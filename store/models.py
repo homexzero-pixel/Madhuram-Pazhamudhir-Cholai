@@ -10,7 +10,7 @@ class StoreProfile(models.Model):
     phone = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)
     gstin = models.CharField("GSTIN", max_length=15, blank=True)
-    logo = models.FileField(upload_to="logo/", blank=True)
+    logo = models.FileField(upload_to="logo/", blank=True, help_text="Leave empty to use the built-in Madhuram logo.")
     currency_symbol = models.CharField(max_length=5, default="₹")
     bill_footer = models.CharField(max_length=200, blank=True, default="Thank you! Visit again.")
     updated_at = models.DateTimeField(auto_now=True)

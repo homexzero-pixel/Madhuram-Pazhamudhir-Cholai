@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load static %}
 {% block body_class %}login-page{% endblock %}
 {% block content %}
 <div class="row justify-content-center align-items-center min-vh-100">
@@ -6,8 +6,8 @@
     <div class="card shadow border-0">
       <div class="card-body p-4">
         <div class="text-center mb-4">
-          <div class="display-4">🍌🥭🍇</div>
-          <h4 class="mt-2 mb-0">{{ store.name|default:"Madhuram Pazhamudhir Cholai" }}</h4>
+          <img src="{% if store.logo %}{{ store.logo.url }}{% else %}{% static 'img/logo.webp' %}{% endif %}" alt="{{ store.name|default:'Madhuram Pazhamudhir Cholai' }}" class="img-fluid" style="max-width:300px">
+          <h1 class="visually-hidden">{{ store.name|default:"Madhuram Pazhamudhir Cholai" }}</h1>
           <div class="text-muted small">{{ store.tagline }}</div>
         </div>
         {% if form.errors %}<div class="alert alert-danger py-2">Wrong username or password.</div>{% endif %}

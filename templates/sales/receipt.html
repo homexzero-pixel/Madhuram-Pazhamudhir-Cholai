@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% load cholai %}
+{% extends "base.html" %}{% load static cholai %}
 {% block title %}Bill {{ sale.bill_no }}{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-center gap-2 mb-3 d-print-none">
@@ -8,8 +8,7 @@
 </div>
 <div class="receipt mx-auto">
   <div class="text-center">
-    {% if store.logo %}<img src="{{ store.logo.url }}" alt="" height="48"><br>{% endif %}
-    <div class="fw-bold fs-6">{{ store.name }}</div>
+    <img src="{% if store.logo %}{{ store.logo.url }}{% else %}{% static 'img/logo.webp' %}{% endif %}" alt="{{ store.name }}" class="receipt-logo">
     {% if store.tagline %}<div>{{ store.tagline }}</div>{% endif %}
     {% if store.address %}<div>{{ store.address|linebreaksbr }}</div>{% endif %}
     {% if store.phone %}<div>Ph: {{ store.phone }}</div>{% endif %}

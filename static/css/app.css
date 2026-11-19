@@ -1,7 +1,9 @@
-:root { --brand: #15803d; --brand-dark: #14532d; --accent: #f59e0b; }
+:root { --brand: #12612a; --brand-dark: #003d14; --accent: #f59e0b; }
 body { background: #f6f8f4; }
 .brand-bar { background: linear-gradient(90deg, var(--brand-dark), var(--brand)); }
-.brand-mark { font-size: 1.5rem; line-height: 1; }
+.brand-logo { background: #fff; border-radius: .5rem; padding: 3px 8px; display: inline-block; }
+.brand-logo img { display: block; height: 48px; width: auto; }
+.receipt-logo { display: block; width: 150px; height: auto; margin: 0 auto 4px; }
 .login-page { background: linear-gradient(135deg, #fef3c7 0%, #dcfce7 100%); }
 .card { border: 0; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
 .stat-card .stat-label { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
