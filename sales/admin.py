@@ -1,15 +1,22 @@
 from django.contrib import admin
 
-from .models import Sale, SaleItem
+from .models import Payment, Sale, SaleLine, SaleReturn, Settlement, Shift
 
 
-class SaleItemInline(admin.TabularInline):
-    model = SaleItem
+class LineInline(admin.TabularInline):
+    model = SaleLine
+    extra = 0
+
+
+class PaymentInline(admin.TabularInline):
+    model = Payment
     extra = 0
 
 
 @admin.register(Sale)
 class SaleAdmin(admin.ModelAdmin):
-    list_display = ("bill_no", "created_at", "cashier", "total", "payment_method", "status")
-    list_filter = ("status", "payment_method")
-    inlines = [SaleItemInline]
+    list_display = ("bill_no", "created_at", "cashier", "total")
+    inlines = [LineInline, PaymentInline]
+
+
+admin.site.register([Shift, SaleReturn, Settlement])

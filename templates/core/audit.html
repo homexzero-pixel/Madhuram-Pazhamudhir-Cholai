@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Audit log</h1><p>Who changed a price, approved a discount, issued a refund, wrote off stock or reopened a shift.</p></div>
+<form class="d-flex gap-2"><select name="action" class="form-select" aria-label="Action"><option value="">All actions</option>{% for a in actions %}<option {% if request.GET.action == a %}selected{% endif %}>{{ a }}</option>{% endfor %}</select><input name="q" value="{{ request.GET.q }}" class="form-control" placeholder="Search" aria-label="Search"><button class="btn btn-success">Filter</button></form></div>
+<div class="card"><div class="table-responsive"><table class="table table-sm"><thead><tr><th>When</th><th>Action</th><th>By</th><th>Approved by</th><th>What</th></tr></thead><tbody>
+{% for a in page %}<tr><td class="text-nowrap">{{ a.at|date:"d-m-Y H:i:s" }}</td><td><span class="badge text-bg-light border">{{ a.action }}</span></td><td>{{ a.user.username|default:"system" }}</td><td>{{ a.approved_by.username|default:"" }}</td><td>{{ a.summary }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% include "includes/pager.html" %}
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Cash Closing{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Cash Closing</h1><p>Open the shift with the float, record cash in / out, then count the drawer and close.</p></div>
+{% if "settlement" in can %}<a class="btn btn-outline-success" href="{% url 'settlements' %}"><i class="bi bi-bank"></i> UPI / card settlements</a>{% endif %}</div>
+{% if not shift %}
+<div class="card mb-3"><div class="card-body">
+  <h2 class="h5">No shift is open</h2>
+  {% if last %}<p class="text-muted">Last shift {{ last.pk }} ({{ last.cashier.display }}) closed {{ last.closed_at|date:"d-m-Y H:i" }} and left <b>{{ last.retained_cash|money }}</b> in the drawer. Enter the amount you count now.</p>{% endif %}
+  {% if "cash" in can %}<form method="post" action="{% url 'shift_open' %}" class="d-flex gap-2 align-items-end">{% csrf_token %}
+    <div><label class="form-label" for="opening">Opening float in the drawer (₹)</label><input id="opening" name="opening" class="form-control form-control-lg" inputmode="decimal" value="{{ last.retained_cash|default_if_none:'' }}"></div>
+    <button class="btn btn-success btn-lg">Open shift</button></form>{% endif %}
+</div></div>
+{% else %}
+<div class="tiles">
+  <div class="tile good"><div class="k">Expected cash in drawer</div><div class="v">{{ summary.expected|money }}</div><div class="s">Shift {{ shift.pk }} · {{ shift.cashier.display }} · since {{ shift.opened_at|date:"H:i" }}</div></div>
+  <div class="tile"><div class="k">Bills</div><div class="v">{{ summary.bills }}</div><div class="s">Cash {{ summary.tenders.cash|money }} · UPI {{ summary.tenders.upi|money }} · Card {{ summary.tenders.card|money }} · Credit {{ summary.tenders.credit|money }}</div></div>
+</div>
+<div class="row g-3">
+<div class="col-lg-6"><div class="card h-100"><div class="card-header">How the expected cash is worked out</div><div class="card-body">
+<table class="table table-sm"><tbody>
+<tr><td>Opening float</td><td class="r">{{ summary.opening|money }}</td></tr>
+<tr><td>+ Cash sales (after change given)</td><td class="r">{{ summary.cash_sales|money }}</td></tr>
+<tr><td>+ Other cash received (credit collections {{ summary.collections|money }}, paid in {{ summary.pay_in|money }})</td><td class="r">{{ summary.other_in|money }}</td></tr>
+<tr><td>− Cash refunds</td><td class="r">{{ summary.refunds|money }}</td></tr>
+<tr><td>− Cash expenses</td><td class="r">{{ summary.expenses|money }}</td></tr>
+<tr><td>− Cash removed (paid out {{ summary.pay_out|money }}, bank deposits {{ summary.deposits|money }}, supplier cash {{ summary.supplier_payments|money }})</td><td class="r">{{ summary.removed|money }}</td></tr>
+<tr class="fw-bold"><td>= Expected closing cash</td><td class="r">{{ summary.expected|money }}</td></tr></tbody></table>
+<p class="small text-muted mb-0">UPI, card and credit never change the drawer. UPI/card refunds ({{ summary.refunds_by.upi|money }} / {{ summary.refunds_by.card|money }}) and non-cash expenses ({{ summary.non_cash_expenses|money }}) are shown in reports only.</p>
+</div></div></div>
+<div class="col-lg-6"><div class="card h-100"><div class="card-header">Cash in / out of the drawer</div><div class="card-body">
+<form method="post" action="{% url 'cash_move' %}" class="row g-2">{% csrf_token %}
+<div class="col-md-4"><label class="form-label" for="kind">Type</label><select id="kind" name="kind" class="form-select">{% for v, t in kinds %}<option value="{{ v }}">{{ t }}</option>{% endfor %}</select></div>
+<div class="col-md-3"><label class="form-label" for="amt">Amount ₹</label><input id="amt" name="amount" class="form-control" inputmode="decimal"></div>
+<div class="col-md-5"><label class="form-label" for="rsn">Reason</label><input id="rsn" name="reason" class="form-control"></div>
+<div class="col-md-7"><label class="form-label" for="ref">Reference (deposit slip no.)</label><input id="ref" name="reference" class="form-control"></div>
+<div class="col-md-5 d-flex align-items-end"><button class="btn btn-outline-success w-100">Record</button></div></form>
+<table class="table table-sm mt-3"><tbody>{% for m in moves %}<tr><td>{{ m.at|date:"H:i" }}</td><td>{{ m.get_kind_display }}</td><td>{{ m.reason }} {{ m.reference }}</td><td class="r">{{ m.signed|money }}</td></tr>{% empty %}<tr><td class="text-muted">None yet. Cash expenses are recorded under Expenses.</td></tr>{% endfor %}</tbody></table>
+</div></div></div>
+</div>
+<div class="card mt-3"><div class="card-header">Count the drawer and close shift {{ shift.pk }}</div><div class="card-body">
+<form method="post" action="{% url 'shift_close' shift.pk %}" data-confirm="Close the shift with this count?">{% csrf_token %}
+<div class="row g-2">{% for n in notes %}<div class="col-6 col-md-2 col-xl-1"><label class="form-label small" for="n{{ n }}">₹{{ n }} ×</label><input id="n{{ n }}" name="n{{ n }}" class="form-control denom" data-v="{{ n }}" inputmode="numeric"></div>{% endfor %}</div>
+<div class="row g-3 mt-1 align-items-end">
+<div class="col-md-3"><label class="form-label" for="counted">Counted total ₹</label><input id="counted" name="counted" class="form-control form-control-lg" inputmode="decimal"></div>
+<div class="col-md-3"><label class="form-label" for="retained">Leave in drawer for next shift ₹</label><input id="retained" name="retained" class="form-control" inputmode="decimal" placeholder="default: all counted"></div>
+<div class="col-md-3"><label class="form-label" for="note">Note</label><input id="note" name="note" class="form-control"></div>
+<div class="col-md-3"><div>Difference: <b id="diff">—</b></div><button class="btn btn-success btn-lg w-100 mt-1">Close shift</button></div></div>
+<p class="small text-muted mt-2 mb-0">Cash you take to the bank: record it above as "Removed for bank deposit" before closing, so the next opening balance is explained.</p>
+</form></div></div>
+<script>
+(function(){const exp={{ summary.expected }};const c=document.getElementById('counted'),d=document.getElementById('diff');
+function tot(){let t=0;document.querySelectorAll('.denom').forEach(i=>t+=(parseInt(i.value)||0)*+i.dataset.v);if(t)c.value=t.toFixed(2);upd();}
+function upd(){const v=parseFloat(c.value);d.textContent=isNaN(v)?'—':(v-exp>=0?'+':'')+'₹'+(v-exp).toFixed(2);d.className=Math.abs(v-exp)<0.005?'text-success':'text-danger';}
+document.querySelectorAll('.denom').forEach(i=>i.addEventListener('input',tot));c.addEventListener('input',upd);})();
+</script>
+{% endif %}
+<h2 class="h5 mt-4">Recent shifts</h2>
+<div class="card"><div class="table-responsive"><table class="table"><thead><tr><th>Shift</th><th>Cashier</th><th>Opened</th><th>Closed</th><th class="r">Float</th><th class="r">Expected</th><th class="r">Counted</th><th class="r">Variance</th><th class="r">Left in drawer</th><th></th></tr></thead><tbody>
+{% for s in recent %}<tr><td><a href="{% url 'shift_detail' s.pk %}">{{ s.pk }}</a></td><td>{{ s.cashier.display }}</td><td>{{ s.opened_at|date:"d-m H:i" }}</td><td>{% if s.closed_at %}{{ s.closed_at|date:"d-m H:i" }}{% else %}<span class="badge text-bg-success">open</span>{% endif %}</td>
+<td class="r">{{ s.opening_float|money }}</td><td class="r">{{ s.expected|money }}</td><td class="r">{{ s.counted|money }}</td><td class="r {% if s.variance %}text-danger fw-bold{% endif %}">{{ s.variance|money }}</td><td class="r">{{ s.retained_cash|money }}</td>
+<td>{% if s.status == "closed" and "reopen_shift" in can %}<form method="post" action="{% url 'shift_reopen' s.pk %}" class="d-flex gap-1">{% csrf_token %}<input name="reason" class="form-control form-control-sm" placeholder="reason to reopen" aria-label="Reason to reopen shift {{ s.pk }}"><button class="btn btn-sm btn-outline-danger">Reopen</button></form>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

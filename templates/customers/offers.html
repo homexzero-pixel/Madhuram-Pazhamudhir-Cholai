@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Offers{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Offers &amp; promotions</h1><p>Lower priority number is tried first. The cashier sees which offer applied on every line, and the receipt prints it.</p></div><a class="btn btn-success" href="{% url 'offer_add' %}">New offer</a></div>
+<div class="card"><table class="table mb-0"><thead><tr><th>Priority</th><th>Offer</th><th>Type</th><th>Applies to</th><th>Valid</th><th>Status</th></tr></thead><tbody>
+{% for o in offers %}<tr><td>{{ o.priority }}</td><td><a href="{% url 'offer_edit' o.pk %}">{{ o.name }}</a></td><td>{{ o.get_kind_display }}{% if o.percent %} · {{ o.percent|q }}%{% endif %}{% if o.amount %} · {{ o.amount|money }}{% endif %}{% if o.min_qty %} · min {{ o.min_qty|q }}{% endif %}{% if o.deal_price is not None %} · at {{ o.deal_price|money }}{% endif %}</td>
+<td class="small">{% for i in o.items.all %}{{ i.sku }} {% endfor %}{% for c in o.categories.all %}{{ c.name }} {% endfor %}</td><td>{{ o.starts_on|date:"d-m-Y" }} – {{ o.ends_on|date:"d-m-Y" }}</td><td>{% if o.is_active and o.starts_on <= today and o.ends_on >= today %}<span class="badge text-bg-success">live</span>{% else %}<span class="badge text-bg-secondary">not live</span>{% endif %}</td></tr>{% empty %}<tr><td colspan="6" class="text-muted">No offers.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

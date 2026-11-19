@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Inventory{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Inventory</h1><p>Stock is kept by lot. Sales take the earliest expiry first; expired lots cannot be billed.</p></div>
+<div class="d-flex gap-2">{% if "stocktake" in can %}<a class="btn btn-outline-success" href="{% url 'counts' %}"><i class="bi bi-clipboard-check"></i> Stocktake</a>{% endif %}<a class="btn btn-outline-secondary" href="{% url 'ledger' %}"><i class="bi bi-journal-text"></i> Stock ledger</a></div></div>
+<ul class="nav nav-pills mb-3">{% for v, t in views %}<li class="nav-item"><a class="nav-link {% if view == v %}active bg-success{% endif %}" href="?view={{ v }}">{{ t }}</a></li>{% endfor %}</ul>
+{% if page %}
+<div class="card"><div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Product</th><th>Category</th><th class="r">Stock</th><th class="r">Reorder at</th>{% if view == "dead" %}<th>Last sold</th>{% endif %}<th>Preferred supplier</th><th></th></tr></thead><tbody>
+{% for i in page %}<tr><td><a href="{% url 'item_detail' i.pk %}">{{ i.name }}</a> <span class="small text-muted">{{ i.sku }}</span></td><td>{{ i.category.name }}</td><td class="r fw-bold">{{ i.on_hand|q }} {{ i.unit_label }}</td><td class="r">{{ i.reorder_level|q }}</td>{% if view == "dead" %}<td>{{ i.last_sale|date:"d-m-Y"|default:"never" }}</td>{% endif %}<td>{{ i.preferred_supplier|default:"—" }}</td>
+<td>{% if "purchase" in can %}<a class="btn btn-sm btn-outline-success" href="{% url 'po_new' %}?item={{ i.pk }}">Order</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="7" class="text-muted p-4">Nothing here.</td></tr>{% endfor %}</tbody></table></div></div>
+{% include "includes/pager.html" %}
+{% elif moves %}
+<div class="tiles"><div class="tile bad"><div class="k">Written off, last 30 days (at cost)</div><div class="v">{{ waste_value|money }}</div></div></div>
+<div class="card"><div class="table-responsive"><table class="table"><thead><tr><th>When</th><th>Product</th><th>Type</th><th class="r">Qty</th><th class="r">Cost value</th><th>Reason</th><th>By</th><th>Approved</th></tr></thead><tbody>
+{% for m in moves %}<tr><td>{{ m.at|date:"d-m-Y H:i" }}</td><td>{{ m.item.name }}</td><td>{{ m.get_kind_display }}</td><td class="r">{{ m.qty|q }}</td><td class="r">{{ m.value|money }}</td><td>{{ m.reason }}</td><td>{{ m.user.username }}</td><td>{{ m.approved_by.username|default:"" }}</td></tr>{% empty %}<tr><td colspan="8" class="text-muted">No write-offs.</td></tr>{% endfor %}</tbody></table></div></div>
+{% with page=moves %}{% include "includes/pager.html" %}{% endwith %}
+{% else %}
+<form class="mb-2 d-flex gap-2"><input type="hidden" name="view" value="{{ view }}"><input name="q" value="{{ q }}" class="form-control" style="max-width:300px" placeholder="Product, SKU or batch" aria-label="Search lots"><button class="btn btn-success">Find</button></form>
+<div class="card"><div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Lot</th><th>Product</th><th>Batch</th><th>Expiry</th><th class="r">On hand</th><th class="r">Unit cost</th><th>Source</th><th>Status</th><th></th></tr></thead><tbody>
+{% for l in lots %}<tr class="{% if l.is_expired %}table-danger{% endif %}"><td>{{ l.pk }}</td><td><a href="{% url 'item_detail' l.item_id %}">{{ l.item.name }}</a></td><td>{{ l.batch }}</td><td>{{ l.expiry|date:"d-m-Y"|default:"—" }}</td><td class="r">{{ l.qty|q }} {{ l.item.unit_label }}</td><td class="r">{{ l.unit_cost|money }}</td><td class="small">{{ l.source }}</td><td>{{ l.get_status_display }}</td>
+<td>{% if "write_off" in can %}<a class="btn btn-sm btn-outline-danger" href="{% url 'write_off' l.pk %}">Adjust / write off</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="9" class="text-muted p-4">No lots.</td></tr>{% endfor %}</tbody></table></div></div>
+{% with page=lots %}{% include "includes/pager.html" %}{% endwith %}
+{% endif %}
+{% endblock %}

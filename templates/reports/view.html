@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}{{ rep.title }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ rep.title }}</h1><p>{% if rep.dates %}{{ start|date:"d-m-Y" }} to {{ end|date:"d-m-Y" }} · {% endif %}<b>Date basis:</b> {{ rep.basis }}</p></div>
+<form class="d-flex gap-2 flex-wrap no-print" method="get">
+<select name="report" class="form-select" style="width:220px" onchange="this.form.submit()" aria-label="Report">{% for r in reports %}<option value="{{ r.key }}" {% if r.key == rep.key %}selected{% endif %}>{{ r.title }}</option>{% endfor %}</select>
+{% if request.GET.category %}<input type="hidden" name="category" value="{{ request.GET.category }}">{% endif %}
+{% if rep.dates %}<input type="date" name="start" value="{{ start|date:'Y-m-d' }}" class="form-control" style="width:155px" aria-label="From"><input type="date" name="end" value="{{ end|date:'Y-m-d' }}" class="form-control" style="width:155px" aria-label="To">{% endif %}
+<button class="btn btn-success">Run</button>
+<button class="btn btn-outline-secondary" name="format" value="csv">CSV</button><button class="btn btn-outline-secondary" name="format" value="xlsx">Excel</button>
+<button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i></button></form></div>
+<div class="d-none d-print-block mb-2"><b>{{ store.name }}</b> · {{ rep.title }} · printed {% now "d-m-Y H:i" %}</div>
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover"><thead><tr>{% for c in cols %}<th class="{% if not forloop.first %}r{% endif %}">{{ c }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in rows %}<tr>{% for c in row %}<td class="{% if not forloop.first %}r{% endif %}">{{ c|cell }}</td>{% endfor %}</tr>
+{% empty %}<tr><td colspan="{{ cols|length }}" class="text-muted p-4">No data for this period.</td></tr>{% endfor %}</tbody>
+{% if totals %}<tfoot><tr class="fw-bold">{% for c in totals %}<td class="{% if not forloop.first %}r{% endif %}">{{ c|cell }}</td>{% endfor %}</tr></tfoot>{% endif %}</table></div></div>
+{% if defs %}<div class="card mt-3"><div class="card-header">How the figures are calculated</div><div class="card-body"><dl class="row mb-0">{% for k, v in defs %}<dt class="col-sm-3">{{ k }}</dt><dd class="col-sm-9">{{ v }}</dd>{% endfor %}</dl></div></div>{% endif %}
+{% endblock %}

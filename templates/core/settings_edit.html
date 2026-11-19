@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ title }}</h1></div><a class="btn btn-outline-secondary" href="{% url 'settings_home' %}">Back</a></div>
+{% if section == "store" %}<div class="alert alert-warning"><b>Needs the store accountant's confirmation:</b> GSTIN, legal name, invoice series, whether exempt items (most fresh produce) are billed on an invoice-cum-bill of supply, item HSN codes and GST rates, and when to switch on "block billing without tax setup". The software prints bill numbers as PREFIX/FY/00001 (at most 16 characters, a new series every financial year).</div>{% endif %}
+{% if section == "hardware" %}
+<div class="alert alert-info"><b>Hardware status is not "tested" until checked on the counter PC.</b> Scanner: keyboard (HID) mode with Enter suffix. Printer: install the Windows driver, set paper to 80 or 58 mm, and make it the default printer in the browser. Weighing scale: the software reads scale-printed barcode labels using the layout below; a direct cable link to the scale is not built because it depends on the scale model.</div>
+<div class="card mb-3"><div class="card-body">
+<form method="get" class="row g-2 align-items-end"><div class="col-md-6"><label class="form-label" for="test">Test a scale label: scan or type it here</label><input id="test" name="test" class="form-control" value="{{ request.GET.test }}"></div><div class="col-auto"><button class="btn btn-outline-success">Decode</button></div>
+{% if example %}<div class="col-12 small text-muted">Example in the current layout for PLU 101: <code>{{ example }}</code></div>{% endif %}</form>
+{% if sample %}<div class="alert alert-success mt-2 mb-0">Item code <b>{{ sample.item_code }}</b> · {{ sample.value_type }} <b>{{ sample.value|q }}</b>{% if sample.value_type == "weight" %} kg{% else %} ₹{% endif %}</div>{% endif %}
+{% if sample_error %}<div class="alert alert-danger mt-2 mb-0">{{ sample_error }}</div>{% endif %}
+</div></div>{% endif %}
+<div class="card"><div class="card-body"><form method="post" novalidate>{% csrf_token %}{% include "includes/form_fields.html" %}<button class="btn btn-success btn-lg mt-3">Save</button></form></div></div>
+{% endblock %}

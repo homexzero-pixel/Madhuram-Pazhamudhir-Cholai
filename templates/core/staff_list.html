@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Staff{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Staff &amp; roles</h1><p>Each person logs in with their own name, so every bill, price change, refund and write-off is recorded against them.</p></div><a class="btn btn-success" href="{% url 'staff_add' %}">Add staff</a></div>
+<div class="card mb-3"><table class="table align-middle"><thead><tr><th>User name</th><th>Name</th><th>Role</th><th>Approval PIN</th><th>Status</th><th></th></tr></thead><tbody>
+{% for u in users %}<tr><td class="fw-semibold">{{ u.username }}</td><td>{{ u.get_full_name }} <span class="ta text-muted">{{ u.name_ta }}</span></td><td>{{ u.get_role_display }}</td><td>{% if u.approval_pin %}set{% else %}<span class="text-muted">—</span>{% endif %}</td><td>{% if u.is_active %}<span class="badge text-bg-success">active</span>{% else %}<span class="badge text-bg-secondary">disabled</span>{% endif %}</td><td><a class="btn btn-sm btn-outline-success" href="{% url 'staff_edit' u.pk %}">Edit</a></td></tr>{% endfor %}</tbody></table></div>
+<div class="card"><div class="card-header">What each role can do</div><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Permission</th>{% for r, label in roles %}<th>{{ label }}</th>{% endfor %}</tr></thead><tbody>
+{% for p, label in perms.items %}<tr><td>{{ label }}</td>{% for r, l in roles %}<td>{% if p in role_perms|get:r %}<i class="bi bi-check-lg text-success"></i>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

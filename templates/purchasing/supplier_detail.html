@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}{{ s.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ s.name }}</h1><p>{{ s.phone }} · {{ s.address }} {% if s.gstin %}· GSTIN {{ s.gstin }}{% endif %}</p></div>
+<div class="d-flex gap-2">{% if "purchase" in can %}<a class="btn btn-outline-success" href="{% url 'supplier_edit' s.pk %}">Edit</a><a class="btn btn-outline-success" href="{% url 'po_new' %}">New order</a>{% endif %}</div></div>
+<div class="tiles"><div class="tile warn"><div class="k">You owe</div><div class="v">{{ balance|money }}</div><div class="s">Opening {{ s.opening_balance|money }} + invoices − returns − payments</div></div></div>
+{% if "supplier_pay" in can %}<div class="card mb-3"><div class="card-header">Record a payment</div><div class="card-body"><form method="post" action="{% url 'supplier_pay' s.pk %}" class="row g-2 align-items-end">{% csrf_token %}
+<div class="col-md-2"><label class="form-label" for="a">Amount ₹</label><input id="a" name="amount" class="form-control" inputmode="decimal" required></div>
+<div class="col-md-3"><label class="form-label" for="m">Method</label><select id="m" name="method" class="form-select">{% for v, t in methods %}<option value="{{ v }}">{{ t }}</option>{% endfor %}</select></div>
+<div class="col-md-2"><label class="form-label" for="d">Date</label><input id="d" type="date" name="paid_on" class="form-control"></div>
+<div class="col-md-3"><label class="form-label" for="r">Reference / UTR / cheque</label><input id="r" name="reference" class="form-control"></div>
+<div class="col-md-2"><button class="btn btn-success w-100">Save</button></div></form><p class="small text-muted mb-0 mt-2">"Cash from drawer" needs an open shift and reduces the expected drawer cash.</p></div></div>{% endif %}
+<div class="card"><div class="card-header">Statement</div><table class="table table-sm mb-0"><thead><tr><th>Date</th><th>Entry</th><th class="r">Paid / returned</th><th class="r">Billed</th><th class="r">Balance</th></tr></thead><tbody>
+<tr><td></td><td>Opening balance</td><td></td><td></td><td class="r">{{ s.opening_balance|money }}</td></tr>
+{% for e in entries %}<tr><td>{{ e.date|date:"d-m-Y" }}</td><td>{% if e.link %}<a href="{{ e.link }}">{{ e.what }}</a>{% else %}{{ e.what }}{% endif %}</td><td class="r">{% if e.debit %}{{ e.debit|money }}{% endif %}</td><td class="r">{% if e.credit %}{{ e.credit|money }}{% endif %}</td><td class="r">{{ e.balance|money }}</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

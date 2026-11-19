@@ -1,5 +1,8 @@
-// Ask for confirmation on forms marked with data-confirm (delete, void, clear).
+// Confirm forms marked data-confirm; global shortcut F1 opens billing.
 document.addEventListener('submit', function (e) {
-  const msg = e.target.dataset && e.target.dataset.confirm;
-  if (msg && !window.confirm(msg)) e.preventDefault();
+  const m = e.target.dataset && e.target.dataset.confirm;
+  if (m && !window.confirm(m)) e.preventDefault();
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'F1' && !document.body.classList.contains('pos-page')) { e.preventDefault(); location.href = '/billing/'; }
 });

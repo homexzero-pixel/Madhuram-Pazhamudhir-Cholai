@@ -1,34 +1,37 @@
-{% extends "base.html" %}{% load cholai %}
+{% extends "base.html" %}{% load mpc %}
+{% block title %}{{ sale.bill_no }}{% endblock %}
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-  <h4 class="mb-0">Bill {{ sale.bill_no }} {% if sale.status == 'void' %}<span class="badge text-bg-danger">Void</span>{% endif %}</h4>
-  <div class="d-flex gap-2">
-    <a href="{% url 'sale_receipt' sale.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i> Receipt</a>
-    {% if is_manager and sale.status != 'void' %}
-    <form method="post" action="{% url 'sale_void' sale.pk %}" data-confirm="Void this bill? Items will go back to stock.">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-octagon"></i> Void bill</button></form>
-    {% endif %}
-    <a href="{% url 'sale_list' %}" class="btn btn-sm btn-outline-primary">Back</a>
-  </div>
+<div class="page-head"><div><h1>Bill {{ sale.bill_no }}</h1><p>{{ sale.get_doc_type_display }} · {{ sale.created_at|date:"l d-m-Y H:i" }} · cashier {{ sale.cashier.display }} · shift {{ sale.shift_id }} · {{ sale.customer|default:"Walk-in customer" }}</p></div>
+<div class="d-flex gap-2 flex-wrap">
+  <a class="btn btn-success" href="{% url 'sale_receipt' sale.pk %}?print=1&reprint=1" target="_blank"><i class="bi bi-printer"></i> Reprint receipt</a>
+  <a class="btn btn-outline-success" href="{% url 'sale_receipt' sale.pk %}?w=a4" target="_blank">A4 invoice</a>
+  <a class="btn btn-outline-secondary" href="{% url 'sale_list' %}">All bills</a></div></div>
+<div class="tiles">
+  <div class="tile"><div class="k">Bill total</div><div class="v">{{ sale.total|money }}</div><div class="s">Gross {{ sale.gross|money }} − discount {{ sale.discount|money }}</div></div>
+  <div class="tile"><div class="k">Paid</div><div class="v">{{ sale.paid|money }}</div><div class="s">{% for p in sale.payments.all %}{{ p.get_method_display }} {{ p.amount|money }}{% if p.reference %} ({{ p.reference }}){% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}{% if sale.change %} · change {{ sale.change|money }}{% endif %}</div></div>
+  <div class="tile {% if sale.refunded %}warn{% endif %}"><div class="k">Refunded</div><div class="v">{{ sale.refunded|money }}</div><div class="s">Still refundable {{ refundable|money }}</div></div>
+  <div class="tile"><div class="k">Printed</div><div class="v">{{ sale.print_count }}×</div><div class="s">Reprints are logged; they never create a new sale.</div></div>
 </div>
-<div class="row g-3">
-  <div class="col-md-4"><div class="card"><div class="card-body small">
-    <dl class="row mb-0">
-      <dt class="col-5">Date</dt><dd class="col-7">{{ sale.created_at|date:"d M Y, H:i" }}</dd>
-      <dt class="col-5">Cashier</dt><dd class="col-7">{{ sale.cashier }}</dd>
-      <dt class="col-5">Customer</dt><dd class="col-7">{{ sale.customer_name|default:"—" }}</dd>
-      <dt class="col-5">Phone</dt><dd class="col-7">{{ sale.customer_phone|default:"—" }}</dd>
-      <dt class="col-5">Payment</dt><dd class="col-7">{{ sale.get_payment_method_display }}</dd>
-      <dt class="col-5">Received</dt><dd class="col-7">{{ sale.amount_received|money:store.currency_symbol }}</dd>
-      <dt class="col-5">Change</dt><dd class="col-7">{{ sale.change_due|money:store.currency_symbol }}</dd>
-      {% if is_manager %}<dt class="col-5">Profit</dt><dd class="col-7">{{ sale.profit|money:store.currency_symbol }}</dd>{% endif %}
-    </dl></div></div></div>
-  <div class="col-md-8"><div class="card"><table class="table mb-0">
-    <thead><tr><th>Item</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">Amount</th></tr></thead><tbody>
-    {% for i in sale.items.all %}<tr><td>{{ i.product_name }}</td><td class="text-end">{{ i.quantity|qty }} {{ i.unit }}</td><td class="text-end">{{ i.unit_price|money:store.currency_symbol }}</td><td class="text-end">{{ i.line_total|money:store.currency_symbol }}</td></tr>{% endfor %}
-    </tbody><tfoot>
-      <tr><td colspan="3" class="text-end">Subtotal</td><td class="text-end">{{ sale.subtotal|money:store.currency_symbol }}</td></tr>
-      <tr><td colspan="3" class="text-end">Discount</td><td class="text-end">-{{ sale.discount|money:store.currency_symbol }}</td></tr>
-      <tr class="fw-bold"><td colspan="3" class="text-end">Total</td><td class="text-end">{{ sale.total|money:store.currency_symbol }}</td></tr>
-    </tfoot></table></div></div>
-</div>
+<form method="post" action="{% url 'sale_return' sale.pk %}" data-confirm="Save this return and refund?">{% csrf_token %}<input type="hidden" name="key" value="{{ return_key }}">
+<div class="card mb-3"><div class="card-header">Items {% if can_refund %}· enter the quantity to return{% endif %}</div><div class="table-responsive"><table class="table align-middle">
+<thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Discount</th><th class="r">Net</th><th>Offer / note</th><th class="r">Returned</th>{% if can_refund %}<th>Return qty</th><th>Goes to</th>{% endif %}</tr></thead><tbody>
+{% for l in sale.lines.all %}<tr><td>{{ l.name }}<div class="small text-muted"><span class="ta">{{ l.name_ta }}</span> {{ l.sku }} · {{ l.get_tax_class_display|default:l.tax_class }}{% if l.gst_rate %} {{ l.gst_rate|q }}%{% endif %}</div></td>
+<td class="r">{{ l.qty|q }} {{ l.unit }}</td><td class="r">{{ l.rate|money }}{% if l.rate != l.list_price %}<div class="small text-danger">list {{ l.list_price|money }}</div>{% endif %}</td><td class="r">{{ l.discount|money }}</td><td class="r fw-semibold">{{ l.net|money }}</td><td class="small">{{ l.discount_note }}</td><td class="r">{{ l.returned_qty|q }}</td>
+{% if can_refund %}<td style="width:120px">{% if l.returnable_qty > 0 %}<input name="qty_{{ l.pk }}" class="form-control form-control-sm" inputmode="decimal" placeholder="max {{ l.returnable_qty|q }}" aria-label="Return quantity for {{ l.name }}">{% else %}<span class="text-muted small">fully returned</span>{% endif %}</td>
+<td style="width:190px">{% if l.returnable_qty > 0 %}<select name="disp_{{ l.pk }}" class="form-select form-select-sm" aria-label="Where the returned {{ l.name }} goes">{% for v, t in dispositions %}<option value="{{ v }}" {% if v == "quarantine" %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>{% endif %}</td>{% endif %}</tr>{% endfor %}
+</tbody></table></div></div>
+{% if can_refund and refundable > 0 %}
+<div class="card mb-3"><div class="card-header">Return and refund</div><div class="card-body"><div class="row g-3">
+<div class="col-md-3"><label class="form-label" for="method">Refund by</label><select id="method" name="method" class="form-select">
+  {% for p in sale.payments.all %}<option value="{{ p.method }}">{{ p.get_method_display }} (original)</option>{% endfor %}
+  <option value="cash">Cash from drawer</option>{% if sale.customer %}<option value="credit">Credit to customer account</option>{% endif %}</select></div>
+<div class="col-md-5"><label class="form-label" for="reason">Reason</label><input id="reason" name="reason" class="form-control" required placeholder="e.g. damaged pack, wrong item"></div>
+<div class="col-md-4"><label class="form-label" for="reference">UPI / card refund reference</label><input id="reference" name="reference" class="form-control"></div>
+<div class="col-md-3"><label class="form-label" for="approver">Approver (if needed)</label><input id="approver" name="approver" class="form-control" autocomplete="off"></div>
+<div class="col-md-3"><label class="form-label" for="pin">PIN</label><input id="pin" name="pin" type="password" class="form-control" autocomplete="off"></div>
+<div class="col-12"><p class="small text-muted mb-2">Refund = the item's share of what the customer actually paid, after its offer and discount. Tax is reversed in the same proportion. Loyalty points earned on the bill are reversed proportionally.</p><button class="btn btn-danger btn-lg">Save return &amp; refund</button></div>
+</div></div></div>{% endif %}
+</form>
+{% if sale.returns.exists %}<div class="card"><div class="card-header">Returns on this bill</div><table class="table"><tbody>
+{% for r in sale.returns.all %}<tr><td><a href="{% url 'return_detail' r.pk %}">{{ r.number }}</a></td><td>{{ r.created_at|date:"d-m-Y H:i" }}</td><td>{{ r.reason }}</td><td>{{ r.get_method_display }}</td><td class="r">{{ r.total|money }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 {% endblock %}

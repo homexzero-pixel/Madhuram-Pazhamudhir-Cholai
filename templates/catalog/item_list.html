@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Products{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Products</h1><p>{{ counts.all }} SKUs · {{ counts.active }} active · {{ counts.candidate }} generated candidates waiting for the store to verify</p></div>
+<div class="d-flex gap-2 flex-wrap">{% if "products" in can %}<a class="btn btn-success" href="{% url 'item_add' %}"><i class="bi bi-plus-lg"></i> New product</a><a class="btn btn-outline-success" href="{% url 'import_start' %}"><i class="bi bi-upload"></i> Import CSV / Excel</a><a class="btn btn-outline-secondary" href="{% url 'export_products' %}"><i class="bi bi-download"></i> Export</a>{% endif %}</div></div>
+<form class="card card-body mb-3" method="get"><div class="row g-2 align-items-end">
+<div class="col-md-4"><label class="form-label small" for="q">Search English / Tamil name, brand, SKU, PLU or barcode</label><input id="q" name="q" value="{{ q }}" class="form-control" autofocus></div>
+<div class="col-md-2"><label class="form-label small" for="dep">Department</label><select id="dep" name="department" class="form-select" onchange="this.form.category && (this.form.category.value='');this.form.submit()"><option value="">All</option>{% for d in departments %}<option value="{{ d.pk }}" {% if request.GET.department == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>{% endfor %}</select></div>
+<div class="col-md-2"><label class="form-label small" for="cat">Category</label><select id="cat" name="category" class="form-select"><option value="">All</option>{% for c in categories %}<option value="{{ c.pk }}" {% if request.GET.category == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select></div>
+<div class="col-md-2"><label class="form-label small" for="st">Show</label><select id="st" name="status" class="form-select">
+<option value="active" {% if status == "active" %}selected{% endif %}>Active (sellable)</option><option value="inactive" {% if status == "inactive" %}selected{% endif %}>Inactive</option><option value="candidate" {% if status == "candidate" %}selected{% endif %}>Unverified candidates</option><option value="no_tamil" {% if status == "no_tamil" %}selected{% endif %}>Missing Tamil name</option><option value="no_tax" {% if status == "no_tax" %}selected{% endif %}>Active, GST not set</option><option value="" {% if status == "" %}selected{% endif %}>Everything</option></select></div>
+<div class="col-md-2"><button class="btn btn-success w-100">Search</button></div></div></form>
+<form method="get" action="{% url 'labels' %}" target="_blank" id="lblform">
+<div class="card"><div class="table-responsive"><table class="table table-hover align-middle">
+<thead><tr><th><input type="checkbox" class="form-check-input" aria-label="Select all" onclick="document.querySelectorAll('.pick').forEach(c=>c.checked=this.checked)"></th><th>SKU / PLU</th><th>Product</th><th>Category</th><th>Pack</th><th class="r">MRP</th><th class="r">Price</th><th class="r">Stock</th><th>Status</th></tr></thead><tbody>
+{% for i in page %}<tr><td><input type="checkbox" class="form-check-input pick" value="{{ i.pk }}" aria-label="Select {{ i.name }}"></td><td class="small"><a href="{% url 'item_detail' i.pk %}">{{ i.sku }}</a>{% if i.plu %}<br>PLU {{ i.plu }}{% endif %}</td>
+<td><a href="{% url 'item_detail' i.pk %}" class="text-decoration-none text-reset fw-semibold">{{ i.name }}</a><div class="small ta text-muted">{{ i.name_ta|default:"" }}</div></td><td class="small">{{ i.category.name }}</td><td class="small">{{ i.pack_size }}</td>
+<td class="r">{{ i.mrp|money }}</td><td class="r fw-semibold">{% if i.price is not None %}{{ i.price|money }}{% if i.weighed %}/kg{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+<td class="r {% if i.is_active and i.is_low %}text-danger fw-bold{% endif %}">{{ i.on_hand|q }} {{ i.unit_label }}</td>
+<td>{% if i.is_active %}<span class="badge text-bg-success">active</span>{% else %}<span class="badge text-bg-secondary">inactive</span>{% endif %} {% if i.status == "candidate" %}<span class="badge badge-cand">candidate</span>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="9" class="text-muted p-4">No products match. Unverified candidates are hidden unless you choose them under "Show".</td></tr>{% endfor %}</tbody></table></div></div>
+<input type="hidden" name="ids" id="ids"><div class="d-flex gap-2 align-items-center mt-2"><button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('ids').value=[...document.querySelectorAll('.pick:checked')].map(c=>c.value).join(',')"><i class="bi bi-tags"></i> Print labels for selected</button><label class="small" for="copies">copies</label><input id="copies" name="copies" value="1" class="form-control form-control-sm" style="width:60px"></div>
+</form>
+{% include "includes/pager.html" %}
+{% endblock %}

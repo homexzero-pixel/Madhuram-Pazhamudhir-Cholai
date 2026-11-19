@@ -1,36 +1,73 @@
-{% extends "base.html" %}{% load static cholai %}
-{% block title %}Bill {{ sale.bill_no }}{% endblock %}
-{% block content %}
-<div class="d-flex justify-content-center gap-2 mb-3 d-print-none">
-  <button class="btn btn-success" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
-  <a href="{% url 'pos' %}" class="btn btn-outline-success"><i class="bi bi-cart-plus"></i> Next bill</a>
-  <a href="{% url 'sale_detail' sale.pk %}" class="btn btn-outline-secondary">Details</a>
+{% load static mpc %}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>{{ sale.bill_no }}</title>
+<link href="{% static 'css/app.css' %}" rel="stylesheet">
+<style>body{background:#eee;margin:0}.bar{padding:8px;text-align:center;font:14px system-ui}@media print{.bar{display:none}body{background:#fff}}
+{% if w == "58" %}@page{size:58mm auto;margin:0}{% elif w == "80" %}@page{size:80mm auto;margin:0}{% else %}@page{size:A4;margin:10mm}{% endif %}</style>
+</head><body>
+<div class="bar">
+  <button onclick="window.print()">Print</button>
+  <a href="?w=80">80 mm</a> · <a href="?w=58">58 mm</a> · <a href="?w=a4">A4 invoice</a>
+  {% if sale.print_count %}<b style="color:#a00">Already printed {{ sale.print_count }} time{{ sale.print_count|pluralize }} – this copy is marked DUPLICATE.</b>{% else %}<span>Not printed yet.</span>{% endif %}
 </div>
-<div class="receipt mx-auto">
-  <div class="text-center">
-    <img src="{% if store.logo %}{{ store.logo.url }}{% else %}{% static 'img/logo.webp' %}{% endif %}" alt="{{ store.name }}" class="receipt-logo">
-    {% if store.tagline %}<div>{{ store.tagline }}</div>{% endif %}
-    {% if store.address %}<div>{{ store.address|linebreaksbr }}</div>{% endif %}
-    {% if store.phone %}<div>Ph: {{ store.phone }}</div>{% endif %}
-    {% if store.gstin %}<div>GSTIN: {{ store.gstin }}</div>{% endif %}
-  </div>
+{% with doc=sale.get_doc_type_display %}
+{% if w == "a4" %}
+<div class="a4">
+  <table style="border:0"><tr><td style="border:0;width:40%"><img src="{% static 'img/logo.webp' %}" alt="" style="width:200px"></td>
+  <td style="border:0;text-align:right"><h2 style="margin:0">{{ doc }}</h2><b>{{ id.legal_name|default:id.name }}</b><br>{{ id.address|linebreaksbr }}<br>{% if id.phone %}Ph: {{ id.phone }}<br>{% endif %}{% if id.gstin %}GSTIN: {{ id.gstin }} · State: {{ id.state }} ({{ id.state_code }}){% endif %}{% if id.fssai %}<br>FSSAI: {{ id.fssai }}{% endif %}</td></tr></table>
+  <p><b>No.</b> {{ sale.bill_no }} &nbsp; <b>Date</b> {{ sale.created_at|date:"d-m-Y H:i" }} &nbsp; <b>Cashier</b> {{ sale.cashier.username }}<br>
+  <b>Customer</b> {% if sale.customer %}{{ sale.customer.name }} {{ sale.customer.phone|default:"" }}{% if sale.customer.gstin %} · GSTIN {{ sale.customer.gstin }}{% endif %}{% else %}Walk-in{% endif %} · Place of supply: {{ id.state }}</p>
+  <table><thead><tr><th>#</th><th>Item</th><th>HSN</th><th>Qty</th><th>Rate</th><th>Disc</th><th>Taxable</th><th>GST %</th><th>CGST</th><th>SGST</th><th>Amount</th></tr></thead><tbody>
+  {% for l in sale.lines.all %}<tr><td>{{ forloop.counter }}</td><td>{{ l.name }}{% if l.name_ta %}<br><span class="ta">{{ l.name_ta }}</span>{% endif %}</td><td>{{ l.hsn }}</td><td class="r">{{ l.qty|q }} {{ l.unit }}</td><td class="r">{{ l.rate|rupees }}</td><td class="r">{{ l.discount|rupees }}</td><td class="r">{{ l.taxable|rupees }}</td><td class="r">{% if l.tax_class == "taxable" %}{{ l.gst_rate|q }}{% else %}{{ l.get_tax_class_display|default:l.tax_class }}{% endif %}</td><td class="r">{{ l.cgst|rupees }}</td><td class="r">{{ l.sgst|rupees }}</td><td class="r">{{ l.net|rupees }}</td></tr>{% endfor %}
+  </tbody><tfoot><tr><th colspan="10" style="text-align:right">Total</th><th class="r">{{ sale.total|money }}</th></tr></tfoot></table>
+  <p>Paid: {% for p in sale.payments.all %}{{ p.get_method_display }} {{ p.amount|money }}{% if p.reference %} ({{ p.reference }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}{% if sale.change %} · Change {{ sale.change|money }}{% endif %}</p>
+  <p style="font-size:10px;color:#555">Prices are inclusive of GST where applicable. Tax treatment as configured by the store; to be confirmed by the store's accountant.</p>
+</div>
+{% else %}
+<div class="receipt w{{ w }}">
+  <img class="logo" src="{% static 'img/logo.webp' %}" alt="">
+  <div class="c b">{{ id.legal_name|default:id.name }}</div>
+  {% if id.address %}<div class="c">{{ id.address|linebreaksbr }}</div>{% endif %}
+  {% if id.phone %}<div class="c">Ph: {{ id.phone }}</div>{% endif %}
+  {% if id.gstin %}<div class="c">GSTIN: {{ id.gstin }}</div>{% endif %}
+  <div class="c b">{{ doc }}</div>
   <hr>
-  <div class="d-flex justify-content-between"><span>Bill: {{ sale.bill_no }}</span><span>{{ sale.created_at|date:"d/m/Y H:i" }}</span></div>
-  <div>Cashier: {{ sale.cashier }}</div>
-  {% if sale.customer_name or sale.customer_phone %}<div>Customer: {{ sale.customer_name }} {{ sale.customer_phone }}</div>{% endif %}
-  {% if sale.status == 'void' %}<div class="text-center fw-bold">*** VOID ***</div>{% endif %}
+  <div>Bill: {{ sale.bill_no }}</div>
+  <div>{{ sale.created_at|date:"d-m-Y H:i" }} · {{ sale.cashier.username }}</div>
+  {% if sale.customer %}<div>Customer: {{ sale.customer.name }} {{ sale.customer.phone|default:"" }}</div>{% endif %}
+  {% if reprint %}<div class="c b">** DUPLICATE / REPRINT **</div>{% endif %}
   <hr>
-  <table class="w-100">
-    <thead><tr><th>Item</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">Amt</th></tr></thead>
-    <tbody>{% for i in sale.items.all %}<tr><td>{{ i.product_name }}</td><td class="text-end">{{ i.quantity|qty }}{{ i.unit }}</td><td class="text-end">{{ i.unit_price|money:"" }}</td><td class="text-end">{{ i.line_total|money:"" }}</td></tr>{% endfor %}</tbody>
+  <table>
+  {% for l in sale.lines.all %}
+  <tr><td colspan="3">{{ l.name }}{% if l.name_ta %} <span class="ta">{{ l.name_ta }}</span>{% endif %}</td></tr>
+  <tr><td>{{ l.qty|q }}{{ l.unit }} × {{ l.rate|rupees }}</td><td></td><td class="r">{{ l.gross|rupees }}</td></tr>
+  {% if l.discount %}<tr><td colspan="2">&nbsp; {{ l.discount_note|default:"Discount"|truncatechars:28 }}</td><td class="r">-{{ l.discount|rupees }}</td></tr>{% endif %}
+  {% endfor %}
   </table>
   <hr>
-  <div class="d-flex justify-content-between"><span>Subtotal</span><span>{{ sale.subtotal|money:store.currency_symbol }}</span></div>
-  {% if sale.discount %}<div class="d-flex justify-content-between"><span>Discount</span><span>-{{ sale.discount|money:store.currency_symbol }}</span></div>{% endif %}
-  <div class="d-flex justify-content-between fw-bold fs-6"><span>TOTAL</span><span>{{ sale.total|money:store.currency_symbol }}</span></div>
-  <div class="d-flex justify-content-between"><span>Paid ({{ sale.get_payment_method_display }})</span><span>{{ sale.amount_received|money:store.currency_symbol }}</span></div>
-  {% if sale.change_due %}<div class="d-flex justify-content-between"><span>Change</span><span>{{ sale.change_due|money:store.currency_symbol }}</span></div>{% endif %}
+  <table>
+  <tr><td>Items</td><td class="r">{{ sale.lines.count }}</td></tr>
+  {% if sale.discount %}<tr><td>Gross</td><td class="r">{{ sale.gross|money }}</td></tr><tr><td>Discount</td><td class="r">-{{ sale.discount|money }}</td></tr>{% endif %}
+  <tr class="tot"><td>TOTAL</td><td class="r">{{ sale.total|money }}</td></tr>
+  {% for p in sale.payments.all %}<tr><td>{{ p.get_method_display }}{% if p.method == "cash" %} received{% endif %}</td><td class="r">{% if p.method == "cash" %}{{ p.tendered|money }}{% else %}{{ p.amount|money }}{% endif %}</td></tr>{% endfor %}
+  {% if sale.change %}<tr class="b"><td>Change</td><td class="r">{{ sale.change|money }}</td></tr>{% endif %}
+  </table>
+  {% if tax_rows %}<hr><table><tr><th style="text-align:left">GST%</th><th class="r">Taxable</th><th class="r">CGST</th><th class="r">SGST</th></tr>
+  {% for t in tax_rows %}<tr><td>{{ t.rate|q }}</td><td class="r">{{ t.taxable|rupees }}</td><td class="r">{{ t.cgst|rupees }}</td><td class="r">{{ t.sgst|rupees }}</td></tr>{% endfor %}</table>{% endif %}
+  {% if savings > 0 %}<div class="c">You saved {{ savings|money }} on MRP</div>{% endif %}
+  {% if sale.points_earned %}<div class="c">Points earned: {{ sale.points_earned|q }}</div>{% endif %}
   <hr>
-  <div class="text-center">{{ store.bill_footer }}</div>
+  <div class="c">{{ id.footer }}</div>
+  <div class="c">Prices incl. GST where applicable</div>
 </div>
-{% endblock %}
+{% endif %}
+{% endwith %}
+<script>
+  {% if auto %}
+  window.addEventListener('load', function () {
+    var csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+    fetch('/api/sales/{{ sale.pk }}/printed/', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf}, body: JSON.stringify({reprint: {{ reprint|yesno:"true,false" }} })});
+    setTimeout(function () { window.print(); }, 200);
+  });
+  {% endif %}
+</script>
+</body></html>

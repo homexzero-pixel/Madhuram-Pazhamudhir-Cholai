@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Reports</h1><p>Every report has date filters, export to CSV / Excel, printing, and links back to the original bills.</p></div></div>
+<div class="row g-3">{% for g, reps in groups.items %}<div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-header">{{ g }}</div><div class="list-group list-group-flush">
+{% for r in reps %}<a class="list-group-item list-group-item-action" href="{% url 'report_view' %}?report={{ r.key }}">{{ r.title }}</a>{% endfor %}</div></div></div>{% endfor %}</div>
+{% endblock %}

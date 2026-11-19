@@ -1,0 +1,5 @@
+{% load static mpc %}<!doctype html><html><head><meta charset="utf-8"><title>Labels</title><link href="{% static 'css/app.css' %}" rel="stylesheet">
+<style>body{background:#fff;margin:6mm}@media print{.bar{display:none}}</style></head><body>
+<div class="bar" style="margin-bottom:6px"><button onclick="window.print()">Print</button> 50 × 30 mm labels. Print at 100% (no "fit to page").</div>
+<div class="label-sheet">{% for l in labels %}<div class="label"><div class="p">{% if l.item.price is not None %}{{ l.item.price|money }}{% if l.item.weighed %}/kg{% endif %}{% endif %}</div><div>{{ l.item.name|truncatechars:38 }}</div><div class="ta">{{ l.item.name_ta|truncatechars:30 }}</div>{{ l.svg|safe }}</div>{% empty %}<p>Select products first.</p>{% endfor %}</div>
+</body></html>

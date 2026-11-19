@@ -1,0 +1,5 @@
+{% load static %}<!doctype html><html><head><meta charset="utf-8"><title>Practice barcodes</title><link href="{% static 'css/app.css' %}" rel="stylesheet">
+<style>body{background:#fff;margin:10mm;font-family:system-ui}.row1{display:flex;gap:16px;align-items:center;border-bottom:1px solid #ddd;padding:8px 0;break-inside:avoid}.row1 svg{width:70mm;height:24mm}@media print{.bar{display:none}}</style></head><body>
+<h2>Madhuram practice barcodes</h2><p class="bar"><button onclick="window.print()">Print at 100%</button> Use with the <b>practice</b> database only. Set the scanner to keyboard mode with Enter after each scan.</p>
+{% for r in rows %}<div class="row1">{{ r.svg|safe }}<div><b>{{ r.label }}</b><br><code>{{ r.code }}</code></div></div>{% endfor %}
+</body></html>

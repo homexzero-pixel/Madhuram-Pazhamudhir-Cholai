@@ -1,110 +1,100 @@
-from decimal import Decimal
-
 from django.conf import settings
-from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
-POSITIVE = [MinValueValidator(Decimal("0.001"))]
-NON_NEGATIVE = [MinValueValidator(Decimal("0"))]
+from catalog.models import Item
 
 
-class Category(models.Model):
-    name = models.CharField(max_length=60, unique=True)
-    description = models.CharField(max_length=200, blank=True)
+class StockLot(models.Model):
+    """One delivery (or opening count) of one item. Each lot keeps its own batch, expiry and cost."""
+
+    SELLABLE, QUARANTINE = "sellable", "quarantine"
+    STATUS = [(SELLABLE, "Sellable"), (QUARANTINE, "Quarantine (not for sale)")]
+
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="lots")
+    batch = models.CharField(max_length=40, blank=True)
+    expiry = models.DateField(null=True, blank=True, db_index=True)
+    received_qty = models.DecimalField(max_digits=12, decimal_places=3)
+    qty = models.DecimalField("On hand", max_digits=12, decimal_places=3)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=4, help_text="Actual cost per sale unit, after free goods.")
+    status = models.CharField(max_length=10, choices=STATUS, default=SELLABLE)
+    received_at = models.DateTimeField(default=timezone.now)
+    source = models.CharField(max_length=60, blank=True, help_text="GRN / opening / return reference")
+    supplier = models.ForeignKey("purchasing.Supplier", null=True, blank=True, on_delete=models.PROTECT, related_name="lots")
+    grn_line = models.ForeignKey("purchasing.GRNLine", null=True, blank=True, on_delete=models.PROTECT, related_name="lots")
+    origin = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="+")
 
     class Meta:
-        ordering = ["name"]
-        verbose_name_plural = "categories"
+        ordering = ["item_id", "expiry", "id"]
+        indexes = [models.Index(fields=["item", "status", "expiry"])]
+        constraints = [models.CheckConstraint(condition=models.Q(qty__gte=0), name="lot_qty_not_negative")]
 
     def __str__(self):
-        return self.name
+        return f"Lot {self.pk} {self.item.sku} {self.batch}"
+
+    def is_expired(self, on=None):
+        return self.expiry is not None and self.expiry < (on or timezone.localdate())
 
 
-class Product(models.Model):
-    UNIT_CHOICES = [
-        ("kg", "Kilogram"),
-        ("g", "Gram"),
-        ("pc", "Piece"),
-        ("dozen", "Dozen"),
-        ("bunch", "Bunch"),
-        ("box", "Box"),
-        ("ltr", "Litre"),
-        ("pkt", "Packet"),
+class StockMove(models.Model):
+    """Append-only stock ledger. Every change to a lot is one row here."""
+
+    KINDS = [
+        ("opening", "Opening stock"),
+        ("purchase", "Goods received"),
+        ("sale", "Sale"),
+        ("return_in", "Customer return"),
+        ("purchase_return", "Return to supplier"),
+        ("waste", "Wastage"),
+        ("damage", "Damage"),
+        ("expiry", "Expired write-off"),
+        ("adjust", "Stocktake adjustment"),
+        ("transfer_out", "Moved out of sellable"),
+        ("transfer_in", "Moved into lot"),
     ]
-
-    name = models.CharField(max_length=80, unique=True)
-    tamil_name = models.CharField(max_length=80, blank=True)
-    code = models.CharField("item code", max_length=20, unique=True, blank=True, null=True)
-    category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="products")
-    unit = models.CharField(max_length=10, choices=UNIT_CHOICES, default="kg")
-    cost_price = models.DecimalField(max_digits=10, decimal_places=2, default=0, validators=NON_NEGATIVE)
-    selling_price = models.DecimalField(max_digits=10, decimal_places=2, validators=NON_NEGATIVE)
-    stock = models.DecimalField(max_digits=12, decimal_places=3, default=0)
-    reorder_level = models.DecimalField(max_digits=12, decimal_places=3, default=5, validators=NON_NEGATIVE)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    at = models.DateTimeField(default=timezone.now, db_index=True)
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="moves")
+    lot = models.ForeignKey(StockLot, on_delete=models.PROTECT, related_name="moves")
+    kind = models.CharField(max_length=16, choices=KINDS, db_index=True)
+    qty = models.DecimalField(max_digits=12, decimal_places=3, help_text="+ in, − out")
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=4)
+    ref = models.CharField(max_length=60, blank=True, db_index=True)
+    reason = models.CharField(max_length=200, blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
 
     class Meta:
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
+        ordering = ["-at", "-id"]
 
     @property
-    def is_low_stock(self):
-        return self.stock <= self.reorder_level
+    def value(self):
+        from core.money import money
+
+        return money(self.qty * self.unit_cost)
+
+
+class StockCount(models.Model):
+    OPEN, APPROVED, CANCELLED = "open", "approved", "cancelled"
+    STATUS = [(OPEN, "Counting"), (APPROVED, "Approved"), (CANCELLED, "Cancelled")]
+    title = models.CharField(max_length=100)
+    created_at = models.DateTimeField(default=timezone.now)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    status = models.CharField(max_length=10, choices=STATUS, default=OPEN)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-id"]
+
+
+class StockCountLine(models.Model):
+    count = models.ForeignKey(StockCount, on_delete=models.CASCADE, related_name="lines")
+    item = models.ForeignKey(Item, on_delete=models.PROTECT)
+    lot = models.ForeignKey(StockLot, on_delete=models.PROTECT, null=True, blank=True)
+    expected = models.DecimalField(max_digits=12, decimal_places=3)
+    counted = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)
+    reason = models.CharField(max_length=120, blank=True)
 
     @property
-    def stock_value(self):
-        return (self.stock * self.cost_price).quantize(Decimal("0.01"))
-
-    def as_dict(self):
-        return {
-            "id": self.pk,
-            "name": self.name,
-            "tamil_name": self.tamil_name,
-            "code": self.code,
-            "category": self.category.name,
-            "unit": self.unit,
-            "selling_price": str(self.selling_price),
-            "stock": str(self.stock),
-            "low_stock": self.is_low_stock,
-        }
-
-
-class Supplier(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-    phone = models.CharField(max_length=20, blank=True)
-    address = models.CharField(max_length=200, blank=True)
-    notes = models.CharField(max_length=200, blank=True)
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
-
-
-class Purchase(models.Model):
-    """Stock received from a supplier. Saving adds to the product's stock."""
-
-    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="purchases")
-    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name="purchases", null=True, blank=True)
-    quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=POSITIVE)
-    unit_cost = models.DecimalField(max_digits=10, decimal_places=2, validators=NON_NEGATIVE)
-    total_cost = models.DecimalField(max_digits=12, decimal_places=2, editable=False)
-    invoice_no = models.CharField(max_length=40, blank=True)
-    purchased_on = models.DateField()
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="purchases")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-purchased_on", "-id"]
-
-    def __str__(self):
-        return f"{self.product} × {self.quantity}"
-
-    def save(self, *args, **kwargs):
-        self.total_cost = (self.quantity * self.unit_cost).quantize(Decimal("0.01"))
-        super().save(*args, **kwargs)
+    def difference(self):
+        return None if self.counted is None else self.counted - self.expected

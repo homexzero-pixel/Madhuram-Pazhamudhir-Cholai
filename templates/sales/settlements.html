@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Settlements{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>UPI &amp; card settlement reconciliation</h1><p>Payments are recorded at the counter. This screen matches them to the money the bank actually credited.</p></div>
+<form class="d-flex gap-2" method="get"><select name="method" class="form-select" aria-label="Method"><option value="upi" {% if method == "upi" %}selected{% endif %}>UPI</option><option value="card" {% if method == "card" %}selected{% endif %}>Card</option></select>
+<input type="date" name="upto" value="{{ upto|date:'Y-m-d' }}" class="form-control" aria-label="Up to"><button class="btn btn-success">Show</button></form></div>
+{% if old %}<div class="alert alert-warning">{{ old }} UPI / card payment{{ old|pluralize }} older than 3 days {{ old|pluralize:"is,are" }} still not matched to a bank settlement.</div>{% endif %}
+<div class="tiles"><div class="tile"><div class="k">Unsettled {{ method|upper }} payments up to {{ upto|date:"d-m-Y" }}</div><div class="v">{{ unsettled_total|money }}</div></div>
+<div class="tile"><div class="k">Unsettled {{ method|upper }} refunds</div><div class="v">{{ refunds_total|money }}</div></div>
+<div class="tile good"><div class="k">Net expected from provider</div><div class="v">{{ net_expected|money }}</div><div class="s">Credited + fees should equal this</div></div></div>
+<div class="row g-3"><div class="col-lg-5"><div class="card"><div class="card-header">Record a bank credit</div><div class="card-body">
+<form method="post" action="{% url 'settlement_create' %}" class="row g-2">{% csrf_token %}<input type="hidden" name="method" value="{{ method }}"><input type="hidden" name="upto" value="{{ upto|date:'Y-m-d' }}">
+<div class="col-6"><label class="form-label" for="c">Amount credited ₹</label><input id="c" name="credited" class="form-control" inputmode="decimal" required></div>
+<div class="col-6"><label class="form-label" for="f">Fees / MDR ₹</label><input id="f" name="fees" class="form-control" inputmode="decimal" value="0"></div>
+<div class="col-6"><label class="form-label" for="so">Credited on</label><input id="so" type="date" name="settled_on" class="form-control"></div>
+<div class="col-6"><label class="form-label" for="p">Provider / bank</label><input id="p" name="provider" class="form-control"></div>
+<div class="col-12"><label class="form-label" for="br">Bank reference / UTR</label><input id="br" name="bank_reference" class="form-control"></div>
+<div class="col-12"><button class="btn btn-success">Match all unsettled up to {{ upto|date:"d-m-Y" }}</button></div></form></div></div>
+<div class="card mt-3"><div class="card-header">By business date</div><table class="table table-sm mb-0">{% for d in by_day %}<tr><td>{{ d.sale__business_date|date:"d-m-Y" }}</td><td class="r">{{ d.total|money }}</td></tr>{% empty %}<tr><td class="text-muted">Nothing unsettled.</td></tr>{% endfor %}</table></div></div>
+<div class="col-lg-7"><div class="card"><div class="card-header">Settlement history</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Date</th><th>Method</th><th class="r">Expected</th><th class="r">Credited</th><th class="r">Fees</th><th class="r">Unexplained</th><th>Ref</th></tr></thead><tbody>
+{% for s in history %}<tr><td>{{ s.settled_on|date:"d-m-Y" }}</td><td>{{ s.get_method_display }}</td><td class="r">{{ s.expected|money }}</td><td class="r">{{ s.credited|money }}</td><td class="r">{{ s.fees|money }}</td><td class="r {% if s.difference %}text-danger fw-bold{% else %}text-success{% endif %}">{{ s.difference|money }}</td><td>{{ s.bank_reference }}</td></tr>{% empty %}<tr><td colspan="7" class="text-muted">No settlements recorded.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card mt-3"><div class="card-header">Unsettled payments</div><div class="table-responsive" style="max-height:360px"><table class="table table-sm mb-0">{% for p in unsettled %}<tr><td><a href="{% url 'sale_detail' p.sale_id %}">{{ p.sale.bill_no }}</a></td><td>{{ p.sale.created_at|date:"d-m H:i" }}</td><td>{{ p.reference }}</td><td class="r">{{ p.amount|money }}</td></tr>{% endfor %}</table></div></div></div></div>
+{% endblock %}

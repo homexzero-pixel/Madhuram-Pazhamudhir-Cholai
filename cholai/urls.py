@@ -1,17 +1,19 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
-
-from . import views
+from django.urls import include, path, re_path
+from django.views.static import serve
 
 urlpatterns = [
-    path("", views.dashboard, name="dashboard"),
-    path("admin/", admin.site.urls),
+    path("django-admin/", admin.site.urls),
+    path("", include("core.urls")),
     path("accounts/", include("accounts.urls")),
-    path("store/", include("store.urls")),
+    path("products/", include("catalog.urls")),
     path("inventory/", include("inventory.urls")),
-    path("sales/", include("sales.urls")),
+    path("purchases/", include("purchasing.urls")),
+    path("customers/", include("customers.urls")),
+    path("", include("sales.urls")),
     path("expenses/", include("expenses.urls")),
     path("reports/", include("reports.urls")),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # Static files are served by the app itself: it runs on one shop PC without a separate web server.
+    re_path(r"^static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
+]
