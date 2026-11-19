@@ -1,0 +1,34 @@
+{% extends "base.html" %}{% load cholai %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h4 class="mb-0">Products</h4>
+  <form class="d-flex flex-wrap gap-2" method="get">
+    <input class="form-control form-control-sm" style="max-width:200px" type="search" name="q" value="{{ q }}" placeholder="Name / Tamil name / code">
+    <select name="category" class="form-select form-select-sm" style="max-width:170px" onchange="this.form.submit()">
+      <option value="">All categories</option>
+      {% for c in categories %}<option value="{{ c.pk }}" {% if cat == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+    <div class="form-check form-switch align-self-center"><input class="form-check-input" type="checkbox" name="low" value="1" id="low" {% if low %}checked{% endif %} onchange="this.form.submit()"><label class="form-check-label small" for="low">Low stock</label></div>
+    <button class="btn btn-sm btn-outline-success"><i class="bi bi-search"></i></button>
+    {% if is_manager %}<a href="{% url 'product_create' %}" class="btn btn-sm btn-success text-nowrap"><i class="bi bi-plus"></i> Add product</a>{% endif %}
+  </form>
+</div>
+<div class="card"><div class="table-responsive"><table class="table table-hover mb-0 align-middle">
+  <thead><tr><th>Code</th><th>Product</th><th>Category</th><th class="text-end">Cost</th><th class="text-end">Price</th><th class="text-end">Stock</th><th></th></tr></thead>
+  <tbody>
+  {% for p in page %}
+  <tr class="{% if not p.is_active %}text-muted{% endif %}">
+    <td class="small">{{ p.code|default:"" }}</td>
+    <td>{{ p.name }} {% if p.tamil_name %}<div class="small text-muted">{{ p.tamil_name }}</div>{% endif %}{% if not p.is_active %}<span class="badge text-bg-secondary">inactive</span>{% endif %}</td>
+    <td>{{ p.category }}</td>
+    <td class="text-end">{{ p.cost_price|money:store.currency_symbol }}</td>
+    <td class="text-end fw-semibold">{{ p.selling_price|money:store.currency_symbol }}<span class="text-muted small">/{{ p.unit }}</span></td>
+    <td class="text-end"><span class="badge {% if p.stock <= 0 %}text-bg-danger{% elif p.is_low_stock %}text-bg-warning{% else %}text-bg-success{% endif %}">{{ p.stock|qty }} {{ p.unit }}</span></td>
+    <td class="text-end text-nowrap">{% if is_manager %}
+      <a href="{% url 'product_edit' p.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+      {% url 'product_delete' p.pk as del %}{% include "includes/delete_button.html" with action=del confirm="Delete this product?" %}{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="7" class="text-muted">No products found.</td></tr>{% endfor %}
+  </tbody></table></div></div>
+{% include "includes/pagination.html" %}
+{% endblock %}

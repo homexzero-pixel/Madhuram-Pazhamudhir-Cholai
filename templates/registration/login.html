@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block body_class %}login-page{% endblock %}
+{% block content %}
+<div class="row justify-content-center align-items-center min-vh-100">
+  <div class="col-sm-8 col-md-5 col-lg-4">
+    <div class="card shadow border-0">
+      <div class="card-body p-4">
+        <div class="text-center mb-4">
+          <div class="display-4">🍌🥭🍇</div>
+          <h4 class="mt-2 mb-0">{{ store.name|default:"Madhuram Pazhamudhir Cholai" }}</h4>
+          <div class="text-muted small">{{ store.tagline }}</div>
+        </div>
+        {% if form.errors %}<div class="alert alert-danger py-2">Wrong username or password.</div>{% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-3"><label class="form-label">Username</label><input name="username" class="form-control" autofocus required></div>
+          <div class="mb-3"><label class="form-label">Password</label><input type="password" name="password" class="form-control" required></div>
+          <input type="hidden" name="next" value="{{ next }}">
+          <button class="btn btn-success w-100">Log in</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

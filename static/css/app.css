@@ -1,0 +1,29 @@
+:root { --brand: #15803d; --brand-dark: #14532d; --accent: #f59e0b; }
+body { background: #f6f8f4; }
+.brand-bar { background: linear-gradient(90deg, var(--brand-dark), var(--brand)); }
+.brand-mark { font-size: 1.5rem; line-height: 1; }
+.login-page { background: linear-gradient(135deg, #fef3c7 0%, #dcfce7 100%); }
+.card { border: 0; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.stat-card .stat-label { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+.stat-card .stat-value { font-size: 1.5rem; font-weight: 700; }
+.btn-success { --bs-btn-bg: var(--brand); --bs-btn-border-color: var(--brand); }
+
+/* POS */
+.product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .75rem; max-height: 72vh; overflow-y: auto; }
+.product-tile { border: 1px solid #e5e7eb; border-radius: .6rem; padding: .6rem; background: #fff; transition: box-shadow .15s; }
+.product-tile:hover { box-shadow: 0 2px 8px rgba(21,128,61,.2); border-color: #bbf7d0; }
+.product-tile.out { opacity: .5; }
+.product-tile .price { color: var(--brand); font-weight: 700; }
+.cart-card { position: sticky; top: 1rem; }
+
+/* Thermal-style receipt */
+.receipt { max-width: 340px; background: #fff; padding: 1rem; font-family: "Courier New", monospace; font-size: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+.receipt hr { border-top: 1px dashed #000; opacity: 1; margin: .4rem 0; }
+.receipt th { border-bottom: 1px dashed #000; }
+
+@media print {
+  body { background: #fff; }
+  .card { box-shadow: none; }
+  .receipt { box-shadow: none; max-width: 80mm; padding: 0; }
+  main { padding: 0 !important; }
+}

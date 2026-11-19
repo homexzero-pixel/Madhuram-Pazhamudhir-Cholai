@@ -1,0 +1,71 @@
+{% extends "base.html" %}{% load static cholai %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+  <div>
+    <h4 class="mb-0">Vanakkam, {{ user.first_name|default:user.username }} 👋</h4>
+    <div class="text-muted small">{% now "l, d F Y" %}</div>
+  </div>
+  <a href="{% url 'pos' %}" class="btn btn-success btn-lg"><i class="bi bi-cart-plus"></i> New bill</a>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body">
+    <div class="stat-label">Today's sales</div><div class="stat-value">{{ today.revenue|money:store.currency_symbol }}</div>
+    <div class="small text-muted">{{ today.bills }} bill{{ today.bills|pluralize }}</div></div></div></div>
+  <div class="col-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body">
+    <div class="stat-label">This month</div><div class="stat-value">{{ month.revenue|money:store.currency_symbol }}</div>
+    <div class="small text-muted">{{ month.bills }} bills · avg {{ month.avg_bill|money:store.currency_symbol }}</div></div></div></div>
+  {% if is_manager %}
+  <div class="col-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body">
+    <div class="stat-label">Month gross profit</div><div class="stat-value text-success">{{ month.gross_profit|money:store.currency_symbol }}</div>
+    <div class="small text-muted">Expenses {{ month.expenses|money:store.currency_symbol }}</div></div></div></div>
+  <div class="col-6 col-xl-3"><div class="card stat-card h-100"><div class="card-body">
+    <div class="stat-label">Month net profit</div><div class="stat-value {% if month.net_profit < 0 %}text-danger{% else %}text-success{% endif %}">{{ month.net_profit|money:store.currency_symbol }}</div>
+    <div class="small text-muted">Purchases {{ month.purchases|money:store.currency_symbol }}</div></div></div></div>
+  {% endif %}
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card h-100"><div class="card-header bg-white">Sales – last 7 days</div>
+      <div class="card-body"><canvas id="weekChart" height="140"></canvas></div></div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header bg-white d-flex justify-content-between"><span><i class="bi bi-exclamation-triangle text-warning"></i> Low stock</span>
+        <a href="{% url 'product_list' %}?low=1" class="small">See all</a></div>
+      <ul class="list-group list-group-flush">
+        {% for p in low_stock %}
+        <li class="list-group-item d-flex justify-content-between"><span>{{ p.name }} {% if p.tamil_name %}<span class="text-muted small">{{ p.tamil_name }}</span>{% endif %}</span>
+          <span class="badge {% if p.stock <= 0 %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ p.stock|qty }} {{ p.unit }}</span></li>
+        {% empty %}<li class="list-group-item text-muted">All items are well stocked.</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-12">
+    <div class="card"><div class="card-header bg-white d-flex justify-content-between"><span>Recent bills</span><a href="{% url 'sale_list' %}" class="small">All bills</a></div>
+      <div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle">
+        <thead><tr><th>Bill</th><th>Time</th><th>Cashier</th><th>Customer</th><th>Payment</th><th class="text-end">Total</th><th></th></tr></thead>
+        <tbody>
+        {% for s in recent %}
+        <tr class="{% if s.status == 'void' %}text-decoration-line-through text-muted{% endif %}">
+          <td><a href="{% url 'sale_detail' s.pk %}">{{ s.bill_no }}</a></td><td>{{ s.created_at|date:"d M, H:i" }}</td>
+          <td>{{ s.cashier }}</td><td>{{ s.customer_name|default:"—" }}</td><td>{{ s.get_payment_method_display }}</td>
+          <td class="text-end">{{ s.total|money:store.currency_symbol }}</td>
+          <td class="text-end"><a href="{% url 'sale_receipt' s.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i></a></td>
+        </tr>
+        {% empty %}<tr><td colspan="7" class="text-muted">No bills yet.</td></tr>{% endfor %}
+        </tbody></table></div></div>
+  </div>
+</div>
+{{ week_chart|json_script:"week-data" }}
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'vendor/chartjs/chart.umd.js' %}"></script>
+<script>
+  const wk = JSON.parse(document.getElementById('week-data').textContent);
+  new Chart(document.getElementById('weekChart'), {type: 'bar',
+    data: {labels: wk.labels, datasets: [{label: 'Sales', data: wk.values, backgroundColor: '#f59e0b', borderRadius: 6}]},
+    options: {plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true}}}});
+</script>
+{% endblock %}

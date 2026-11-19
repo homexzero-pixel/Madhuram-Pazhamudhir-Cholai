@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% load cholai %}
+{% block title %}Bill {{ sale.bill_no }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-center gap-2 mb-3 d-print-none">
+  <button class="btn btn-success" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+  <a href="{% url 'pos' %}" class="btn btn-outline-success"><i class="bi bi-cart-plus"></i> Next bill</a>
+  <a href="{% url 'sale_detail' sale.pk %}" class="btn btn-outline-secondary">Details</a>
+</div>
+<div class="receipt mx-auto">
+  <div class="text-center">
+    {% if store.logo %}<img src="{{ store.logo.url }}" alt="" height="48"><br>{% endif %}
+    <div class="fw-bold fs-6">{{ store.name }}</div>
+    {% if store.tagline %}<div>{{ store.tagline }}</div>{% endif %}
+    {% if store.address %}<div>{{ store.address|linebreaksbr }}</div>{% endif %}
+    {% if store.phone %}<div>Ph: {{ store.phone }}</div>{% endif %}
+    {% if store.gstin %}<div>GSTIN: {{ store.gstin }}</div>{% endif %}
+  </div>
+  <hr>
+  <div class="d-flex justify-content-between"><span>Bill: {{ sale.bill_no }}</span><span>{{ sale.created_at|date:"d/m/Y H:i" }}</span></div>
+  <div>Cashier: {{ sale.cashier }}</div>
+  {% if sale.customer_name or sale.customer_phone %}<div>Customer: {{ sale.customer_name }} {{ sale.customer_phone }}</div>{% endif %}
+  {% if sale.status == 'void' %}<div class="text-center fw-bold">*** VOID ***</div>{% endif %}
+  <hr>
+  <table class="w-100">
+    <thead><tr><th>Item</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">Amt</th></tr></thead>
+    <tbody>{% for i in sale.items.all %}<tr><td>{{ i.product_name }}</td><td class="text-end">{{ i.quantity|qty }}{{ i.unit }}</td><td class="text-end">{{ i.unit_price|money:"" }}</td><td class="text-end">{{ i.line_total|money:"" }}</td></tr>{% endfor %}</tbody>
+  </table>
+  <hr>
+  <div class="d-flex justify-content-between"><span>Subtotal</span><span>{{ sale.subtotal|money:store.currency_symbol }}</span></div>
+  {% if sale.discount %}<div class="d-flex justify-content-between"><span>Discount</span><span>-{{ sale.discount|money:store.currency_symbol }}</span></div>{% endif %}
+  <div class="d-flex justify-content-between fw-bold fs-6"><span>TOTAL</span><span>{{ sale.total|money:store.currency_symbol }}</span></div>
+  <div class="d-flex justify-content-between"><span>Paid ({{ sale.get_payment_method_display }})</span><span>{{ sale.amount_received|money:store.currency_symbol }}</span></div>
+  {% if sale.change_due %}<div class="d-flex justify-content-between"><span>Change</span><span>{{ sale.change_due|money:store.currency_symbol }}</span></div>{% endif %}
+  <hr>
+  <div class="text-center">{{ store.bill_footer }}</div>
+</div>
+{% endblock %}

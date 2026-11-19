@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% load cholai %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3"><h4 class="mb-0">Expense categories</h4>
+  <a href="{% url 'expense_category_create' %}" class="btn btn-sm btn-success"><i class="bi bi-plus"></i> Add category</a></div>
+<div class="card"><table class="table mb-0 align-middle"><thead><tr><th>Name</th><th>Description</th><th class="text-end">Total spent</th><th></th></tr></thead><tbody>
+{% for c in categories %}<tr><td class="fw-semibold">{{ c.name }}</td><td>{{ c.description|default:"—" }}</td><td class="text-end">{{ c.total|default:0|money:store.currency_symbol }}</td>
+<td class="text-end text-nowrap"><a href="{% url 'expense_category_edit' c.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+{% url 'expense_category_delete' c.pk as del %}{% include "includes/delete_button.html" with action=del %}</td></tr>
+{% empty %}<tr><td colspan="4" class="text-muted">No categories yet.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}
