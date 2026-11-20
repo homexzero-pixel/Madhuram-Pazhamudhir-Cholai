@@ -112,6 +112,16 @@ LOGIN_REDIRECT_URL = "home"
 LOGOUT_REDIRECT_URL = "login"
 SESSION_COOKIE_AGE = 60 * 60 * 14  # one long shift
 
+# ---- Online hosting (VPS behind nginx with HTTPS). Off for the counter PC.
+# Set MPC_HTTPS=1 and DJANGO_ALLOWED_HOSTS=billing.yourshop.in on the server (see docs/HOSTINGER_VPS.md).
+if os.environ.get("MPC_HTTPS") == "1":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS if h not in ("localhost", "127.0.0.1")]
+    SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
 CATALOGUE_CSV = BASE_DIR / "data" / "Madhuram_20000_SKUs.csv"
 
 from django.contrib.messages import constants as message_constants  # noqa: E402

@@ -1,4 +1,5 @@
 """Start the store system on this PC: migrate, daily backup, then serve on http://127.0.0.1:8765/."""
+import os
 import threading
 import webbrowser
 from datetime import date
@@ -45,4 +46,9 @@ class Command(BaseCommand):
 
         from cholai.wsgi import application
 
-        serve(application, host=host, port=port, threads=8, channel_timeout=120)
+        extra = {}
+        if os.environ.get("MPC_HTTPS") == "1":
+            # Online hosting: trust only the local nginx in front of us for the client IP and https scheme.
+            extra = {"trusted_proxy": "127.0.0.1", "trusted_proxy_headers": {"x-forwarded-for", "x-forwarded-proto"},
+                     "trusted_proxy_count": 1}
+        serve(application, host=host, port=port, threads=8, channel_timeout=120, **extra)

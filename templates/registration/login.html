@@ -7,7 +7,7 @@
     <div class="card-body p-4">
       <img src="{% static 'img/logo.webp' %}" alt="{{ store.name }}" class="login-logo">
       {% if mode == "demo" %}<div class="alert alert-warning py-2 small mb-3"><b>Practice database.</b> Nothing here touches the live store. Log in as <code>owner</code>, <code>manager</code> or <code>cashier</code> · password <code>practice123</code> · approval PIN <code>1234</code>.</div>{% endif %}
-      {% if form.errors %}<div class="alert alert-danger py-2">Wrong user name or password.</div>{% endif %}
+      {% if locked %}<div class="alert alert-danger py-2">{{ locked }}</div>{% elif form.errors %}<div class="alert alert-danger py-2">Wrong user name or password.</div>{% endif %}
       <form method="post">{% csrf_token %}
         <label class="form-label" for="u">User name</label><input id="u" name="username" class="form-control form-control-lg mb-3" autofocus autocomplete="username" required>
         <label class="form-label" for="p">Password</label><input id="p" type="password" name="password" class="form-control form-control-lg mb-3" autocomplete="current-password" required>

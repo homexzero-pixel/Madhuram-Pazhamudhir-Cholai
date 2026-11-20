@@ -38,9 +38,18 @@ def authorise(user, perm, approver_username="", approver_pin=""):
         return user
     if not approver_username:
         raise PermissionDenied(f"Needs approval: {PERMISSIONS[perm]}. Ask a manager to enter their user name and PIN.")
-    approver = User.objects.filter(username__iexact=approver_username.strip(), is_active=True).first()
+    from . import throttle
+
+    name = approver_username.strip().lower()
+    try:
+        throttle.check("pin", name)
+    except throttle.Locked as exc:
+        raise PermissionDenied(str(exc)) from exc
+    approver = User.objects.filter(username__iexact=name, is_active=True).first()
     if approver is None or not approver.check_pin(approver_pin):
+        throttle.fail("pin", name)
         raise PermissionDenied("Approval user name or PIN is wrong.")
+    throttle.clear("pin", name)
     if not approver.can(perm):
         raise PermissionDenied(f"{approver.username} cannot approve this.")
     return approver

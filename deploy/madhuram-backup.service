@@ -1,0 +1,9 @@
+[Unit]
+Description=Madhuram nightly checked backup
+
+[Service]
+Type=oneshot
+User=madhuram
+WorkingDirectory=/opt/madhuram/app
+EnvironmentFile=/etc/madhuram.env
+ExecStart=/opt/madhuram/app/.venv/bin/python manage.py auto_backup

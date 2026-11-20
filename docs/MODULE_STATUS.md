@@ -23,6 +23,7 @@ walk-through of every screen with no errors. **Nothing has been run on the shop'
 | Backup & restore | Automatic (daily + shift close) and manual checked backups, second folder, restore-check screen, restore command keeping the old file | Acceptance 10 (restore into separate DB matched) | **Restore drill on the shop PC**; off-site copy routine |
 | Pilot data | `import_pilot` brings over products, barcodes, GST, lots, bills, refunds, shifts and expenses (dry run first) | Pilot DB built with the pilot's own code and imported | Run on the shop's real `counter.sqlite` |
 | Windows packaging | Setup, start, practice, owner, backup, restore and import launchers; offline install from bundled wheels | **Not run on Windows** | Windows run-through on the counter PC |
+| Online hosting (VPS) | `deploy/setup_vps.sh` (nginx, HTTPS, firewall, service, nightly backup), HTTPS-only settings, login and PIN lockout | HTTPS-behind-proxy, CSRF, host check and lockout tested locally; lockout tests | **First run on a real Hostinger VPS**; domain |
 | Multiple counters | Single counter only (stated in the app and README) | — | Design and build if a second till is needed |
 
 ## Delivered in stages

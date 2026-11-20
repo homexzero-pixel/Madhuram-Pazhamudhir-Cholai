@@ -39,6 +39,7 @@ All data is in one SQLite database file on the PC, and checked backups are taken
 | [Cashier SOP](docs/CASHIER_SOP.md) | Counter staff, with screenshots |
 | [Owner guide](docs/OWNER_GUIDE.md) | Owner / manager: products, purchases, stock, closing, reports |
 | [Backup & restore](docs/BACKUP_RESTORE.md) | Owner / whoever looks after the PC |
+| [Online hosting on Hostinger VPS](docs/HOSTINGER_VPS.md) | Low-cost hosting (about ₹599/month) to use the system from anywhere; billing then needs the internet |
 | [Hardware](docs/HARDWARE.md) | Scanner, weighing scale, thermal printer setup and what is still untested |
 | [GST & invoices](docs/GST_AND_INVOICES.md) | Settings the store's accountant must confirm |
 | [Module status](docs/MODULE_STATUS.md) | What was built, tested, and still needs store data, accountant approval or hardware |
