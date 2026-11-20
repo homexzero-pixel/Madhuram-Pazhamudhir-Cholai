@@ -94,7 +94,7 @@ def report_view(request):
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = rep["title"][:30]
+        ws.title = "".join(ch for ch in rep["title"] if ch not in "/\\?*[]:")[:30] or "Report"
         ws.append([title])
         ws.append([f"Date basis: {rep['basis']}"])
         ws.append(cols)

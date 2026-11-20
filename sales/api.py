@@ -224,7 +224,7 @@ def pos_checkout(request, body):
     sale, created = S.checkout(body.get("draft"), request.user, body.get("payments") or [],
                                customer_id=body.get("customer"), approver=body.get("approver", ""), pin=body.get("pin", ""))
     return JsonResponse({
-        "ok": True, "created": created, "sale": sale.pk, "bill_no": sale.bill_no, "total": str(sale.total),
+        "ok": True, "created": created, "sale": sale.pk, "bill_no": sale.bill_no, "sale_total": str(sale.total),
         "change": str(sale.change), "receipt": reverse("sale_receipt", args=[sale.pk]), **state(request.user),
     })
 

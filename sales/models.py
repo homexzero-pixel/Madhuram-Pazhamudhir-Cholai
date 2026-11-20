@@ -8,6 +8,11 @@ from django.utils import timezone
 
 from catalog.models import Item
 
+def _m(v):
+    """SQLite returns sums without trailing zeros; keep money at 2 decimals."""
+    return (v or Decimal(0)).quantize(Decimal("0.01"))
+
+
 TENDERS = [("cash", "Cash"), ("upi", "UPI"), ("card", "Card"), ("credit", "Customer credit")]
 REFUND_METHODS = [("cash", "Cash"), ("upi", "UPI"), ("card", "Card"), ("credit", "Credit to customer account")]
 
@@ -125,15 +130,15 @@ class Sale(models.Model):
 
     @property
     def paid(self):
-        return self.payments.aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        return _m(self.payments.aggregate(s=Sum("amount"))["s"])
 
     @property
     def change(self):
-        return self.payments.aggregate(s=Sum("change"))["s"] or Decimal(0)
+        return _m(self.payments.aggregate(s=Sum("change"))["s"])
 
     @property
     def refunded(self):
-        return SaleReturn.objects.filter(sale=self).aggregate(s=Sum("total"))["s"] or Decimal(0)
+        return _m(SaleReturn.objects.filter(sale=self).aggregate(s=Sum("total"))["s"])
 
 
 class SaleLine(models.Model):

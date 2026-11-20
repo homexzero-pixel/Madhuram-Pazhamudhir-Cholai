@@ -134,10 +134,11 @@ def cash_summary(shift):
     from purchasing.models import SupplierPayment
 
     def total(qs, fieldname="amount"):
-        return qs.aggregate(s=Sum(fieldname))["s"] or ZERO
+        return money(qs.aggregate(s=Sum(fieldname))["s"] or ZERO)
 
     cash_sales = total(Payment.objects.filter(sale__shift=shift, method="cash"))
-    collections = total(CreditEntry.objects.filter(shift=shift, kind="payment", method="cash"))
+    # Credit-ledger payments are stored as negative amounts (the customer owes less); as drawer cash they come in.
+    collections = -total(CreditEntry.objects.filter(shift=shift, kind="payment", method="cash"))
     pay_in = total(shift.cash_moves.filter(kind="pay_in"))
     refunds = total(SaleReturn.objects.filter(shift=shift, method="cash"), "total")
     expenses = total(Expense.objects.filter(shift=shift, method="cash"))
@@ -566,6 +567,9 @@ def _checkout(draft_uuid, user, payments, customer_id, approver, pin):
     draft.status = DraftBill.DONE
     draft.customer = customer
     draft.save(update_fields=["status", "customer", "updated_at"])
+    # Saved in the same transaction as the bill, payments and stock movements.
+    audit("sale", f"Bill {bill_no} ₹{q.total} " + " + ".join(f"{r['method']} ₹{r['amount']}" for r in rows),
+          user=user, obj=sale, lines=len(q.lines), change=change)
     return sale
 
 

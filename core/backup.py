@@ -22,19 +22,18 @@ def make_backup(dest_dir=None, label="manual"):
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     dest = dest_dir / f"madhuram-{settings.MODE}-{stamp}-{label}.sqlite3"
     tmp = dest.with_suffix(".partial")
+    # Use the app's own connection: the SQLite online-backup API copies a consistent snapshot
+    # even while billing continues.
     connection.ensure_connection()
-    src = sqlite3.connect(str(_db_path()))
+    src = connection.connection
+    out = sqlite3.connect(str(tmp))
     try:
-        out = sqlite3.connect(str(tmp))
-        try:
-            src.backup(out)
-            ok = out.execute("PRAGMA integrity_check").fetchone()[0]
-            if ok != "ok":
-                raise BackupError(f"Integrity check failed on the backup copy: {ok}")
-        finally:
-            out.close()
+        src.backup(out)
+        ok = out.execute("PRAGMA integrity_check").fetchone()[0]
+        if ok != "ok":
+            raise BackupError(f"Integrity check failed on the backup copy: {ok}")
     finally:
-        src.close()
+        out.close()
     tmp.replace(dest)
     return dest
 
@@ -49,6 +48,8 @@ def auto_backup(label="auto"):
     """Called after a shift closes and once a day at start-up. Never raises into the caller."""
     from core.models import StoreSettings, audit
 
+    if settings.MODE == "test":  # the automated tests check backups explicitly
+        return None
     try:
         cfg = StoreSettings.load()
         path = make_backup(label=f"auto-{label}")
