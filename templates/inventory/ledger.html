@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Stock ledger{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Stock ledger</h1><p>Every change to stock: opening, purchases, sales, returns, write-offs, stocktake adjustments and transfers.</p></div>
+<form class="d-flex gap-2"><select name="kind" class="form-select" aria-label="Type"><option value="">All types</option>{% for v, t in kinds %}<option value="{{ v }}" {% if request.GET.kind == v %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><input name="q" value="{{ request.GET.q }}" class="form-control" placeholder="Product, SKU, bill or GRN" aria-label="Search"><button class="btn btn-success">Filter</button></form></div>
+<div class="card"><div class="table-responsive"><table class="table table-sm"><thead><tr><th>When</th><th>Product</th><th>Type</th><th>Lot</th><th class="r">Qty</th><th class="r">Unit cost</th><th>Reference</th><th>Reason</th><th>By</th></tr></thead><tbody>
+{% for m in page %}<tr><td class="text-nowrap">{{ m.at|date:"d-m-Y H:i" }}</td><td><a href="{% url 'item_detail' m.item_id %}">{{ m.item.name|truncatechars:40 }}</a></td><td>{{ m.get_kind_display }}</td><td>{{ m.lot_id }}</td><td class="r {% if m.qty < 0 %}text-danger{% else %}text-success{% endif %}">{{ m.qty|q }}</td><td class="r">{{ m.unit_cost|money }}</td><td>{{ m.ref }}</td><td class="small">{{ m.reason }}</td><td>{{ m.user.username|default:"" }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% include "includes/pager.html" %}
+{% endblock %}

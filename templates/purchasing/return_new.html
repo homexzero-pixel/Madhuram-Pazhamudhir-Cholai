@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Return to supplier{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Return to supplier</h1><p>Choose the lots that go back. The value reduces what you owe the supplier.</p></div></div>
+<form method="get" class="d-flex gap-2 mb-3"><select name="supplier" class="form-select" style="max-width:340px" aria-label="Supplier"><option value="">Choose supplier…</option>{% for s in suppliers %}<option value="{{ s.pk }}" {% if sup.pk == s.pk %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select><button class="btn btn-success">Show lots</button></form>
+{% if sup %}<form method="post" class="card card-body">{% csrf_token %}<input type="hidden" name="supplier" value="{{ sup.pk }}">
+<table class="table table-sm"><thead><tr><th>Lot</th><th>Item</th><th>Batch / expiry</th><th class="r">On hand</th><th class="r">Cost</th><th>Return qty</th></tr></thead><tbody>
+{% for l in lots %}<tr><td>{{ l.pk }}</td><td>{{ l.item.name }}</td><td>{{ l.batch }} {{ l.expiry|date:"d-m-Y" }}</td><td class="r">{{ l.qty|q }} {{ l.item.unit_label }}</td><td class="r">{{ l.unit_cost|money }}</td><td style="width:120px"><input name="q{{ l.pk }}" class="form-control form-control-sm" inputmode="decimal" aria-label="Return quantity lot {{ l.pk }}"></td></tr>{% empty %}<tr><td colspan="6" class="text-muted">No stock from this supplier.</td></tr>{% endfor %}</tbody></table>
+<label class="form-label" for="reason">Reason</label><input id="reason" name="reason" class="form-control mb-3" required><button class="btn btn-danger">Save supplier return</button></form>{% endif %}
+{% endblock %}

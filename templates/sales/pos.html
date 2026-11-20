@@ -1,0 +1,62 @@
+{% extends "base.html" %}{% load static mpc %}
+{% block title %}Billing{% endblock %}
+{% block body_class %}pos-page{% endblock %}
+{% block content %}
+<div class="pos" id="pos" data-autoprint="{{ store.auto_print|yesno:'1,0' }}" data-width="{{ store.receipt_width }}">
+  <section class="pos-main">
+    <div class="status-strip" id="status-strip"></div>
+    <form class="scanbar" id="scan-form" autocomplete="off">
+      <input class="scan" id="scan" placeholder="Scan barcode · or type SKU / PLU / 0.375*PLU · Enter" aria-label="Barcode, SKU or PLU" autofocus>
+      <input class="form-control wt" id="qty" placeholder="Qty / kg" inputmode="decimal" aria-label="Quantity or weight for the next scan (F4)">
+      <button class="btn btn-success px-4" type="submit"><i class="bi bi-plus-lg"></i> Add</button>
+    </form>
+    <div class="billtable-wrap">
+      <table class="table table-hover billtable" aria-label="Current bill">
+        <thead><tr><th>#</th><th>Product</th><th class="r">Qty / kg</th><th class="r">Rate</th><th class="r">Discount</th><th class="r">Amount</th></tr></thead>
+        <tbody id="lines"></tbody>
+      </table>
+      <div id="empty" class="text-center text-muted py-5"><i class="bi bi-upc-scan fs-1"></i><div class="fs-5 mt-2">Scan the first item · முதல் பொருளை ஸ்கேன் செய்யவும்</div></div>
+    </div>
+  </section>
+  <aside class="pos-side">
+    <div class="totalbox">
+      <div class="row2"><span id="count">0 items</span><span id="bill-ref"></span></div>
+      <div class="big" id="total">₹0.00</div>
+      <div class="row2"><span>Before discount <b id="gross">₹0.00</b></span><span>Saved <b id="disc">₹0.00</b></span></div>
+    </div>
+    <div class="card"><div class="card-body py-2">
+      <div class="d-flex justify-content-between align-items-center"><span class="text-muted small">Customer</span>
+        <button class="btn btn-sm btn-outline-success" data-k="F7">Choose <kbd>F7</kbd></button></div>
+      <div id="cust" class="fw-semibold">Walk-in customer</div>
+    </div></div>
+    <button class="btn btn-success btn-lg py-3 fs-4" id="pay-btn" data-k="F12"><i class="bi bi-cash-coin"></i> Payment <kbd>F12</kbd></button>
+    <div class="keys">
+      <button class="btn btn-outline-secondary" data-k="F2">Search <kbd>F2</kbd></button>
+      <button class="btn btn-outline-secondary" data-k="F4">Qty / weight <kbd>F4</kbd></button>
+      <button class="btn btn-outline-secondary" data-k="F5">Change price <kbd>F5</kbd></button>
+      <button class="btn btn-outline-secondary" data-k="F6">Discount <kbd>F6</kbd></button>
+      <button class="btn btn-outline-secondary" data-k="F8">Hold <kbd>F8</kbd></button>
+      <button class="btn btn-outline-secondary" data-k="F9">Recall <kbd>F9</kbd></button>
+      <button class="btn btn-outline-secondary" data-k="Delete">Remove line <kbd>Del</kbd></button>
+      <button class="btn btn-outline-danger" data-k="cancel">Cancel bill <kbd>Ctrl+⌫</kbd></button>
+    </div>
+    <div class="small text-muted">↑ ↓ choose a line · <kbd>+</kbd> <kbd>−</kbd> change pieces · <kbd>Esc</kbd> back to scanner</div>
+    <div id="last-sale" class="card d-none"><div class="card-body py-2 small">
+      Last bill <b id="last-no"></b> · change <b id="last-change"></b>
+      <div class="mt-1 d-flex gap-2"><a class="btn btn-sm btn-outline-success" id="last-print" target="_blank">Reprint</a><a class="btn btn-sm btn-outline-secondary" id="last-open">Open bill</a></div>
+    </div></div>
+  </aside>
+</div>
+
+<div class="alert flash d-none" id="flash" role="alert"></div>
+
+<!-- generic dialog -->
+<div class="modal" id="dlg" tabindex="-1" aria-labelledby="dlg-title">
+  <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="dlg-title"></h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+    <div class="modal-body" id="dlg-body"></div>
+    <div class="modal-footer" id="dlg-foot"></div>
+  </div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/pos.js' %}"></script>{% endblock %}

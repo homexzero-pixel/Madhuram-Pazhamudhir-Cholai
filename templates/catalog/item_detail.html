@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}{{ item.sku }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ item.name }}</h1><p><span class="ta">{{ item.name_ta|default:"Tamil name needed" }}</span> · {{ item.sku }}{% if item.plu %} · PLU {{ item.plu }}{% endif %} · {{ item.department }} › {{ item.category }} · base product {{ item.base }}</p></div>
+<div class="d-flex gap-2 flex-wrap">
+{% if "products" in can %}<a class="btn btn-success" href="{% url 'item_edit' item.pk %}"><i class="bi bi-pencil"></i> Edit</a>
+{% if item.status == "candidate" or not item.is_active %}<form method="post" action="{% url 'item_verify' item.pk %}">{% csrf_token %}<button class="btn btn-outline-success">Verify &amp; activate</button></form>{% endif %}{% endif %}
+<a class="btn btn-outline-secondary" target="_blank" href="{% url 'labels' %}?ids={{ item.pk }}&copies=4"><i class="bi bi-tags"></i> Labels</a>
+{% if "purchase" in can %}<a class="btn btn-outline-secondary" href="{% url 'grn_new' %}?item={{ item.pk }}">Receive stock</a>{% endif %}</div></div>
+{% if item.status == "candidate" %}<div class="alert alert-warning">This is a <b>generated assortment candidate</b>. Check brand, pack size, MRP and barcode on the physical pack before verifying. It cannot be billed until it is verified and active.</div>{% endif %}
+<div class="tiles">
+<div class="tile"><div class="k">Selling price</div><div class="v">{{ item.price|money }}{% if item.weighed %}<small>/kg</small>{% endif %}</div><div class="s">MRP {{ item.mrp|money }} · cost {{ item.cost|money }}</div></div>
+<div class="tile {% if item.is_low %}warn{% endif %}"><div class="k">Sellable stock</div><div class="v">{{ item.on_hand|q }} {{ item.unit_label }}</div><div class="s">Reorder at {{ item.reorder_level|q }}{% if quarantine %} · some stock in quarantine{% endif %}</div></div>
+<div class="tile"><div class="k">GST</div><div class="v" style="font-size:1.1rem">{{ item.get_tax_class_display }}{% if item.gst_rate is not None %} {{ item.gst_rate|q }}%{% endif %}</div><div class="s">HSN {{ item.hsn|default:"not set" }}</div></div>
+<div class="tile"><div class="k">Buying</div><div class="v" style="font-size:1.1rem">1 {{ item.purchase_unit }} = {{ item.units_per_purchase|q }} {{ item.unit_label }}</div><div class="s">Supplier {{ item.preferred_supplier|default:"—" }} · shelf {{ item.shelf|default:"—" }}</div></div></div>
+<div class="row g-3"><div class="col-lg-5"><div class="card h-100"><div class="card-header">Barcodes (scan to sell)</div><div class="card-body">
+<table class="table table-sm"><tbody>{% for b in barcodes %}<tr><td class="font-monospace">{{ b.code }}</td><td>{{ b.get_kind_display }}</td><td>{% if b.qty_per_scan != 1 %}<b>{{ b.qty_per_scan|q }} per scan</b>{% else %}1 per scan{% endif %}</td>
+<td>{% if "link_barcode" in can %}<form method="post" action="{% url 'barcode_delete' item.pk b.pk %}" data-confirm="Remove barcode {{ b.code }}?">{% csrf_token %}<button class="btn btn-sm btn-link text-danger p-0">remove</button></form>{% endif %}</td></tr>{% empty %}<tr><td class="text-muted">No barcode linked. Cashiers can still use SKU {{ item.sku }}{% if item.plu %} or PLU {{ item.plu }}{% endif %}.</td></tr>{% endfor %}</tbody></table>
+{% if "link_barcode" in can %}<form method="post" action="{% url 'barcode_add' item.pk %}" class="row g-2">{% csrf_token %}
+<div class="col-12"><label class="form-label small" for="code">Scan the pack barcode</label><input id="code" name="code" class="form-control font-monospace" autocomplete="off"></div>
+<div class="col-6"><label class="form-label small" for="per">Units per scan</label><input id="per" name="qty_per_scan" value="1" class="form-control"></div>
+<div class="col-6"><label class="form-label small" for="kind">Type</label><select id="kind" name="kind" class="form-select">{% for v, t in kinds %}<option value="{{ v }}">{{ t }}</option>{% endfor %}</select></div>
+<div class="col-12"><div class="form-text">A different pack size needs its own SKU. Use "units per scan" only for an outer carton of this exact pack.</div><button class="btn btn-outline-success mt-1">Link barcode</button></div></form>{% endif %}
+</div></div></div>
+<div class="col-lg-7"><div class="card h-100"><div class="card-header">Stock lots (earliest expiry is sold first)</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Lot</th><th>Batch</th><th>Expiry</th><th class="r">On hand</th><th class="r">Received</th><th class="r">Cost</th><th>From</th><th>Status</th></tr></thead><tbody>
+{% for l in lots %}<tr class="{% if l.is_expired %}table-danger{% endif %}"><td>{{ l.pk }}</td><td>{{ l.batch }}</td><td>{{ l.expiry|date:"d-m-Y"|default:"—" }}{% if l.is_expired %} <b>expired</b>{% endif %}</td><td class="r">{{ l.qty|q }}</td><td class="r">{{ l.received_qty|q }}</td><td class="r">{{ l.unit_cost|money }}</td><td class="small">{{ l.source }}</td><td>{{ l.get_status_display }}</td></tr>{% empty %}<tr><td colspan="8" class="text-muted">No stock.</td></tr>{% endfor %}</tbody></table></div></div></div></div>
+<div class="card mt-3"><div class="card-header">Recent stock movements</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>When</th><th>Type</th><th>Lot</th><th class="r">Qty</th><th>Ref</th><th>Reason</th><th>By</th></tr></thead><tbody>
+{% for m in moves %}<tr><td>{{ m.at|date:"d-m-Y H:i" }}</td><td>{{ m.get_kind_display }}</td><td>{{ m.lot_id }}</td><td class="r {% if m.qty < 0 %}text-danger{% else %}text-success{% endif %}">{{ m.qty|q }}</td><td>{{ m.ref }}</td><td class="small">{{ m.reason }}</td><td>{{ m.user.username|default:"" }}</td></tr>{% empty %}<tr><td class="text-muted" colspan="7">None.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

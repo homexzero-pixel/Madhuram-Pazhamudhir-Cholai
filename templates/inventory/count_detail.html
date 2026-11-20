@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}{{ sc.title }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ sc.title }}</h1><p>{{ sc.get_status_display }}{% if sc.approved_by %} · approved by {{ sc.approved_by.display }} {{ sc.approved_at|date:"d-m-Y H:i" }}{% endif %}</p></div><button class="btn btn-outline-secondary" onclick="window.print()">Print count sheet</button></div>
+<form method="post">{% csrf_token %}
+<div class="card"><div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Product</th><th>Lot / expiry</th><th class="r">Expected</th><th>Counted</th><th class="r">Difference</th><th>Reason for difference</th></tr></thead><tbody>
+{% for l in lines %}<tr><td>{{ l.item.name }} <span class="small text-muted">{{ l.item.sku }}</span></td><td class="small">{% if l.lot %}lot {{ l.lot_id }} {{ l.lot.batch }} {{ l.lot.expiry|date:"d-m-Y" }}{% endif %}</td><td class="r">{{ l.expected|q }}</td>
+<td style="width:120px">{% if sc.status == "open" %}<input name="c{{ l.pk }}" value="{{ l.counted|q }}" class="form-control form-control-sm" inputmode="decimal" aria-label="Counted {{ l.item.name }}">{% else %}{{ l.counted|q }}{% endif %}</td>
+<td class="r {% if l.difference %}text-danger fw-bold{% endif %}">{{ l.difference|q }}</td><td>{% if sc.status == "open" %}<input name="r{{ l.pk }}" value="{{ l.reason }}" class="form-control form-control-sm" aria-label="Reason {{ l.item.name }}">{% else %}{{ l.reason }}{% endif %}</td></tr>{% endfor %}</tbody></table></div></div>
+{% if sc.status == "open" %}<div class="d-flex gap-2 align-items-end mt-3 flex-wrap"><button name="action" value="save" class="btn btn-outline-success">Save counts</button>
+<div><label class="form-label small" for="ap">Approver (if you cannot approve)</label><input id="ap" name="approver" class="form-control form-control-sm" autocomplete="off"></div><div><label class="form-label small" for="pp">PIN</label><input id="pp" name="pin" type="password" class="form-control form-control-sm"></div>
+<button name="action" value="approve" class="btn btn-success" onclick="return confirm('Adjust stock to the counted quantities?')">Approve &amp; adjust stock</button></div>{% endif %}
+</form>
+{% endblock %}

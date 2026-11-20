@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Adjust lot{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Lot {{ lot.pk }} · {{ lot.item.name }}</h1><p>Batch {{ lot.batch|default:"—" }} · expiry {{ lot.expiry|date:"d-m-Y"|default:"—" }} · on hand {{ lot.qty|q }} {{ lot.item.unit_label }} · {{ lot.get_status_display }}</p></div><a href="{% url 'item_detail' lot.item_id %}" class="btn btn-outline-secondary">Back</a></div>
+<div class="card"><div class="card-body"><form method="post" class="row g-3">{% csrf_token %}
+<div class="col-md-4"><label class="form-label" for="kind">What happened</label><select id="kind" name="kind" class="form-select">
+{% if lot.status == "sellable" %}<option value="waste">Wastage (spoiled, rotten)</option><option value="damage">Damage</option><option value="expiry">Expired – write off</option><option value="quarantine">Move to quarantine (check later)</option>{% else %}<option value="release">Release back to sellable (manager)</option><option value="waste">Wastage</option><option value="damage">Damage</option><option value="expiry">Expired – write off</option>{% endif %}</select></div>
+<div class="col-md-3"><label class="form-label" for="qty">Quantity ({{ lot.item.unit_label }})</label><input id="qty" name="qty" class="form-control" inputmode="decimal" required></div>
+<div class="col-md-5"><label class="form-label" for="reason">Reason (required)</label><input id="reason" name="reason" class="form-control" required></div>
+<div class="col-12"><button class="btn btn-danger">Record</button> <span class="small text-muted ms-2">Write-offs are recorded with your name in the stock ledger and audit log.</span></div></form></div></div>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Sales &amp; Returns{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Sales &amp; Returns</h1><p>Find a bill by number, customer name or phone, or by date. Open a bill to reprint it or take a return.</p></div>
+<form class="d-flex flex-wrap gap-2" method="get">
+  <input name="q" value="{{ q }}" class="form-control" placeholder="Bill no. / customer / phone" style="width:240px" aria-label="Search bills">
+  <input type="date" name="start" value="{{ start|date:'Y-m-d' }}" class="form-control" style="width:160px" aria-label="From">
+  <input type="date" name="end" value="{{ end|date:'Y-m-d' }}" class="form-control" style="width:160px" aria-label="To">
+  <button class="btn btn-success">Find</button></form></div>
+<div class="card mb-3"><div class="table-responsive"><table class="table table-hover align-middle">
+<thead><tr><th>Bill</th><th>Date &amp; time</th><th>Cashier</th><th>Customer</th><th class="r">Items</th><th class="r">Total</th><th class="r">Refunded</th><th></th></tr></thead><tbody>
+{% for s in page %}<tr><td><a href="{% url 'sale_detail' s.pk %}" class="fw-semibold">{{ s.bill_no }}</a></td><td>{{ s.created_at|date:"d-m-Y H:i" }}</td><td>{{ s.cashier.username }}</td>
+<td>{{ s.customer|default:"Walk-in" }}</td><td class="r">{{ s.lines.count }}</td><td class="r fw-semibold">{{ s.total|money }}</td><td class="r">{% with r=s.refunded %}{% if r %}<span class="text-danger">{{ r|money }}</span>{% else %}—{% endif %}{% endwith %}</td>
+<td class="text-end"><a class="btn btn-sm btn-outline-secondary" href="{% url 'sale_receipt' s.pk %}?print=1&reprint=1" target="_blank"><i class="bi bi-printer"></i> Reprint</a></td></tr>
+{% empty %}<tr><td colspan="8" class="text-muted p-4">No bills found.</td></tr>{% endfor %}</tbody></table></div></div>
+{% include "includes/pager.html" %}
+<h2 class="h5 mt-4">Returns / credit notes</h2>
+<div class="card"><div class="table-responsive"><table class="table"><thead><tr><th>Credit note</th><th>Date</th><th>Original bill</th><th>Reason</th><th>Refund by</th><th class="r">Amount</th></tr></thead><tbody>
+{% for r in returns %}<tr><td><a href="{% url 'return_detail' r.pk %}">{{ r.number }}</a></td><td>{{ r.created_at|date:"d-m-Y H:i" }}</td><td><a href="{% url 'sale_detail' r.sale_id %}">{{ r.sale.bill_no }}</a></td><td>{{ r.reason }}</td><td>{{ r.get_method_display }}</td><td class="r">{{ r.total|money }}</td></tr>
+{% empty %}<tr><td colspan="6" class="text-muted">No returns in this period.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

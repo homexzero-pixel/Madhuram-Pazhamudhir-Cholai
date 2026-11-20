@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Shift {{ shift.pk }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Shift {{ shift.pk }} · {{ shift.cashier.display }}</h1><p>{{ shift.counter }} · business date {{ shift.business_date|date:"d-m-Y" }} · opened {{ shift.opened_at|date:"d-m-Y H:i" }}{% if shift.closed_at %} · closed {{ shift.closed_at|date:"d-m-Y H:i" }} by {{ shift.closed_by.display }}{% endif %}{% if shift.reopen_count %} · <span class="text-danger">reopened {{ shift.reopen_count }}×</span>{% endif %}</p></div>
+<div class="d-flex gap-2"><button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button><a class="btn btn-outline-secondary" href="{% url 'cash_home' %}">Back</a></div></div>
+<div class="tiles">
+<div class="tile"><div class="k">Expected cash</div><div class="v">{{ summary.expected|money }}</div></div>
+<div class="tile"><div class="k">Counted</div><div class="v">{{ shift.counted|money }}</div><div class="s">{% for k, v in shift.denominations.items %}₹{{ k }}×{{ v }} {% endfor %}</div></div>
+<div class="tile {% if shift.variance %}bad{% else %}good{% endif %}"><div class="k">Variance (counted − expected)</div><div class="v">{{ shift.variance|money }}</div><div class="s">{{ shift.close_note }}</div></div>
+<div class="tile"><div class="k">Left for next shift</div><div class="v">{{ shift.retained_cash|money }}</div></div></div>
+<div class="row g-3"><div class="col-lg-6"><div class="card"><div class="card-header">Drawer calculation</div><table class="table table-sm mb-0"><tbody>
+<tr><td>Opening float</td><td class="r">{{ summary.opening|money }}</td></tr><tr><td>+ Cash sales</td><td class="r">{{ summary.cash_sales|money }}</td></tr>
+<tr><td>+ Other cash received</td><td class="r">{{ summary.other_in|money }}</td></tr><tr><td>− Cash refunds</td><td class="r">{{ summary.refunds|money }}</td></tr>
+<tr><td>− Cash expenses</td><td class="r">{{ summary.expenses|money }}</td></tr><tr><td>− Cash removed</td><td class="r">{{ summary.removed|money }}</td></tr>
+<tr class="fw-bold"><td>= Expected</td><td class="r">{{ summary.expected|money }}</td></tr></tbody></table></div></div>
+<div class="col-lg-6"><div class="card"><div class="card-header">Tenders (do not affect the drawer except cash)</div><table class="table table-sm mb-0"><thead><tr><th>Method</th><th class="r">Sales</th><th class="r">Refunds</th></tr></thead><tbody>
+{% for m, v in summary.tenders.items %}<tr><td>{{ m|upper }}</td><td class="r">{{ v|money }}</td><td class="r">{{ summary.refunds_by|get:m|money }}</td></tr>{% endfor %}</tbody></table></div></div></div>
+<div class="card mt-3"><div class="card-header">Bills in this shift</div><div class="table-responsive"><table class="table table-sm"><tbody>
+{% for s in sales %}<tr><td><a href="{% url 'sale_detail' s.pk %}">{{ s.bill_no }}</a></td><td>{{ s.created_at|date:"H:i" }}</td><td class="r">{{ s.total|money }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

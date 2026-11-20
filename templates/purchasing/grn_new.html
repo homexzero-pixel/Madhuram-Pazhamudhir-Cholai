@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Receive goods{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Receive goods{% if po %} against {{ po.number }}{% endif %}</h1><p>One supplier invoice can contain many items and lots. Quantities are in purchase units; stock is added in sale units using each item's conversion (e.g. 2 cartons × 24 = 48 bottles).</p></div><a class="btn btn-outline-secondary" href="{% url 'purchase_home' %}">Back</a></div>
+<form method="post" class="card card-body">{% csrf_token %}{% if po %}<input type="hidden" name="po" value="{{ po.pk }}">{% endif %}<input type="hidden" name="lcount" value="{{ lines|length }}">
+<div class="row g-2 mb-3">
+<div class="col-md-4"><label class="form-label" for="sup">Supplier</label>{% if po %}<input class="form-control" value="{{ po.supplier }}" disabled id="sup">{% else %}<select id="sup" name="supplier" class="form-select" required><option value="">Choose…</option>{% for s in suppliers %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select>{% endif %}</div>
+<div class="col-md-3"><label class="form-label" for="inv">Supplier invoice no.</label><input id="inv" name="invoice_no" class="form-control" required></div>
+<div class="col-md-2"><label class="form-label" for="invd">Invoice date</label><input id="invd" type="date" name="invoice_date" class="form-control" required></div>
+<div class="col-md-3"><label class="form-label" for="invt">Invoice total ₹ (to match)</label><input id="invt" name="invoice_total" class="form-control" inputmode="decimal" required></div></div>
+<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>SKU / barcode</th><th>Billed qty</th><th>Free qty</th><th>Damaged</th><th>Sale units per purchase unit</th><th>Cost / purchase unit ₹</th><th>Batch</th><th>Expiry</th></tr></thead><tbody>
+{% for l in lines %}<tr><td><input name="l{{ forloop.counter0 }}-code" value="{{ l.code|default:'' }}" class="form-control form-control-sm font-monospace" aria-label="SKU line {{ forloop.counter }}">{% if l.name %}<div class="small text-muted">{{ l.name }}</div>{% endif %}<input type="hidden" name="l{{ forloop.counter0 }}-po_line" value="{{ l.po_line|default:'' }}"></td>
+<td><input name="l{{ forloop.counter0 }}-qty" value="{{ l.qty|q }}" class="form-control form-control-sm" inputmode="decimal" aria-label="Billed quantity line {{ forloop.counter }}"></td>
+<td><input name="l{{ forloop.counter0 }}-free_qty" class="form-control form-control-sm" inputmode="decimal" aria-label="Free quantity line {{ forloop.counter }}"></td>
+<td><input name="l{{ forloop.counter0 }}-damaged_qty" class="form-control form-control-sm" inputmode="decimal" aria-label="Damaged quantity line {{ forloop.counter }}"></td>
+<td><input name="l{{ forloop.counter0 }}-units_per_purchase" value="{{ l.upp|q }}" class="form-control form-control-sm" inputmode="decimal" aria-label="Units per purchase unit line {{ forloop.counter }}"></td>
+<td><input name="l{{ forloop.counter0 }}-unit_cost" value="{{ l.cost|default:'' }}" class="form-control form-control-sm" inputmode="decimal" aria-label="Cost line {{ forloop.counter }}"></td>
+<td><input name="l{{ forloop.counter0 }}-batch" class="form-control form-control-sm" aria-label="Batch line {{ forloop.counter }}"></td>
+<td><input type="date" name="l{{ forloop.counter0 }}-expiry" class="form-control form-control-sm" aria-label="Expiry line {{ forloop.counter }}" {% if l.expiry %}required{% endif %}></td></tr>{% endfor %}</tbody></table></div>
+<p class="small text-muted">Free goods lower the actual cost per unit. Damaged quantity is recorded and written off immediately, so it never reaches the shelf. The same supplier invoice number cannot be entered twice.</p>
+<button class="btn btn-success btn-lg">Save goods receipt &amp; add stock</button></form>
+{% endblock %}

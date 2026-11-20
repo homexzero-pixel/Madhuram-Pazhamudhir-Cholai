@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Backups{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Backups</h1><p>Database: <code>{{ db }}</code><br>Backup folder: <code>{{ dir }}</code></p></div>
+<form method="post" action="{% url 'backup_now' %}">{% csrf_token %}<button class="btn btn-success btn-lg"><i class="bi bi-shield-check"></i> Back up now</button></form></div>
+<div class="alert alert-info">A checked backup is made automatically when a shift closes and the first time the app starts each day. Copy backups to a USB drive or second PC regularly (set a second folder in Settings → Backups). To restore, follow <b>docs/BACKUP_RESTORE.md</b>: the app must be stopped first.</div>
+{% if report %}<div class="card mb-3 border-success"><div class="card-header">Restore check · {{ report.file }}</div><div class="card-body"><ul class="mb-0">
+<li>Integrity: <b>{{ report.integrity }}</b></li><li>Products: {{ report.items }}</li>
+<li>Last bill: {% if report.last_bill %}<b>{{ report.last_bill.bill_no }}</b> ₹{{ report.last_bill.total }} at {{ report.last_bill.created_at }}{% else %}none{% endif %}</li>
+<li>Bills: {{ report.sales_count }} totalling ₹{{ report.sales_total }}</li><li>Items with stock: {{ report.items_with_stock }} · sellable units {{ report.stock_units }} (lots {{ report.lot_units }})</li>
+<li>Last shift: {% if report.last_shift %}{{ report.last_shift.id }} {{ report.last_shift.status }} · float ₹{{ report.last_shift.opening_float }} · expected ₹{{ report.last_shift.expected }} · counted ₹{{ report.last_shift.counted }}{% endif %}</li></ul></div></div>{% endif %}
+<div class="card"><table class="table align-middle"><thead><tr><th>File</th><th class="r">Size</th><th></th></tr></thead><tbody>
+{% for f in files %}<tr><td>{{ f.name }}</td><td class="r">{{ f.size|filesizeformat }}</td><td class="text-end"><form method="post" action="{% url 'backup_verify' %}" class="d-inline">{% csrf_token %}<input type="hidden" name="name" value="{{ f.name }}"><button class="btn btn-sm btn-outline-success">Check contents</button></form> <a class="btn btn-sm btn-outline-secondary" href="{% url 'backup_download' f.name %}">Download</a></td></tr>
+{% empty %}<tr><td colspan="3" class="text-muted">No backups yet.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

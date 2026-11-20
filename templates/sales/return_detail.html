@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% load static mpc %}
+{% block title %}{{ ret.number }}{% endblock %}
+{% block content %}
+<div class="page-head no-print"><div><h1>Credit note {{ ret.number }}</h1><p>Return against <a href="{% url 'sale_detail' ret.sale_id %}">{{ ret.sale.bill_no }}</a> · business date {{ ret.business_date|date:"d-m-Y" }} (original sale {{ ret.sale.business_date|date:"d-m-Y" }})</p></div>
+<button class="btn btn-success" onclick="window.print()"><i class="bi bi-printer"></i> Print credit note</button></div>
+<div class="receipt w{{ w }}">
+  <img class="logo" src="{% static 'img/logo.webp' %}" alt="">
+  <div class="c b">{{ id.legal_name|default:id.name }}</div>{% if id.gstin %}<div class="c">GSTIN: {{ id.gstin }}</div>{% endif %}
+  <div class="c b">CREDIT NOTE / RETURN</div><hr>
+  <div>No: {{ ret.number }}</div><div>{{ ret.created_at|date:"d-m-Y H:i" }} · {{ ret.user.username }}{% if ret.approved_by %} (appr. {{ ret.approved_by.username }}){% endif %}</div>
+  <div>Against bill {{ ret.sale.bill_no }} of {{ ret.sale.created_at|date:"d-m-Y" }}</div><hr>
+  <table>{% for l in ret.lines.all %}<tr><td colspan="2">{{ l.sale_line.name }}</td></tr><tr><td>{{ l.qty|q }}{{ l.sale_line.unit }} · {{ l.get_disposition_display }}</td><td class="r">{{ l.amount|rupees }}</td></tr>{% endfor %}</table><hr>
+  <table><tr class="tot"><td>REFUND</td><td class="r">{{ ret.total|money }}</td></tr><tr><td>By</td><td class="r">{{ ret.get_method_display }}</td></tr>{% if ret.points_reversed %}<tr><td>Points reversed</td><td class="r">{{ ret.points_reversed|q }}</td></tr>{% endif %}</table>
+  <hr><div>Reason: {{ ret.reason }}</div>
+</div>
+{% endblock %}

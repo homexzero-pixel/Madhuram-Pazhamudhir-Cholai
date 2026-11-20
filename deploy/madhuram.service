@@ -1,0 +1,19 @@
+[Unit]
+Description=Madhuram store system
+After=network.target
+
+[Service]
+User=madhuram
+Group=madhuram
+WorkingDirectory=/opt/madhuram/app
+EnvironmentFile=/etc/madhuram.env
+ExecStart=/opt/madhuram/app/.venv/bin/python manage.py serve --host 127.0.0.1 --port 8765 --no-browser
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/madhuram /opt/madhuram/app/staticfiles
+
+[Install]
+WantedBy=multi-user.target

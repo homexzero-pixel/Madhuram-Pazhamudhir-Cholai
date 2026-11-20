@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Suppliers{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Suppliers</h1><p>Total outstanding to suppliers: <b>{{ total|money }}</b></p></div>{% if "purchase" in can %}<a class="btn btn-success" href="{% url 'supplier_add' %}">Add supplier</a>{% endif %}</div>
+<div class="card"><table class="table table-hover mb-0"><thead><tr><th>Supplier</th><th>Phone</th><th>GSTIN</th><th>Terms</th><th class="r">Outstanding</th></tr></thead><tbody>
+{% for s in suppliers %}<tr><td><a href="{% url 'supplier_detail' s.pk %}">{{ s.name }}</a>{% if not s.is_active %} <span class="badge text-bg-secondary">inactive</span>{% endif %}</td><td>{{ s.phone }}</td><td>{{ s.gstin }}</td><td>{{ s.payment_terms_days }} days</td><td class="r fw-semibold">{{ s.balance|money }}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted">No suppliers yet.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

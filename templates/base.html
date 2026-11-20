@@ -1,0 +1,52 @@
+{% load static mpc %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ title|default:"Madhuram" }}{% endblock %} · {{ store.name|default:"Madhuram" }}</title>
+<link rel="icon" href="{% static 'img/logo.webp' %}">
+<link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
+<link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet">
+<link href="{% static 'css/app.css' %}" rel="stylesheet">
+{% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% if user.is_authenticated %}
+<div class="shell">
+  <aside class="side d-print-none">
+    <a class="brand" href="{% url 'home' %}"><img src="{% static 'img/logo.webp' %}" alt="{{ store.name }}"></a>
+    {% if mode == "demo" %}<div class="demo-flag">PRACTICE DATA · பயிற்சி</div>{% endif %}
+    <nav class="nav-main">
+      {% if "bill" in can %}<a href="{% url 'pos' %}" class="{% if nav == 'billing' %}active{% endif %}"><i class="bi bi-upc-scan"></i> Billing <kbd>F1</kbd></a>{% endif %}
+      {% if "reports" in can %}<a href="{% url 'dashboard' %}" class="{% if nav == 'dashboard' %}active{% endif %}"><i class="bi bi-speedometer2"></i> Owner dashboard</a>{% endif %}
+      <a href="{% url 'item_list' %}" class="{% if nav == 'products' %}active{% endif %}"><i class="bi bi-box-seam"></i> Products</a>
+      {% if "purchase" in can or "reports" in can %}<a href="{% url 'purchase_home' %}" class="{% if nav == 'purchases' %}active{% endif %}"><i class="bi bi-truck"></i> Purchases</a>{% endif %}
+      {% if "stock_view" in can %}<a href="{% url 'stock_home' %}" class="{% if nav == 'inventory' %}active{% endif %}"><i class="bi bi-boxes"></i> Inventory</a>{% endif %}
+      <a href="{% url 'sale_list' %}" class="{% if nav == 'sales' %}active{% endif %}"><i class="bi bi-receipt"></i> Sales &amp; Returns</a>
+      {% if "customers" in can %}<a href="{% url 'customer_list' %}" class="{% if nav == 'customers' %}active{% endif %}"><i class="bi bi-people"></i> Customers</a>{% endif %}
+      {% if "purchase" in can or "reports" in can %}<a href="{% url 'supplier_list' %}" class="{% if nav == 'suppliers' %}active{% endif %}"><i class="bi bi-building"></i> Suppliers</a>{% endif %}
+      {% if "expenses" in can %}<a href="{% url 'expense_list' %}" class="{% if nav == 'expenses' %}active{% endif %}"><i class="bi bi-wallet2"></i> Expenses</a>{% endif %}
+      {% if "cash" in can or "reports" in can %}<a href="{% url 'cash_home' %}" class="{% if nav == 'cash' %}active{% endif %}"><i class="bi bi-cash-stack"></i> Cash Closing</a>{% endif %}
+      {% if "reports" in can %}<a href="{% url 'report_index' %}" class="{% if nav == 'reports' %}active{% endif %}"><i class="bi bi-graph-up"></i> Reports</a>{% endif %}
+      {% if "settings" in can or "users" in can or "backup" in can or "offers" in can or "audit_view" in can %}<a href="{% url 'settings_home' %}" class="{% if nav == 'settings' %}active{% endif %}"><i class="bi bi-gear"></i> Settings</a>{% endif %}
+    </nav>
+    <div class="who">
+      <div><b>{{ user.display }}</b><br><span>{{ user.get_role_display }}</span></div>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-light">Log out</button></form>
+    </div>
+  </aside>
+  <main class="content">
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show d-print-none" role="alert">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
+<main>{% block anon %}{% endblock %}</main>
+{% endif %}
+<script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'js/app.js' %}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

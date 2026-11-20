@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% load static mpc %}
+{% block title %}Owner dashboard{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Owner dashboard</h1><p>{{ today|date:"l, d F Y" }} · figures update with every bill</p></div>
+<div class="d-flex gap-2"><a class="btn btn-outline-success" href="{% url 'report_view' %}?report=daily">Daily sales</a><a class="btn btn-outline-success" href="{% url 'cash_home' %}">Cash closing</a></div></div>
+<h2 class="h6 text-muted text-uppercase">Today</h2>
+<div class="tiles">
+<div class="tile"><div class="k">Net sales</div><div class="v">{{ t.net|money }}</div><div class="s">{{ t.bills }} bills · gross {{ t.gross|money }} − discounts {{ t.discount|money }}</div></div>
+<div class="tile {% if t.returns %}warn{% endif %}"><div class="k">Returns</div><div class="v">{{ t.returns|money }}</div><div class="s">Net after returns {{ t.net_after_returns|money }}</div></div>
+<div class="tile good"><div class="k">Gross margin</div><div class="v">{{ t.margin|money }}</div><div class="s">COGS {{ t.cogs|money }}</div></div>
+<div class="tile"><div class="k">Expenses</div><div class="v">{{ t.expenses|money }}</div><div class="s">After expenses {{ t.operating|money }}</div></div>
+</div>
+<div class="tiles">
+<div class="tile"><div class="k">Cash</div><div class="v">{{ tenders.cash|money }}</div></div><div class="tile"><div class="k">UPI</div><div class="v">{{ tenders.upi|money }}</div></div>
+<div class="tile"><div class="k">Card</div><div class="v">{{ tenders.card|money }}</div></div><div class="tile"><div class="k">Credit</div><div class="v">{{ tenders.credit|money }}</div></div>
+<div class="tile {% if shift %}good{% else %}warn{% endif %}"><div class="k">Drawer (expected)</div><div class="v">{% if cash %}{{ cash.expected|money }}{% else %}closed{% endif %}</div><div class="s">{% if shift %}Shift {{ shift.pk }} · {{ shift.cashier.display }}{% else %}No open shift{% endif %}</div></div>
+</div>
+<h2 class="h6 text-muted text-uppercase">This month</h2>
+<div class="tiles">
+<div class="tile"><div class="k">Net sales</div><div class="v">{{ m.net|money }}</div><div class="s">{{ m.bills }} bills · avg {{ m.avg_bill|money }}</div></div>
+<div class="tile"><div class="k">Returns</div><div class="v">{{ m.returns|money }}</div></div>
+<div class="tile good"><div class="k">Gross margin</div><div class="v">{{ m.margin|money }}</div><div class="s">COGS {{ m.cogs|money }}</div></div>
+<div class="tile {% if m.operating < 0 %}bad{% endif %}"><div class="k">After expenses</div><div class="v">{{ m.operating|money }}</div><div class="s">Expenses {{ m.expenses|money }}</div></div>
+</div>
+<div class="row g-3">
+<div class="col-lg-8"><div class="card h-100"><div class="card-header">Net sales after returns, last 14 days</div><div class="card-body" style="height:280px"><canvas id="c14" aria-label="Net sales last 14 days"></canvas></div></div></div>
+<div class="col-lg-4"><div class="card h-100"><div class="card-header">Needs attention</div><div class="list-group list-group-flush">
+<a class="list-group-item list-group-item-action d-flex justify-content-between" href="{% url 'stock_home' %}?view=low">Low stock <span class="badge {% if low %}text-bg-warning{% else %}text-bg-light{% endif %}">{{ low }}</span></a>
+<a class="list-group-item list-group-item-action d-flex justify-content-between" href="{% url 'stock_home' %}?view=expiry">Expiring soon <span class="badge {% if expiring %}text-bg-warning{% else %}text-bg-light{% endif %}">{{ expiring }}</span></a>
+<a class="list-group-item list-group-item-action d-flex justify-content-between" href="{% url 'stock_home' %}?view=expired">Expired lots still on hand <span class="badge {% if expired %}text-bg-danger{% else %}text-bg-light{% endif %}">{{ expired }}</span></a>
+<a class="list-group-item list-group-item-action d-flex justify-content-between" href="{% url 'settlements' %}">UPI / card not yet settled <span>{{ unsettled|money }}</span></a>
+</div></div></div></div>
+<div class="card mt-3"><div class="card-header">Latest bills</div><table class="table table-sm mb-0">{% for s in recent %}<tr><td><a href="{% url 'sale_detail' s.pk %}">{{ s.bill_no }}</a></td><td>{{ s.created_at|date:"d-m H:i" }}</td><td>{{ s.cashier.username }}</td><td class="r">{{ s.total|money }}</td></tr>{% empty %}<tr><td class="text-muted">No bills yet.</td></tr>{% endfor %}</table></div>
+<details class="mt-3"><summary class="text-muted">How these figures are calculated</summary><dl class="row mt-2">{% for k, v in defs %}<dt class="col-sm-3">{{ k }}</dt><dd class="col-sm-9">{{ v }}</dd>{% endfor %}</dl></details>
+{{ chart|json_script:"c14-data" }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'vendor/chartjs/chart.umd.js' %}"></script>
+<script>const d=JSON.parse(document.getElementById('c14-data').textContent);new Chart(document.getElementById('c14'),{type:'bar',data:{labels:d.labels,datasets:[{label:'Net sales ₹',data:d.values,backgroundColor:'#12612a',borderRadius:4}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'₹'+v.toLocaleString('en-IN')}}}}});</script>{% endblock %}

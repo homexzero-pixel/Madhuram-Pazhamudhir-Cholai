@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}New purchase order{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>New purchase order</h1><p>Quantities and costs are in <b>purchase units</b> (e.g. cartons). Scan a barcode or type the SKU in each line.</p></div><a class="btn btn-outline-secondary" href="{% url 'purchase_home' %}">Back</a></div>
+<form method="post" class="card card-body">{% csrf_token %}<input type="hidden" name="lcount" value="12">
+<div class="row g-2 mb-3"><div class="col-md-5"><label class="form-label" for="sup">Supplier</label><select id="sup" name="supplier" class="form-select" required><option value="">Choose…</option>{% for s in suppliers %}<option value="{{ s.pk }}" {% if pre.preferred_supplier_id == s.pk %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select><div class="form-text"><a href="{% url 'supplier_add' %}">Add a supplier</a></div></div>
+<div class="col-md-3"><label class="form-label" for="exp">Expected delivery</label><input id="exp" type="date" name="expected_on" class="form-control"></div>
+<div class="col-md-4"><label class="form-label" for="notes">Notes</label><input id="notes" name="notes" class="form-control"></div></div>
+<table class="table table-sm"><thead><tr><th>#</th><th>SKU / barcode</th><th>Qty (purchase units)</th><th>Cost per purchase unit ₹</th></tr></thead><tbody>
+{% for i in rows %}<tr><td>{{ forloop.counter }}</td><td><input name="l{{ i }}-code" class="form-control form-control-sm font-monospace" {% if forloop.first and pre %}value="{{ pre.sku }}"{% endif %} aria-label="Line {{ forloop.counter }} SKU"></td><td><input name="l{{ i }}-qty" class="form-control form-control-sm" inputmode="decimal" aria-label="Line {{ forloop.counter }} quantity"></td><td><input name="l{{ i }}-unit_cost" class="form-control form-control-sm" inputmode="decimal" aria-label="Line {{ forloop.counter }} cost"></td></tr>{% endfor %}</tbody></table>
+<button class="btn btn-success btn-lg">Save purchase order</button></form>
+{% endblock %}
