@@ -27,7 +27,7 @@ echo.
 echo Setup finished.
 echo   1. Run Create_Owner.bat once to create the owner login for the real store.
 echo   2. Run Try_Demo.bat to practise, or Start_Store.bat to open the real store.
-pause
+if not defined MPC_NOPAUSE pause
 exit /b 0
 :failed
 echo Setup failed. Take a photo of this window for support.

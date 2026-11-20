@@ -12,6 +12,11 @@ differs. Nothing here needs internet after setup.
 
 ## 2. Install
 
+**Quickest:** double-click **`Install_Madhuram.bat`**. It installs Python if needed (with Windows' `winget`), sets everything up, asks for the owner login, adds desktop shortcuts, makes the store start with Windows, and opens it. If it installs Python, it asks you to double-click it once more.
+
+Step by step instead:
+
+
 1. Copy the `Madhuram_Store_System` folder to `C:\Madhuram` (any folder without special permissions is fine).
 2. Double-click **`Setup_Windows.bat`**.
    - If the folder contains `wheels\`, it installs from there with **no internet**.
