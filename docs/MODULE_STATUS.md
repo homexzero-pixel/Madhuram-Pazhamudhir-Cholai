@@ -1,0 +1,32 @@
+# Module status
+
+"Tested" means automated tests and/or the end-to-end acceptance run passed on the development machine (Linux), plus a browser
+walk-through of every screen with no errors. **Nothing has been run on the shop's Windows PC or with physical hardware yet.**
+
+| Module | Implemented | Tested | Still needs store data, accountant approval or hardware |
+|---|---|---|---|
+| Barcode billing | Exact-match scan (barcode → SKU → PLU → scale label), repeat scan adds quantity, `3*` and `0.375*PLU` entry, unknown-code alert with the bill untouched and manager-authorised linking, Tamil/English/SKU/PLU/barcode search, quantity edit, remove, hold/recall, cancel with reason, PIN-approved price override (≤ MRP) and discount, customer, split tender, change due, server-saved bill that survives a refresh | Acceptance 1, 2, 3, 6; price-override, hold/recall/cancel and credit tests; real-browser run with screenshots | Physical scanner test; the store's real barcodes linked to products |
+| Weighed produce & scale labels | kg to 3 decimals, PLU, configurable EAN-13 scale-label parser (prefix, positions, weight or price, decimals, check digit), manual weight always available | Weight and price labels, bad check digit refused | **A sample label from the store's scale** to set the layout; direct scale cable link not built (needs the model) |
+| Checkout integrity | Bill, lines, lot allocation, stock ledger, payments, loyalty, credit and audit saved in one transaction; per-draft idempotency key; database lock on every write; gap-free bill numbers | All-or-nothing and double-click tests | — |
+| Receipts & labels | 80 mm, 58 mm, A4 invoice, DUPLICATE reprint with print count, credit note, Code 128 item labels, practice barcode sheet | Reprint test; layouts rendered and captured | **Thermal printer test**; drawer kick not built |
+| Product master | 20,000 candidate SKUs loaded inactive; base product vs SKU; all specified fields; barcode table with units per scan; Tamil names for 207 of 376 base products | Load and lookup at 20,000 SKUs (0.4 ms lookup) | Prices, MRP, brands, real barcodes, HSN/GST, suppliers, the remaining Tamil names: **store data** |
+| Import / export | CSV and Excel, preview, duplicate and row errors, refusal of numeric barcodes from Excel, all-or-nothing apply, undo, template, export | Leading-zero import, error preview, apply and undo tests | — |
+| Purchasing | Suppliers, multi-item POs, partial receipts, GRN with invoice total matching, carton → piece, free and damaged units, batch, expiry and real cost per lot, duplicate-invoice block, supplier returns, payments, statement | Acceptance 4; PO → partial GRN test | Supplier list and opening balances: **store data** |
+| Inventory | Lot ledger with all movement types, FEFO, expired lots blocked, quarantine, write-offs with reason, low/out/near-expiry/dead/wastage views, stocktake with approval | Acceptance 5; stocktake test | Opening stock count: **store data** |
+| Returns | Find by bill/date/customer, partial and weighed returns at the price paid with tax and discount shares, eligibility limits, refund method, disposition, loyalty reversal, credit note | Acceptance 8 (two scenarios) | — |
+| Customers, loyalty, credit | Optional profiles, history, points, credit with limit and approval, collections into the drawer | Credit sale + collection test | Loyalty rate and credit limits: **owner decision** |
+| Offers | %, ₹ off, quantity deal, combo, dates, priority, shown to cashier and on receipt, reversed on return | Quantity-deal return test | Real offers: **owner** |
+| Cash closing & settlements | Shifts, float, cash in/out, bank deposits, retained cash, denominations, variance, reopen with audit, UPI/card settlement with fees and unmatched alert | Acceptance 9; settlement test; close via screen | Bank/UPI provider statement format: **store data** |
+| Reports & dashboard | 21 reports with date basis, drill-down, print, CSV, Excel; owner dashboard | Every report opened and exported in tests | — |
+| GST & invoices | Series per FY, document type by tax mix, inclusive tax split, snapshot on bill, tax summary | Tax split and report tests | **Accountant approval** of every item in [GST_AND_INVOICES.md](GST_AND_INVOICES.md); e-invoice, cess and IGST not built |
+| Roles & audit | Owner, manager, cashier, purchaser, auditor; approval PIN; audit log | Permission tests | Staff list: **store data** |
+| Backup & restore | Automatic (daily + shift close) and manual checked backups, second folder, restore-check screen, restore command keeping the old file | Acceptance 10 (restore into separate DB matched) | **Restore drill on the shop PC**; off-site copy routine |
+| Pilot data | `import_pilot` brings over products, barcodes, GST, lots, bills, refunds, shifts and expenses (dry run first) | Pilot DB built with the pilot's own code and imported | Run on the shop's real `counter.sqlite` |
+| Windows packaging | Setup, start, practice, owner, backup, restore and import launchers; offline install from bundled wheels | **Not run on Windows** | Windows run-through on the counter PC |
+| Multiple counters | Single counter only (stated in the app and README) | — | Design and build if a second till is needed |
+
+## Delivered in stages
+
+The required first stage, scan → bill → payment → receipt → stock deduction → cash closing, is complete and tested. All the
+other modules are implemented too, at the level shown above. The remaining work is mainly store data entry, the accountant's
+review and on-site hardware tests.

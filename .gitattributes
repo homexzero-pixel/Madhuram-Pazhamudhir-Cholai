@@ -1,0 +1,3 @@
+*.bat text eol=crlf
+*.sqlite3 binary
+*.xlsx binary

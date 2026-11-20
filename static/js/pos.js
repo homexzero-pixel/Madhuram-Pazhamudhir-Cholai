@@ -234,7 +234,7 @@
     if (!S.shift) return flash('Open a cashier shift before taking payment.', 'danger', 5000);
     const total = Number(S.total);
     const credit = S.customer && S.customer.credit_allowed;
-    open(`Payment · ${S.count} lines`, `<div class="d-flex justify-content-between align-items-end mb-3"><div><div class="text-muted">To pay</div><div class="pay-big">${inr(total)}</div></div>
+    open(`Payment · ${S.count} lines`, `<div id="pay-box"><div class="d-flex justify-content-between align-items-end mb-3"><div><div class="text-muted">To pay</div><div class="pay-big">${inr(total)}</div></div>
       <div class="text-end"><div class="text-muted">Change to give</div><div class="pay-big text-success" id="chg">₹0.00</div></div></div>
       <div class="pay-grid">
         <label for="p-cash" class="fw-semibold">Cash received</label><input id="p-cash" class="form-control form-control-lg" inputmode="decimal" placeholder="0"><div class="d-flex gap-1 flex-wrap">${[0, 100, 200, 500, 2000].map(v => `<button type="button" class="btn btn-sm btn-outline-secondary" data-cash="${v}">${v ? '₹' + v : 'Exact'}</button>`).join('')}</div>
@@ -244,14 +244,16 @@
       </div>
       <div class="mt-2 d-flex gap-2"><button type="button" class="btn btn-outline-success" data-all="upi">All UPI</button><button type="button" class="btn btn-outline-success" data-all="card">All card</button></div>
       <div class="alert alert-warning mt-3 mb-0 small">For UPI and card, check the payment shows <b>successful</b> on the phone / card machine before pressing Complete.</div>
-      <p class="text-danger fs-5 mt-2 mb-0" id="pay-err"></p>`,
+      <p class="text-danger fs-5 mt-2 mb-0" id="pay-err"></p></div>`,
       `<button class="btn btn-outline-secondary" data-bs-dismiss="modal">Back (Esc)</button><button class="btn btn-success btn-lg px-5" id="pay-ok">Complete sale (Enter)</button>`,
       () => { $('#p-cash').focus(); });
     const val = id => { const e = $(id); return e ? (parseFloat(e.value) || 0) : 0; };
     const upd = () => {
       const non = val('#p-upi') + val('#p-card') + val('#p-credit');
       const due = Math.max(total - non, 0), cash = val('#p-cash');
-      $('#chg').textContent = inr(Math.max(cash - due, 0));
+      const chg = $('#chg'), short = due - cash;
+      if (short > 0.004 && (cash > 0 || non > 0)) { chg.textContent = 'Still to pay ' + inr(short); chg.className = 'pay-big text-danger'; }
+      else { chg.textContent = inr(Math.max(cash - due, 0)); chg.className = 'pay-big text-success'; }
     };
     $('#dlg-body').querySelectorAll('input').forEach(i => i.addEventListener('input', upd));
     $('#dlg-body').querySelectorAll('[data-cash]').forEach(b => b.onclick = () => { const non = val('#p-upi') + val('#p-card') + val('#p-credit'); const due = Math.max(total - non, 0); $('#p-cash').value = +b.dataset.cash || due.toFixed(2); upd(); $('#p-cash').focus(); });
@@ -267,13 +269,13 @@
       let d;
       try { d = await call('/api/pos/checkout/', Object.assign({ draft: S.draft, payments: pays, customer: S.customer && S.customer.id }, extra || {})); }
       catch (e) { $('#pay-err').textContent = 'Network problem. Press Complete again – the same bill can never be saved twice.'; sending = false; $('#pay-ok').disabled = false; return; }
-      sending = false; $('#pay-ok').disabled = false;
+      sending = false; if ($('#pay-ok')) $('#pay-ok').disabled = false;
       if (d.ok) { close(); done(d); return; }
       if (d.needs_approval) { pending = done; close(); setTimeout(() => approve(d.error, a => call('/api/pos/checkout/', Object.assign({ draft: d.draft_prev || S.draft, payments: pays, customer: S.customer && S.customer.id }, a))), 300); return; }
       $('#pay-err').textContent = d.error;
     };
     $('#pay-ok').onclick = () => go();
-    $('#dlg-body').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+    $('#pay-box').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });  // dies with the dialog
   }
 
   function done(d) {

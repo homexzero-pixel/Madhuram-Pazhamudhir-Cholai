@@ -109,4 +109,4 @@ def report_view(request):
         return resp
     return render(request, "reports/view.html", {"nav": "reports", "rep": rep, "cols": cols, "rows": rows, "totals": totals,
                                                  "start": start, "end": end, "defs": DEFINITIONS if key in ("daily", "margin", "categories") else None,
-                                                 "reports": [r for r in R.values() if r["key"] not in ("bills", "category_lines")]})
+                                                 "reports": [r for r in R.values() if r["key"] not in ("bills", "category_lines") or r["key"] == key]})

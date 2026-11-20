@@ -2,6 +2,7 @@
 {% block title %}Settings{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>Settings</h1><p>Administrative controls are kept here, away from the billing counter.</p></div></div>
+<div class="alert alert-info"><b>This version supports one billing counter.</b> The database and bill series live on this PC. A second till would share them over the shop network but is not tested and stops when this PC is off. See README → Multiple counters.</div>
 <div class="row g-3">
 {% if "settings" in can %}{% for key, s in sections.items %}<div class="col-md-6 col-xl-4"><a class="card h-100 text-decoration-none" href="{% url 'settings_edit' key %}"><div class="card-body"><h2 class="h5">{{ s.0 }}</h2><p class="text-muted mb-0 small">{{ s.1|length }} settings</p></div></a></div>{% endfor %}{% endif %}
 {% if "users" in can %}<div class="col-md-6 col-xl-4"><a class="card h-100 text-decoration-none" href="{% url 'staff_list' %}"><div class="card-body"><h2 class="h5">Staff, roles &amp; PINs</h2><p class="text-muted mb-0 small">Owner, manager, cashier, purchaser, auditor</p></div></a></div>{% endif %}

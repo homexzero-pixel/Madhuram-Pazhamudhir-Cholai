@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% load mpc %}
 {% block title %}{{ rep.title }}{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>{{ rep.title }}</h1><p>{% if rep.dates %}{{ start|date:"d-m-Y" }} to {{ end|date:"d-m-Y" }} · {% endif %}<b>Date basis:</b> {{ rep.basis }}</p></div>
+<div class="page-head"><div><h1>{{ rep.title }}{% if request.GET.category %} · {{ request.GET.category }}{% endif %}</h1><p>{% if rep.dates %}{{ start|date:"d-m-Y" }} to {{ end|date:"d-m-Y" }} · {% endif %}<b>Date basis:</b> {{ rep.basis }}</p></div>
 <form class="d-flex gap-2 flex-wrap no-print" method="get">
 <select name="report" class="form-select" style="width:220px" onchange="this.form.submit()" aria-label="Report">{% for r in reports %}<option value="{{ r.key }}" {% if r.key == rep.key %}selected{% endif %}>{{ r.title }}</option>{% endfor %}</select>
 {% if request.GET.category %}<input type="hidden" name="category" value="{{ request.GET.category }}">{% endif %}
