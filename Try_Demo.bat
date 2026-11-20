@@ -7,6 +7,11 @@ if not exist .venv\Scripts\python.exe (
   exit /b 1
 )
 set MPC_MODE=demo
+rem Use the bundled practice database the first time, if the download includes one.
+if not exist "%LOCALAPPDATA%\MadhuramPOS\demo\madhuram.sqlite3" if exist practice_database\madhuram.sqlite3 (
+  mkdir "%LOCALAPPDATA%\MadhuramPOS\demo" 2>nul
+  copy practice_database\madhuram.sqlite3 "%LOCALAPPDATA%\MadhuramPOS\demo\madhuram.sqlite3" >nul
+)
 title Madhuram PRACTICE
 .venv\Scripts\python.exe manage.py migrate -v0
 .venv\Scripts\python.exe manage.py shell -c "from accounts.models import User; import sys; sys.exit(0 if User.objects.exists() else 3)"
