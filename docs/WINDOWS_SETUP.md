@@ -32,6 +32,7 @@ Step by step instead:
 | `Start_Store.bat` | Starts the **real store**. Keep its black window open (you can minimise it); the billing window opens by itself. |
 | `Try_Demo.bat` | Starts the **practice** database on a different port. Safe for training. |
 | `Backup_Now.bat` | Makes a checked backup on this PC and in Google Drive, and shows the last bill, stock and shift it contains. |
+| `Update_Madhuram.bat` | **One-click update** (desktop shortcut *Madhuram Update*). See "Updating the program" below. |
 | `Setup_Backups.bat` | Finds or installs Google Drive for desktop and creates the 21:30 nightly backup task. See [BACKUP_RESTORE.md](BACKUP_RESTORE.md). |
 | `Restore_Backup.bat` | Puts a backup back. Close `Start_Store.bat` first. See [BACKUP_RESTORE.md](BACKUP_RESTORE.md). |
 | `Import_Pilot_Data.bat` | One time only: brings data from the earlier pilot counter. It shows a dry run first. |
@@ -64,5 +65,23 @@ To start automatically at switch-on, put a shortcut to `Start_Store.bat` in the 
 
 ## Updating the program
 
-Close `Start_Store.bat`, run `Backup_Now.bat`, replace the program folder (keep `.venv`), run `Setup_Windows.bat` again
-(it applies database migrations), then start as usual. Data is outside the program folder and is not replaced.
+**One click.** After closing time (or between customers – billing stops for about 2 minutes):
+
+1. Download the new `Madhuram_Store_System.zip` into **Downloads**. No need to unzip it.
+2. Double-click **Madhuram Update** on the desktop (`Update_Madhuram.bat` in the program folder) and press **Enter**.
+
+It then, by itself:
+- closes the store (server, its window and the billing window);
+- backs up the shop data (checked) and also makes the usual PC + Google Drive backup;
+- saves a copy of the current program in `%LOCALAPPDATA%\MadhuramPOS\program-previous\`;
+- puts the new program in place (the shop data, `.venv` and settings are not in the program folder and are not touched);
+- installs the new components (offline, from `wheels\`), updates the database and checks that the store starts;
+- **if anything fails, puts the previous program and the data from just before the update back**, and says so;
+- starts the store again. The version number is shown under your name in the menu.
+
+Other ways: drag the ZIP onto `Update_Madhuram.bat`, or unzip the new version anywhere and run `Update_Madhuram.bat` inside it –
+it finds the installed program by itself. Each run is written to `%LOCALAPPDATA%\MadhuramPOS\update-log.txt`.
+
+**First time only:** an installation made before the updater existed does not have it yet. Unzip the new version and run
+`Update_Madhuram.bat` from the unzipped folder once (or copy the folder over the old one and run `Setup_Windows.bat`). From then on the
+desktop shortcut works.

@@ -56,7 +56,7 @@ All data is in one SQLite database file on the PC. **Two automatic, checked back
 
 ```
 Setup_Windows.bat  Start_Store.bat  Try_Demo.bat  Create_Owner.bat
-Install_Madhuram.bat  Setup_Backups.bat  Backup_Now.bat  Restore_Backup.bat  Import_Pilot_Data.bat     Windows launchers
+Install_Madhuram.bat  Update_Madhuram.bat  Setup_Backups.bat  Backup_Now.bat  Restore_Backup.bat  Import_Pilot_Data.bat     Windows launchers
 data/Madhuram_20000_SKUs.csv     starter catalogue (20,000 candidate SKUs)
 data/import_template.xlsx|csv    product import template
 docs/                            guides, screenshots, results, schema

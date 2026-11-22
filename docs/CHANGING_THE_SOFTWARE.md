@@ -20,11 +20,10 @@ Whoever changes it should:
 
 ## Installing an update at the shop
 
-1. After closing time, run `Backup_Now.bat` (both backups) and close `Start_Store.bat`.
-2. Replace the program folder with the new one (keep `.venv` if it is there). **Your data is not in the program folder**; it stays in
-   `%LOCALAPPDATA%\MadhuramPOS\store\`.
-3. Run `Setup_Windows.bat`. It updates the database structure automatically.
-4. Start `Start_Store.bat` and check the last bill, a few stock figures and Settings → Backups.
+One click: put the new ZIP in **Downloads** and double-click **Madhuram Update** on the desktop. It backs up, updates, checks and
+restarts the store, and rolls back by itself if anything fails. Details in [WINDOWS_SETUP.md](WINDOWS_SETUP.md#updating-the-program).
+
+Whoever builds a new version must change the date in the `VERSION` file (e.g. `2026.12.05`), so the updater can tell new from old.
 
 ## Where things are (for a developer)
 
