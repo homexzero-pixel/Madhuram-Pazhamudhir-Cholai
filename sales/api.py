@@ -121,6 +121,30 @@ def pos_search(request, body):
     return JsonResponse({"ok": True, "results": [i.as_dict() for i in items]})
 
 
+@require_GET
+@api
+def pos_tiles(request, body):
+    """Products to tap on the billing screen: search text, a category, loose items, or the best sellers (default)."""
+    from datetime import timedelta
+
+    from django.db.models import Count, Q as DQ
+    from django.utils import timezone
+
+    q, cat = request.GET.get("q", "").strip(), request.GET.get("cat", "top")
+    if q:
+        items = S.search_items(q, limit=60)
+    else:
+        since = timezone.localdate() - timedelta(days=30)
+        qs = (Item.objects.filter(is_active=True, price__isnull=False)
+              .annotate(n=Count("sale_lines", filter=DQ(sale_lines__sale__business_date__gte=since))))
+        if cat == "kg":
+            qs = qs.filter(sale_unit=Item.KG)
+        elif cat.isdigit():
+            qs = qs.filter(category_id=int(cat))
+        items = list(qs.order_by("-n", "name")[:60])
+    return JsonResponse({"ok": True, "results": [i.as_dict() for i in items]})
+
+
 def _my_line(request, pk):
     return get_object_or_404(DraftLine.objects.select_related("item", "draft"), pk=pk, draft__cashier=request.user,
                              draft__status=DraftBill.OPEN)
@@ -195,12 +219,24 @@ def pos_customer(request, body):
 @require_GET
 @api
 def customer_search(request, body):
+    """Empty search: the customers who bought most recently. Otherwise every word must match the name, or the phone starts with it."""
+    from django.db.models import Max, Q as DQ
+
     q = request.GET.get("q", "").strip()
     qs = Customer.objects.all()
     if q:
-        qs = qs.filter(phone__startswith=q) | Customer.objects.filter(name__icontains=q)
+        digits = "".join(ch for ch in q if ch.isdigit())
+        if digits and len(digits) >= 3 and len(digits) >= len(q.replace(" ", "")) - 1:
+            qs = qs.filter(DQ(phone__startswith=digits) | DQ(phone__contains=digits))
+        else:
+            for w in q.split():
+                qs = qs.filter(DQ(name__icontains=w) | DQ(name_ta__icontains=w))
+        qs = qs.order_by("name")
+    else:
+        qs = qs.annotate(last=Max("sales__created_at")).order_by("-last", "name")
     return JsonResponse({"ok": True, "results": [
-        {"id": c.pk, "name": c.name, "phone": c.phone or "", "points": str(c.points)} for c in qs.order_by("name")[:15]
+        {"id": c.pk, "name": c.name, "name_ta": c.name_ta, "phone": c.phone or "", "points": str(c.points),
+         "owes": str(c.credit_balance) if c.credit_allowed else "0", "credit": c.credit_allowed} for c in qs[:20]
     ]})
 
 

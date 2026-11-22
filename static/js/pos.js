@@ -244,16 +244,33 @@
     $('#cr-ok').onclick = async () => { const d = await call('/api/pos/cancel/', { reason: $('#cr').value, approver: $('#ca').value, pin: $('#cp').value }); if (d.ok) { close(); flash('Bill cancelled.', 'warning'); } else $('#cr-err').textContent = d.error; };
   }
   function customerDialog() {
-    open('Customer (optional)', `<input id="cq" class="form-control form-control-lg" placeholder="Phone number or name"><div class="list-group search-results mt-2" id="cl"></div>
-      <hr><div class="small text-muted mb-1">New customer</div><div class="row g-2"><div class="col-md-6"><input id="cn" class="form-control" placeholder="Name"></div><div class="col-md-4"><input id="cph" class="form-control" placeholder="10-digit phone" inputmode="tel"></div><div class="col-md-2"><button class="btn btn-outline-success w-100" id="cadd">Add</button></div></div><p class="text-danger mt-2 mb-0" id="c-err"></p>`,
+    const cur = S.customer;
+    open('<i class="bi bi-person"></i> Customer (optional)', `${cur ? `<div class="alert alert-info d-flex justify-content-between align-items-center py-2">On this bill: <b>${esc(cur.name)}</b><button class="btn btn-sm btn-outline-secondary" id="c-none">Make it walk-in</button></div>` : ''}
+      <input id="cq" class="form-control form-control-lg" placeholder="Type the customer's name or phone number" autocomplete="off">
+      <div class="small text-muted mt-1" id="c-hint">Recent customers – or type to search. ↑ ↓ to choose, Enter to select.</div>
+      <div class="cust-list mt-2" id="cl"></div>
+      <hr><div class="fw-semibold mb-1"><i class="bi bi-person-plus"></i> New customer</div><div class="row g-2"><div class="col-md-6"><input id="cn" class="form-control" placeholder="Name"></div><div class="col-md-4"><input id="cph" class="form-control" placeholder="10-digit phone" inputmode="tel"></div><div class="col-md-2"><button class="btn btn-outline-success w-100" id="cadd">Add</button></div></div><p class="text-danger mb-0" id="c-err"></p>`,
       '<button class="btn btn-outline-secondary" data-bs-dismiss="modal">Walk-in (Esc)</button>', () => $('#cq').focus());
-    let res = [], t;
-    $('#cq').addEventListener('input', () => { clearTimeout(t); t = setTimeout(async () => {
-      const r = await fetch('/api/customers/search/?q=' + encodeURIComponent($('#cq').value), { headers: { Accept: 'application/json' } }); res = (await r.json()).results || [];
-      $('#cl').innerHTML = res.map((c, i) => `<button class="list-group-item list-group-item-action" data-c="${c.id}">${esc(c.name)} · ${esc(c.phone)} · ${c.points} pts</button>`).join('');
-      $('#cl').querySelectorAll('[data-c]').forEach(b => b.onclick = async () => { await call('/api/pos/customer/', { id: +b.dataset.c }); close(); });
-    }, 150); });
-    $('#cadd').onclick = async () => { const d = await call('/api/customers/quick-add/', { name: $('#cn').value, phone: $('#cph').value }); if (d.ok) close(); else $('#c-err').textContent = d.error; };
+    let res = [], idx = 0, t;
+    const pick = async c => { await call('/api/pos/customer/', { id: c.id }); close(); flash(`Customer: <b>${esc(c.name)}</b>`, 'success', 1500); };
+    const draw = () => {
+      const q = $('#cq').value.trim();
+      $('#c-hint').textContent = q ? (res.length ? `${res.length} found. ↑ ↓ to choose, Enter to select.` : 'No customer found – add them as new below.') : 'Recent customers – or type to search. ↑ ↓ to choose, Enter to select.';
+      $('#cl').innerHTML = res.map((c, i) => `<button type="button" class="cust-row ${i === idx ? 'on' : ''}" data-c="${i}"><span class="cn">${esc(c.name)}${c.name_ta ? ` <span class="ta small">${esc(c.name_ta)}</span>` : ''}</span>
+        <span class="cp">${esc(c.phone || 'no phone')}</span><span class="cx">${Number(c.points) ? c.points + ' pts' : ''}${c.credit ? ` · ${Number(c.owes) > 0 ? '<b class="text-danger">owes ' + inr(c.owes) + '</b>' : 'credit OK'}` : ''}</span></button>`).join('');
+      const on = document.querySelector('#cl .on'); if (on) on.scrollIntoView({ block: 'nearest' });
+      if (q && !res.length) { if (/^[0-9 +]+$/.test(q)) $('#cph').value = q.replace(/\D/g, '').slice(-10); else $('#cn').value = q; }
+    };
+    const search = async () => { const r = await fetch('/api/customers/search/?q=' + encodeURIComponent($('#cq').value.trim()), { headers: { Accept: 'application/json' } }); res = (await r.json()).results || []; idx = 0; draw(); };
+    $('#cq').addEventListener('input', () => { clearTimeout(t); t = setTimeout(search, 120); });
+    $('#cq').addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (res.length) { idx = (idx + (e.key === 'ArrowDown' ? 1 : -1) + res.length) % res.length; draw(); } }
+      if (e.key === 'Enter') { e.preventDefault(); if (res[idx]) pick(res[idx]); else $('#cn').focus(); }
+    });
+    $('#cl').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (b) pick(res[+b.dataset.c]); });
+    if ($('#c-none')) $('#c-none').onclick = async () => { await call('/api/pos/customer/', { clear: true }); close(); };
+    $('#cadd').onclick = async () => { const d = await call('/api/customers/quick-add/', { name: $('#cn').value, phone: $('#cph').value }); if (d.ok) { close(); flash('New customer added to this bill.', 'success', 2000); } else $('#c-err').textContent = d.error; };
+    search();
   }
 
   function payDialog(mode) {
@@ -314,6 +331,7 @@
   }
 
   function done(d, wa) {
+    setTimeout(loadTiles, 300);   // stock on the tiles is now lower
     lastSale = { id: d.sale, phone: wa || (S.customer && S.customer.phone) || '' };
     $('#last-sale').classList.remove('d-none');
     $('#last-no').textContent = d.bill_no; $('#last-change').textContent = inr(d.change);
@@ -347,6 +365,51 @@
     f.src = url; document.body.appendChild(f);
   }
 
+
+  // ---------------- product panel: search + category buttons + tap to add (when a barcode will not scan)
+  let tileCat = 'top', tileT;
+  async function loadTiles() {
+    const q = $('#tq').value.trim();
+    const r = await fetch(`/api/pos/tiles/?cat=${encodeURIComponent(tileCat)}&q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json' } });
+    const items = (await r.json()).results || [];
+    $('#tiles').innerHTML = items.map(it => `<button type="button" class="tile-btn ${Number(it.on_hand) <= 0 ? 'out' : ''}" data-ti="${it.id}" title="${esc(it.sku)}">
+      <span class="tn">${esc(it.name.split(' · ')[0])}</span>${it.name_ta ? `<span class="tt ta">${esc(it.name_ta.split(' · ')[0])}</span>` : ''}
+      <span class="tv">${esc(it.name.split(' · ').slice(1).join(' · '))}</span>
+      <span class="tp">${it.price ? inr(it.price) : '—'}<small>/${it.weighed ? 'kg' : 'pc'}</small></span><span class="ts">${Number(it.on_hand) <= 0 ? 'out of stock' : 'stock ' + Number(it.on_hand)}</span></button>`).join('')
+      || `<div class="text-muted p-3">${q ? `No product matches “${esc(q)}”. Try fewer letters, the Tamil name, or scan the barcode.` : 'No products in this group yet.'}</div>`;
+    tileItems = items;
+  }
+  let tileItems = [];
+  document.getElementById('tilecats').addEventListener('click', e => {
+    const b = e.target.closest('[data-tc]'); if (!b) return;
+    tileCat = b.dataset.tc; $('#tq').value = '';
+    document.querySelectorAll('#tilecats .chipbtn').forEach(x => x.classList.toggle('on', x === b));
+    loadTiles(); focusScan();
+  });
+  $('#tq').addEventListener('input', () => { clearTimeout(tileT); tileT = setTimeout(loadTiles, 120); });
+  $('#tq').addEventListener('keydown', e => {
+    if (e.key === 'Escape') { $('#tq').value = ''; loadTiles(); focusScan(); }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const v = $('#tq').value.trim();
+    if (/^[0-9]{6,}$/.test(v) || /^[0-9.]+\*/.test(v)) { $('#tq').value = ''; loadTiles(); doScan(v); return; }   // a scanner typed into the search box
+    const first = document.querySelector('#tiles [data-ti]'); if (first) first.click();
+  });
+  $('#tiles').addEventListener('click', async e => {
+    const b = e.target.closest('[data-ti]'); if (!b) return;
+    const it = tileItems.find(x => x.id === +b.dataset.ti); if (!it) return;
+    const q = qtyBox.value.trim();
+    if (it.weighed && !q) return weightDialog(it, it.sku);
+    qtyBox.value = '';
+    const d = await call('/api/pos/add/', q ? { item: it.id, qty: q } : { item: it.id });
+    b.classList.add('hit'); setTimeout(() => b.classList.remove('hit'), 350);
+    if (d.ok) { beep(true); sel = S.lines.findIndex(l => l.id === d.added); render(); }
+    else if (d.needs_qty) weightDialog(d.item, it.sku);
+    else { beep(false); flash(esc(d.error), 'danger', 5000); }
+    focusScan();
+  });
+  loadTiles();
+
   // ---------------- keyboard
   const keyMap = {
     F2: searchDialog, F4: () => (sel >= 0 ? lineAction('qty') : qtyBox.focus()), F5: () => lineAction('price'), F6: () => lineAction('discount'),
@@ -354,6 +417,9 @@
   };
   document.addEventListener('keydown', e => {
     if (dlgEl.classList.contains('show')) return;
+    const typing = e.target.tagName === 'INPUT' && e.target.value !== '';
+    if (e.target.id === 'tq' && !/^F\d+$/.test(e.key)) return;          // product search box: only function keys reach the bill
+    if (e.key === 'Delete' && typing) return;                            // Delete inside a box edits the text, never removes a bill line
     if (keyMap[e.key]) { e.preventDefault(); keyMap[e.key](); return; }
     if (e.key === 'F1') { e.preventDefault(); focusScan(); return; }
     if (e.ctrlKey && e.key === 'Backspace') { e.preventDefault(); cancelDialog(); return; }

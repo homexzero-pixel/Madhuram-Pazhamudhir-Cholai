@@ -15,7 +15,14 @@
         <thead><tr><th>#</th><th>Product</th><th class="r">Qty / kg</th><th class="r">Rate</th><th class="r">Discount</th><th class="r">Amount</th></tr></thead>
         <tbody id="lines"></tbody>
       </table>
-      <div id="empty" class="text-center text-muted py-5"><i class="bi bi-upc-scan fs-1"></i><div class="fs-5 mt-2">Scan the first item · முதல் பொருளை ஸ்கேன் செய்யவும்</div></div>
+      <div id="empty" class="text-center text-muted py-4"><i class="bi bi-upc-scan fs-1"></i><div class="fs-5 mt-2">Scan, or tap a product below · ஸ்கேன் செய்யவும் அல்லது கீழே தொடவும்</div></div>
+    </div>
+    <div class="tilepanel" id="tilepanel">
+      <div class="tilebar">
+        <div class="tilesearch"><i class="bi bi-search"></i><input id="tq" placeholder="Search product – name, தமிழ், PLU or code" autocomplete="off" aria-label="Search products to add"></div>
+        <div class="tilecats" id="tilecats"><button class="chipbtn on" data-tc="top">★ Best sellers</button><button class="chipbtn" data-tc="kg">⚖ Loose (kg)</button>{% for c in tile_cats %}<button class="chipbtn" data-tc="{{ c.pk }}">{{ c.name }}</button>{% endfor %}</div>
+      </div>
+      <div class="tiles-grid" id="tiles"></div>
     </div>
   </section>
   <aside class="pos-side">

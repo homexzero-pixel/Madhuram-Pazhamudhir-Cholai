@@ -8,6 +8,12 @@ Built from an owner's day: morning rates, what to buy, where money can leak, and
 
 ![Owner tools](img/47-owner-tools.jpg)
 
+### Add products
+
+**Owner tools → Add products** opens the quick form (also in the left menu as *Quick add product*): scan the barcode, the name as
+printed, category, MRP, selling price, GST, stock. Products from the 20,000-item starter list appear as you type, so nothing is
+duplicated. Details in [Products → Quick add](#quick-add-the-fastest-way-to-put-products-on-sale).
+
 ### Today's prices – every morning after the mandi
 
 **Owner tools → Today's prices.** All loose (by kg) items in one list, with stock, today's **buying rate** and **selling

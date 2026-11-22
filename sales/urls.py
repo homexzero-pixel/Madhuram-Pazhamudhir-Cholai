@@ -8,6 +8,7 @@ urlpatterns = [
     path("api/pos/scan/", api.pos_scan),
     path("api/pos/add/", api.pos_add),
     path("api/pos/search/", api.pos_search),
+    path("api/pos/tiles/", api.pos_tiles),
     path("api/pos/line/<int:pk>/qty/", api.pos_line_qty),
     path("api/pos/line/<int:pk>/remove/", api.pos_line_remove),
     path("api/pos/line/<int:pk>/price/", api.pos_line_price),

@@ -22,8 +22,13 @@ from .models import CashMovement, Payment, ReturnLine, Sale, SaleReturn, Settlem
 def pos(request):
     from catalog.models import Category
 
+    from django.db.models import Count, Q
+
     cats = [{"id": c.pk, "name": c.name, "dept": c.department.name} for c in Category.objects.select_related("department")]
-    return render(request, "sales/pos.html", {"nav": "billing", "categories": cats})
+    # category buttons on the product panel: categories with products on sale, busiest first
+    tile_cats = (Category.objects.annotate(n=Count("items", filter=Q(items__is_active=True, items__price__isnull=False)))
+                 .filter(n__gt=0).annotate(sold=Count("items__sale_lines")).order_by("-sold", "name")[:14])
+    return render(request, "sales/pos.html", {"nav": "billing", "categories": cats, "tile_cats": tile_cats})
 
 
 def _visible_sales(user):

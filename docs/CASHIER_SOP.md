@@ -31,6 +31,24 @@ Each line shows the offer that applied (e.g. "Pomegranate & papaya 5% off"). The
 
 ![Search in Tamil](img/06-search-tamil.jpg)
 
+### Barcode will not scan? Tap the product
+
+Below the bill is the **product panel**: a search box, category buttons (★ Best sellers, ⚖ Loose (kg), Vegetables, Fruit, …)
+and product tiles with price and stock. **Tap a tile to add it.** Loose items ask for the weight. Type in the search box to
+find any product by English or Tamil name, PLU or code; **Enter** adds the first match. If the scanner fires while the
+cursor is in the search box, the barcode is still added normally. **Delete** inside a box only clears the text, never a bill line.
+
+![Tap to add](img/53-billing-tap-to-add.jpg)
+
+### Customer (F7)
+
+**F7** opens the customer list straight away, most recent customers first. Type part of the **name** (any word, English or
+Tamil) or part of the **phone number**; the matching customers appear in large rows with points and any amount owed.
+**↑ ↓** and **Enter**, or tap. Nobody found? The name (or number) you typed is carried into **New customer** below – add the
+phone and press Add. **Make it walk-in** removes a customer from the bill.
+
+![Customer search](img/54-customer-search.jpg)
+
 ### New product scanned (barcode not in the system)
 
 The screen says **"New barcode – not in the system yet"** and **nothing was added**; the bill is unchanged.
