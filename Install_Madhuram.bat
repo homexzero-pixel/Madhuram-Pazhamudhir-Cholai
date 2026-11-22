@@ -37,10 +37,10 @@ call Setup_Backups.bat
 echo  Adding shortcuts...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$w=New-Object -ComObject WScript.Shell; $d=[Environment]::GetFolderPath('Desktop'); $s=[Environment]::GetFolderPath('Startup');" ^
-  "foreach($p in @(@($d,'Madhuram Store','Start_Store.bat'),@($d,'Madhuram Practice','Try_Demo.bat'),@($d,'Madhuram Backup Now','Backup_Now.bat'),@($s,'Madhuram Store','Start_Store.bat'))){" ^
+  "foreach($p in @(@($d,'Madhuram Store','Start_Store.bat'),@($d,'Madhuram Practice','Try_Demo.bat'),@($d,'Madhuram Backup Now','Backup_Now.bat'),@($d,'Madhuram Update','Update_Madhuram.bat'),@($s,'Madhuram Store','Start_Store.bat'))){" ^
   "$l=$w.CreateShortcut((Join-Path $p[0] ($p[1]+'.lnk'))); $l.TargetPath=(Join-Path '%~dp0' $p[2]); $l.WorkingDirectory='%~dp0'; $l.WindowStyle=7; $l.Save()}"
 echo.
-echo  Installed. Desktop shortcuts: "Madhuram Store", "Madhuram Practice", "Madhuram Backup Now".
+echo  Installed. Desktop shortcuts: "Madhuram Store", "Madhuram Practice", "Madhuram Backup Now", "Madhuram Update".
 echo  The store also starts by itself when Windows starts.
 echo  Opening the store now...
 start "" Start_Store.bat

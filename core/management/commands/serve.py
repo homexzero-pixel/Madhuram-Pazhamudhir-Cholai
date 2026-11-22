@@ -22,6 +22,10 @@ class Command(BaseCommand):
         from core.backup import auto_backup
         from core.models import StoreSettings
 
+        try:  # lets Update_Madhuram.bat find this installation
+            (settings.DATA_DIR.parent / "install_path.txt").write_text(str(settings.BASE_DIR), encoding="utf-8")
+        except OSError:
+            pass
         call_command("migrate", interactive=False, verbosity=0)
         call_command("collectstatic", interactive=False, verbosity=0)
         if not Item.objects.exists():

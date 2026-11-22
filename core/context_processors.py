@@ -17,6 +17,10 @@ def _asset_version():
 
 
 ASSET_V = _asset_version()
+try:
+    APP_VERSION = (settings.BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
+except OSError:
+    APP_VERSION = "dev"
 
 
 def store(request):
@@ -29,5 +33,6 @@ def store(request):
         "store": st,
         "mode": settings.MODE,
         "asset_v": ASSET_V,
+        "app_version": APP_VERSION,
         "can": perms_for(user) if user is not None and user.is_authenticated else set(),
     }

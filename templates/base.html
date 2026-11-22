@@ -33,7 +33,7 @@
       {% if "settings" in can or "users" in can or "backup" in can or "offers" in can or "audit_view" in can %}<a href="{% url 'settings_home' %}" class="{% if nav == 'settings' %}active{% endif %}"><i class="bi bi-gear"></i> Settings</a>{% endif %}
     </nav>
     <div class="who">
-      <div><b>{{ user.display }}</b><br><span>{{ user.get_role_display }}</span></div>
+      <div><b>{{ user.display }}</b><br><span>{{ user.get_role_display }}</span><br><span class="small" title="Program version">v{{ app_version }}</span></div>
       <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary">Log out</button></form>
     </div>
   </aside>
