@@ -42,7 +42,7 @@ SECTIONS = {
                                                  "hardware_tested"]),
     "rules": ("Loyalty & stock alerts", ["loyalty_enabled", "loyalty_rupees_per_point", "loyalty_point_value",
                                          "near_expiry_days", "dead_stock_days"]),
-    "backup": ("Backups", ["backup_keep", "backup_extra_dir"]),
+    "backup": ("Backups", ["backup_extra_dir"]),
 }
 
 
@@ -161,9 +161,30 @@ def staff_edit(request, pk=None):
 # ---------------------------------------------------------------- backups & audit
 @require("backup")
 def backups(request):
-    files = [{"name": p.name, "size": p.stat().st_size, "at": p.stat().st_mtime} for p in backup.list_backups()[:60]]
+    from datetime import datetime
+
+    files = [{"name": p.name, "size": p.stat().st_size, "at": datetime.fromtimestamp(p.stat().st_mtime)} for p in backup.list_backups()[:80]]
+    drive = backup.drive_folder()
     return render(request, "core/backups.html", {"nav": "settings", "files": files, "dir": settings.BACKUP_DIR,
-                                                 "db": settings.DATABASES["default"]["NAME"], "report": request.session.pop("verify", None)})
+                                                 "db": settings.DATABASES["default"]["NAME"], "report": request.session.pop("verify", None),
+                                                 "health": backup.health(), "drive": drive,
+                                                 "drive_dir": (drive / backup.DRIVE_SUBFOLDER / settings.MODE) if drive else None})
+
+
+@require("backup")
+@require_POST
+def backup_find_drive(request):
+    found = backup.detect_google_drive()
+    if not found:
+        messages.error(request, "Google Drive for desktop was not found on this PC. Install it, sign in with the shop's Google account, "
+                                "and try again – or type the folder in Settings → Backups.")
+        return redirect("backups")
+    cfg = StoreSettings.load()
+    cfg.backup_extra_dir = str(found)
+    cfg.save()
+    audit("settings", f"Google Drive backup folder set to {found}", user=request.user)
+    messages.success(request, f"Google Drive found at {found}. Press “Back up now” to make the first double backup.")
+    return redirect("backups")
 
 
 @require("backup")
@@ -172,7 +193,19 @@ def backup_now(request):
     try:
         path = backup.make_backup(label="manual")
         audit("backup", f"Manual backup {path.name}", user=request.user)
-        messages.success(request, f"Backup saved and checked: {path.name}")
+        msg = f"System backup saved and checked: {path.name}."
+        drive = backup.drive_folder()
+        if drive:
+            try:
+                backup.copy_verified(path, drive / backup.DRIVE_SUBFOLDER / settings.MODE)
+                msg += " Google Drive copy verified."
+                from datetime import datetime
+                now = datetime.now().isoformat(timespec="seconds")
+                backup._write_status(local={"at": now, "ok": True, "file": path.name, "size": path.stat().st_size},
+                                     drive={"at": now, "ok": True, "file": path.name, "size": path.stat().st_size})
+            except Exception as exc:  # noqa: BLE001
+                messages.warning(request, f"Google Drive copy failed: {exc}")
+        messages.success(request, msg)
     except Exception as exc:  # noqa: BLE001
         messages.error(request, f"Backup failed: {exc}")
     return redirect("backups")

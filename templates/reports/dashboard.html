@@ -3,6 +3,7 @@
 {% block content %}
 <div class="page-head"><div><h1>Owner dashboard</h1><p>{{ today|date:"l, d F Y" }} · figures update with every bill</p></div>
 <div class="d-flex gap-2"><a class="btn btn-outline-success" href="{% url 'report_view' %}?report=daily">Daily sales</a><a class="btn btn-outline-success" href="{% url 'cash_home' %}">Cash closing</a></div></div>
+{% for b in backup_problems %}<div class="alert alert-danger d-flex justify-content-between align-items-center"><div><i class="bi bi-exclamation-triangle-fill"></i> <b>{{ b.label }} is not up to date.</b> {{ b.msg }}{% if b.at %} Last good one: {{ b.at|date:"d M H:i" }}.{% endif %}</div><a class="btn btn-sm btn-light" href="{% url 'backups' %}">Fix backups</a></div>{% endfor %}
 <h2 class="h6 text-muted text-uppercase">Today</h2>
 <div class="tiles">
 <div class="tile"><div class="k">Net sales</div><div class="v">{{ t.net|money }}</div><div class="s">{{ t.bills }} bills · gross {{ t.gross|money }} − discounts {{ t.discount|money }}</div></div>

@@ -11,6 +11,7 @@ urlpatterns = [
     path("settings/staff/<int:pk>/", views.staff_edit, name="staff_edit"),
     path("settings/backups/", views.backups, name="backups"),
     path("settings/backups/now/", views.backup_now, name="backup_now"),
+    path("settings/backups/find-drive/", views.backup_find_drive, name="backup_find_drive"),
     path("settings/backups/verify/", views.backup_verify, name="backup_verify"),
     path("settings/backups/file/<str:name>/", views.backup_download, name="backup_download"),
     path("settings/audit/", views.audit_log, name="audit_log"),

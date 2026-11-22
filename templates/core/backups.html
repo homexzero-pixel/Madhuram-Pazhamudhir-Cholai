@@ -3,13 +3,20 @@
 {% block content %}
 <div class="page-head"><div><h1>Backups</h1><p>Database: <code>{{ db }}</code><br>Backup folder: <code>{{ dir }}</code></p></div>
 <form method="post" action="{% url 'backup_now' %}">{% csrf_token %}<button class="btn btn-success btn-lg"><i class="bi bi-shield-check"></i> Back up now</button></form></div>
-<div class="alert alert-info">A checked backup is made automatically when a shift closes and the first time the app starts each day. Copy backups to a USB drive or second PC regularly (set a second folder in Settings → Backups). To restore, follow <b>docs/BACKUP_RESTORE.md</b>: the app must be stopped first.</div>
+<div class="row g-3 mb-3">{% for h in health %}<div class="col-md-6"><div class="card h-100 border-{% if h.ok %}success{% else %}danger{% endif %}"><div class="card-body">
+<h5 class="mb-1">{% if h.ok %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-exclamation-triangle-fill text-danger"></i>{% endif %} {{ h.label }}</h5>
+{% if h.at %}<div>Last: <b>{{ h.at|date:"d M Y H:i" }}</b> · {{ h.size|filesizeformat }}</div><div class="small text-muted text-break">{{ h.file }}</div>{% endif %}
+{% if not h.ok %}<div class="text-danger small mt-1">{{ h.msg }}</div>{% endif %}
+{% if h.key == "drive" %}<div class="small mt-1">Folder: <code>{% if drive_dir %}{{ drive_dir }}{% else %}not set{% endif %}</code></div>
+<form method="post" action="{% url 'backup_find_drive' %}" class="mt-2">{% csrf_token %}<button class="btn btn-sm btn-outline-primary"><i class="bi bi-google"></i> Find Google Drive</button></form>{% endif %}
+</div></div></div>{% endfor %}</div>
+<div class="alert alert-info">Automatic backups on <b>this PC</b>: when the app starts each day, <b>every hour if anything changed</b>, when a shift closes and every night at 21:30. The start-up, shift-close and nightly ones (and “Back up now”) are also copied to <b>Google Drive</b> and the copy is checked; Google uploads it by itself. Kept: every backup from the last 2 days, one per day for 60 days, one per month for 2 years, within 6 GB on Google Drive (of the free 15 GB) and 20 GB on this PC. To restore, follow <b>docs/BACKUP_RESTORE.md</b>: the app must be stopped first.</div>
 {% if report %}<div class="card mb-3 border-success"><div class="card-header">Restore check · {{ report.file }}</div><div class="card-body"><ul class="mb-0">
 <li>Integrity: <b>{{ report.integrity }}</b></li><li>Products: {{ report.items }}</li>
 <li>Last bill: {% if report.last_bill %}<b>{{ report.last_bill.bill_no }}</b> ₹{{ report.last_bill.total }} at {{ report.last_bill.created_at }}{% else %}none{% endif %}</li>
 <li>Bills: {{ report.sales_count }} totalling ₹{{ report.sales_total }}</li><li>Items with stock: {{ report.items_with_stock }} · sellable units {{ report.stock_units }} (lots {{ report.lot_units }})</li>
 <li>Last shift: {% if report.last_shift %}{{ report.last_shift.id }} {{ report.last_shift.status }} · float ₹{{ report.last_shift.opening_float }} · expected ₹{{ report.last_shift.expected }} · counted ₹{{ report.last_shift.counted }}{% endif %}</li></ul></div></div>{% endif %}
-<div class="card"><table class="table align-middle"><thead><tr><th>File</th><th class="r">Size</th><th></th></tr></thead><tbody>
-{% for f in files %}<tr><td>{{ f.name }}</td><td class="r">{{ f.size|filesizeformat }}</td><td class="text-end"><form method="post" action="{% url 'backup_verify' %}" class="d-inline">{% csrf_token %}<input type="hidden" name="name" value="{{ f.name }}"><button class="btn btn-sm btn-outline-success">Check contents</button></form> <a class="btn btn-sm btn-outline-secondary" href="{% url 'backup_download' f.name %}">Download</a></td></tr>
-{% empty %}<tr><td colspan="3" class="text-muted">No backups yet.</td></tr>{% endfor %}</tbody></table></div>
+<div class="card"><table class="table align-middle"><thead><tr><th>File</th><th>Made</th><th class="r">Size</th><th></th></tr></thead><tbody>
+{% for f in files %}<tr><td>{{ f.name }}</td><td>{{ f.at|date:"d M H:i" }}</td><td class="r">{{ f.size|filesizeformat }}</td><td class="text-end"><form method="post" action="{% url 'backup_verify' %}" class="d-inline">{% csrf_token %}<input type="hidden" name="name" value="{{ f.name }}"><button class="btn btn-sm btn-outline-success">Check contents</button></form> <a class="btn btn-sm btn-outline-secondary" href="{% url 'backup_download' f.name %}">Download</a></td></tr>
+{% empty %}<tr><td colspan="4" class="text-muted">No backups yet.</td></tr>{% endfor %}</tbody></table></div>
 {% endblock %}

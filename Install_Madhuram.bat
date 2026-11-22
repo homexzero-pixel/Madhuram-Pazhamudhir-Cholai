@@ -1,7 +1,7 @@
 @echo off
 rem ONE-CLICK INSTALL for the Madhuram store system on the counter PC.
 rem Installs Python if missing, sets up the program, asks for the owner login,
-rem adds desktop shortcuts, starts automatically with Windows, and opens the store.
+rem sets up backups on this PC + Google Drive, adds desktop shortcuts, starts automatically with Windows, and opens the store.
 cd /d "%~dp0"
 title Madhuram - installing
 echo.
@@ -31,6 +31,9 @@ if errorlevel 3 (
   echo  Create the OWNER login now.
   .venv\Scripts\python.exe manage.py create_owner
 )
+echo.
+echo  Setting up the two automatic backups (this PC + Google Drive)...
+call Setup_Backups.bat
 echo  Adding shortcuts...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$w=New-Object -ComObject WScript.Shell; $d=[Environment]::GetFolderPath('Desktop'); $s=[Environment]::GetFolderPath('Startup');" ^

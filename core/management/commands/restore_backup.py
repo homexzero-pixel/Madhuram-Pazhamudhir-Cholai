@@ -6,7 +6,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from core.backup import verify_backup
+from core.backup import open_plain, verify_backup
 
 
 class Command(BaseCommand):
@@ -30,5 +30,9 @@ class Command(BaseCommand):
             shutil.copy2(db, keep)
             for ext in ("-wal", "-shm"):
                 Path(str(db) + ext).unlink(missing_ok=True)
-        shutil.copy2(src, db)
+        plain, cleanup = open_plain(src)   # .gz backups are decompressed first
+        try:
+            shutil.copyfile(plain, db)
+        finally:
+            cleanup()
         self.stdout.write(self.style.SUCCESS(f"Restored. The previous database was kept as {keep}. Start the app and check the last bill and stock."))

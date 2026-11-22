@@ -4,7 +4,8 @@
 
 The system runs on the billing-counter PC and needs **no internet**. A small web server runs on that PC, and staff use it in a browser
 window (Microsoft Edge in app mode). Barcode scanners in keyboard mode and Windows thermal printers work through the browser.
-All data is in one SQLite database file on the PC, and checked backups are taken automatically.
+All data is in one SQLite database file on the PC. **Two automatic, checked backups**, one on the PC and one in Google Drive
+(free), protect it even if the PC is lost.
 
 > **This version supports one billing counter.** See [Multiple counters](#multiple-counters) before adding a second till.
 
@@ -24,7 +25,7 @@ All data is in one SQLite database file on the PC, and checked backups are taken
 | **Cash closing** | Shifts with opening float, cash in/out, bank deposits, cash left for the next shift, denomination count and variance. Only cash moves the drawer. UPI/card settlement reconciliation with fees and unmatched items. |
 | **Reports** | 21 reports, each showing its date basis, with drill-down to bills, print, CSV and Excel. Owner dashboard. |
 | **Control** | Owner, manager, cashier, purchaser and auditor roles; manager approval PIN; audit log of price changes, discounts, refunds, write-offs, reopened shifts and every sale. |
-| **Data safety** | Transactions for every money/stock change, exact decimals, migrations, automatic and manual checked backups, restore check, separate practice database. |
+| **Data safety** | Transactions for every money/stock change, exact decimals, migrations. **Double backup**: on this PC (hourly when changed, at start-up, at shift close, nightly) and a SHA-256-verified copy in free Google Drive. Compressed, tiered retention within the free 15 GB, red alerts on the dashboard, restore check, separate practice database. |
 
 ## Start here
 
@@ -38,7 +39,8 @@ All data is in one SQLite database file on the PC, and checked backups are taken
 |---|---|
 | [Cashier SOP](docs/CASHIER_SOP.md) | Counter staff, with screenshots |
 | [Owner guide](docs/OWNER_GUIDE.md) | Owner / manager: products, purchases, stock, closing, reports |
-| [Backup & restore](docs/BACKUP_RESTORE.md) | Owner / whoever looks after the PC |
+| [Backup & restore](docs/BACKUP_RESTORE.md) | Owner / whoever looks after the PC: the two backups (PC + Google Drive) |
+| [Capacity test](docs/CAPACITY.md) | One busy year (146,000 bills) tested: speed, database and backup sizes, Drive space |
 | [Online hosting on Hostinger VPS](docs/HOSTINGER_VPS.md) | Low-cost hosting (about ₹599/month) to use the system from anywhere; billing then needs the internet |
 | [Hardware](docs/HARDWARE.md) | Scanner, weighing scale, thermal printer setup and what is still untested |
 | [GST & invoices](docs/GST_AND_INVOICES.md) | Settings the store's accountant must confirm |
@@ -50,7 +52,7 @@ All data is in one SQLite database file on the PC, and checked backups are taken
 
 ```
 Setup_Windows.bat  Start_Store.bat  Try_Demo.bat  Create_Owner.bat
-Backup_Now.bat  Restore_Backup.bat  Import_Pilot_Data.bat     Windows launchers
+Install_Madhuram.bat  Setup_Backups.bat  Backup_Now.bat  Restore_Backup.bat  Import_Pilot_Data.bat     Windows launchers
 data/Madhuram_20000_SKUs.csv     starter catalogue (20,000 candidate SKUs)
 data/import_template.xlsx|csv    product import template
 docs/                            guides, screenshots, results, schema
@@ -69,7 +71,7 @@ Data lives outside the program folder, in `%LOCALAPPDATA%\MadhuramPOS\store\` (l
 pip install -r requirements.txt
 MPC_MODE=demo python manage.py migrate && MPC_MODE=demo python manage.py seed_demo
 MPC_MODE=demo python manage.py serve            # http://127.0.0.1:8765
-MPC_MODE=test python manage.py test             # 27 automated tests
+MPC_MODE=test python manage.py test             # 33 automated tests
 pip install requests && python scripts/run_acceptance.py   # real-process acceptance run → docs/ACCEPTANCE_RESULTS.md
 ```
 

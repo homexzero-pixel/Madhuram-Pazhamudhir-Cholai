@@ -213,7 +213,7 @@ def main():
         post_form(s, base, f"/cash/shift/{pre['shift']['id']}/close/", {"counted": "717.50", "retained": "500"})
         post_form(s, base, "/settings/backups/now/", {})
         live_state = shell_json(env, STATE)
-        backup = sorted((live / "store" / "backups").glob("*manual*.sqlite3"))[-1]
+        backup = sorted((live / "store" / "backups").glob("*manual*.sqlite3*"))[-1]
         restore_dir = work / "restore-test"
         renv = env_for(restore_dir)
         manage(renv, "migrate", "-v0")

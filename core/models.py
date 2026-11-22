@@ -53,8 +53,8 @@ class StoreSettings(models.Model):
     near_expiry_days = models.PositiveSmallIntegerField(default=7)
     dead_stock_days = models.PositiveSmallIntegerField(default=60)
 
-    backup_keep = models.PositiveSmallIntegerField(default=30, help_text="Automatic backups to keep.")
-    backup_extra_dir = models.CharField(max_length=255, blank=True, help_text="Optional second folder (USB drive / network share) for backup copies.")
+    backup_keep = models.PositiveSmallIntegerField(default=30, help_text="Not used any more: backups are kept automatically (all from 2 days, daily for 60 days, monthly for 2 years).")
+    backup_extra_dir = models.CharField(max_length=255, blank=True, help_text="Second backup place: your Google Drive for desktop folder, e.g. G:\\My Drive (found automatically by Setup_Backups.bat). Each backup is copied and checked into its 'Madhuram backups' folder.")
     is_demo = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
