@@ -171,7 +171,7 @@ def stop_store(target):
               " ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
         subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps], capture_output=True)
     else:  # used by the automated test on Linux
-        subprocess.run(["pkill", "-f", f"{target}.*manage.py serve"], capture_output=True)
+        subprocess.run(["pkill", "-f", f"manage.py serve.*--port {PORT}"], capture_output=True)
     for _ in range(20):
         if not store_running():
             return True
