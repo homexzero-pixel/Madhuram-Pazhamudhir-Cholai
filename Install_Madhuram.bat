@@ -29,7 +29,7 @@ set MPC_MODE=store
 if errorlevel 3 (
   echo.
   echo  Create the OWNER login now.
-  .venv\Scripts\python.exe manage.py create_owner
+  .venv\Scripts\python.exe manage.py reset_owner
 )
 echo.
 echo  Setting up the two automatic backups (this PC + Google Drive)...

@@ -32,6 +32,7 @@ Step by step instead:
 | `Start_Store.bat` | Starts the **real store**. Keep its black window open (you can minimise it); the billing window opens by itself. |
 | `Try_Demo.bat` | Starts the **practice** database on a different port. Safe for training. |
 | `Backup_Now.bat` | Makes a checked backup on this PC and in Google Drive, and shows the last bill, stock and shift it contains. |
+| `Reset_Owner_Password.bat` | Forgot the owner password? Sets a new password and PIN (typing is visible) and unlocks the login. |
 | `Update_Madhuram.bat` | **One-click update** (desktop shortcut *Madhuram Update*). See "Updating the program" below. |
 | `Setup_Backups.bat` | Finds or installs Google Drive for desktop and creates the 21:30 nightly backup task. See [BACKUP_RESTORE.md](BACKUP_RESTORE.md). |
 | `Restore_Backup.bat` | Puts a backup back. Close `Start_Store.bat` first. See [BACKUP_RESTORE.md](BACKUP_RESTORE.md). |

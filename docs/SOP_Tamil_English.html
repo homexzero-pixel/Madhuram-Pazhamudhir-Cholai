@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Madhuram Staff SOP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;800&family=Noto+Sans+Tamil:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE  work: a staff handbook kept at the counter, calm and exact
+   IDEA   the laminated two-language manual a shop hands every new cashier: screen on top, English left, Tamil right
+   PICTURE each feature's real screenshot, large, with the steps beside it in both languages
+   COLOUR the app's own blue #2f6fed and deep blue #1f56c8 on white, mango gold #f2a900 for warnings
+   TYPE   Figtree for English, Noto Sans Tamil for Tamil
+   LAYOUT cover band with the day at a glance, chapter links, then one card per feature; one column on phones, print-ready */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#0e1524);--ink:light-dark(#17202f,#e9eef8);--mut:light-dark(#5b6780,#a9b4c9);--line:light-dark(#e1e7f1,#26324a);--card:light-dark(#ffffff,#131c2e);--soft:light-dark(#eef3fd,#17233b);--blue:#2f6fed;--deep:#1f56c8;--gold:#f2a900;--goldbg:light-dark(#fff6dc,#2d2610);--red:light-dark(#c62828,#ff8a80)}
+:root[data-theme=light]{color-scheme:light}
+:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html{scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Figtree,"Segoe UI",system-ui,sans-serif;overflow-x:clip}
+[lang=ta],.ta{font-family:"Noto Sans Tamil","Nirmala UI","Latha",sans-serif;line-height:1.75}
+img{max-width:100%;height:auto;display:block}
+a{color:var(--blue)}
+h1,h2,h3{line-height:1.12;letter-spacing:-.01em;text-wrap:balance;margin:0}
+.band{padding:clamp(24px,4vw,56px) max(5vw,16px)}
+.wrap{max-width:1240px;margin:0 auto}
+.cover{background:var(--deep);color:#fff}
+.cover h1{font-size:clamp(32px,5vw,50px);font-weight:800}
+.cover h1 span{display:block;font-size:.62em;font-weight:700;margin-top:6px}
+.cover p{max-width:70ch;margin:14px 0 0;color:#dfe8ff}
+.cover .meta{margin-top:16px;font-size:14px;color:#c4d4ff}
+.day{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:26px}
+.day div{background:#ffffff1a;border:1px solid #ffffff33;border-radius:14px;padding:14px 16px}
+.day b{display:block;font-size:18px}
+.day .ta{color:#dfe8ff;font-size:15px}
+nav.toc{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+nav .scroll{display:flex;gap:6px;overflow-x:auto;padding:10px max(5vw,16px);max-width:1290px;margin:0 auto}
+nav a{flex:none;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:14px;white-space:nowrap}
+nav a:hover{background:var(--soft)}
+.ch{margin-top:8px}
+.ch>h2{font-size:clamp(26px,3.4vw,36px);font-weight:800;padding-bottom:10px;border-bottom:3px solid var(--blue);margin-bottom:22px}
+.ch>h2 .ta{display:block;font-size:.62em;color:var(--deep);font-weight:700;margin-top:4px}
+:root[data-theme=dark] .ch>h2 .ta{color:#9db8ff}
+.f{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:clamp(16px,2.4vw,26px);margin-bottom:22px;break-inside:avoid}
+.f h3{font-size:22px;font-weight:800}
+.f h3 .ta{display:block;font-size:17px;color:var(--mut);font-weight:600;margin-top:2px}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px;margin:16px 0}
+.shots figure{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--soft)}
+.shots figcaption{font-size:13px;color:var(--mut);padding:6px 10px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px}
+.two>div{background:var(--soft);border-radius:12px;padding:14px 18px}
+.two h4{margin:0 0 6px;font-size:13px;color:var(--mut);font-weight:600}
+.two ol,.two ul{margin:0;padding-left:1.25em}
+.two li{margin:4px 0}
+kbd{font:600 13px Figtree,monospace;background:var(--card);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 6px;white-space:nowrap}
+.warn{background:var(--goldbg);border-left:5px solid var(--gold);border-radius:10px;padding:10px 14px;margin-top:14px}
+.warn p{margin:2px 0}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top}
+th{font-size:13px;color:var(--mut);font-weight:600}
+td:first-child{white-space:nowrap}
+.scrollx{overflow-x:auto}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.rules div{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--card)}
+.rules b{display:block}
+footer{color:var(--mut);font-size:14px}
+@media(max-width:760px){.two{grid-template-columns:1fr;gap:10px}}
+@media print{nav.toc{display:none}.cover{background:#fff;color:#000}.cover p,.cover .meta,.day .ta{color:#333}.day div{border-color:#999}.f{border-color:#999;page-break-inside:avoid}.ch{page-break-before:always}body{font-size:12.5px}.shots img{max-height:420px;object-fit:contain}}
+</style>
+</head>
+<body>
+
+<header class="cover band"><div class="wrap">
+  <h1>Madhuram Pazhamudhir Cholai – Staff SOP<span class="ta">மதுரம் பழமுதிர் சோலை – பணியாளர் வழிகாட்டி (SOP)</span></h1>
+  <p>Every screen of the store system with the steps in English and Tamil. Read the chapter for your job; keep this page open on the counter PC or print it.</p>
+  <p class="ta">ஸ்டோர் மென்பொருளின் ஒவ்வொரு திரையும், ஆங்கிலம் மற்றும் தமிழில் படிப்படியான வழிமுறைகளுடன். உங்கள் வேலைக்கான பகுதியைப் படியுங்கள்; இந்தப் பக்கத்தை கவுண்டர் கணினியில் திறந்து வைக்கலாம் அல்லது அச்சிடலாம்.</p>
+  <div class="day">
+    <div><b>Morning · காலை</b>Log in, open the shift with the float, set today's produce prices.<br><span class="ta">உள்நுழைந்து, தொடக்கச் சில்லறைப் பணத்துடன் ஷிஃப்ட்டைத் திறந்து, இன்றைய பழம்/காய்கறி விலையை அமைக்கவும்.</span></div>
+    <div><b>All day · நாள் முழுவதும்</b>Scan or tap products, take payment, hand over the printed bill.<br><span class="ta">பொருளை ஸ்கேன் செய்யவும் அல்லது தொடவும், பணம் பெறவும், அச்சிட்ட பில்லை வாடிக்கையாளரிடம் கொடுக்கவும்.</span></div>
+    <div><b>Evening · மாலை</b>Count the drawer, close the shift, send the day summary, check the buy list.<br><span class="ta">பணப்பெட்டியை எண்ணி, ஷிஃப்ட்டை முடித்து, நாள் சுருக்கத்தை அனுப்பி, வாங்க வேண்டிய பட்டியலைப் பார்க்கவும்.</span></div>
+  </div>
+  <div class="meta">Program version 2026.11.23 · Practice logins: owner / manager / cashier, password <b>practice123</b>, PIN <b>1234</b> (practice data only)</div>
+</div></header>
+
+<nav class="toc" aria-label="Chapters"><div class="scroll">
+  <a href="#start">1 Start · தொடக்கம்</a><a href="#billing">2 Billing · பில்லிங்</a><a href="#payment">3 Payment · பணம்</a><a href="#returns">4 Returns · திருப்பம்</a>
+  <a href="#closing">5 Closing · முடிவு</a><a href="#owner">6 Owner tools · உரிமையாளர்</a><a href="#stock">7 Products &amp; stock · பொருட்கள்</a>
+  <a href="#reports">8 Reports · அறிக்கைகள்</a><a href="#settings">9 Settings &amp; safety · அமைப்புகள்</a><a href="#keys">10 Keys · விசைகள்</a><a href="#rules">11 Golden rules · முக்கிய விதிகள்</a>
+</div></nav>
+
+<main class="band"><div class="wrap">
+
+<!-- ============================================================ 1 START -->
+<section class="ch" id="start"><h2>1. Start of the day<span class="ta">1. நாளின் தொடக்கம்</span></h2>
+
+<article class="f"><h3>Log in<span class="ta">உள்நுழைவு</span></h3>
+<div class="shots"><figure><img src="img/01-login.jpg" alt="Login screen" loading="lazy"><figcaption>Login · உள்நுழைவு திரை</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Double-click <b>Madhuram Store</b> on the desktop. The billing window opens by itself.</li>
+<li>Type your <b>own</b> user name and password and press <kbd>Enter</kbd>. Capital letters in the user name do not matter.</li>
+<li>Never use another person's login: every bill, discount and refund is recorded with the name of the person logged in.</li>
+<li>Five wrong tries lock the login for 15 minutes. Owner forgot the password? Double-click <b>Reset_Owner_Password</b> in the program folder.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>டெஸ்க்டாப்பில் உள்ள <b>Madhuram Store</b> ஐ இருமுறை கிளிக் செய்யவும். பில்லிங் சாளரம் தானாகத் திறக்கும்.</li>
+<li>உங்கள் <b>சொந்த</b> பயனர் பெயர், கடவுச்சொல்லை உள்ளிட்டு <kbd>Enter</kbd> அழுத்தவும். பெயரில் பெரிய/சிறிய எழுத்து வேறுபாடு இல்லை.</li>
+<li>மற்றவரின் உள்நுழைவை ஒருபோதும் பயன்படுத்த வேண்டாம்: ஒவ்வொரு பில், தள்ளுபடி, பணத் திருப்பமும் உள்நுழைந்தவரின் பெயரில் பதிவாகும்.</li>
+<li>ஐந்து முறை தவறாக உள்ளிட்டால் 15 நிமிடம் பூட்டப்படும். உரிமையாளர் கடவுச்சொல் மறந்தால்: நிரல் கோப்புறையில் <b>Reset_Owner_Password</b> ஐ இருமுறை கிளிக் செய்யவும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Open your shift<span class="ta">உங்கள் ஷிஃப்ட்டைத் திறத்தல்</span></h3>
+<div class="two"><div><h4>English</h4><ol>
+<li>Go to <b>Cash Closing</b>.</li>
+<li>Count the cash already in the drawer and type it as the <b>opening float</b> (e.g. ₹1,000). Press <b>Open shift</b>.</li>
+<li>The green dot and "Shift … · your name" now show on the billing screen. Payment is refused until a shift is open.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li><b>Cash Closing</b> பக்கத்திற்குச் செல்லவும்.</li>
+<li>பணப்பெட்டியில் ஏற்கனவே உள்ள பணத்தை எண்ணி <b>தொடக்கச் சில்லறைப் பணம் (opening float)</b> ஆக உள்ளிடவும் (எ.கா. ₹1,000). <b>Open shift</b> அழுத்தவும்.</li>
+<li>பில்லிங் திரையில் பச்சைப் புள்ளியும் "Shift … · உங்கள் பெயர்" உம் தெரியும். ஷிஃப்ட் திறக்காமல் பணம் பெற முடியாது.</li></ol></div></div>
+</article>
+</section>
+
+<!-- ============================================================ 2 BILLING -->
+<section class="ch" id="billing"><h2>2. Billing<span class="ta">2. பில்லிங்</span></h2>
+
+<article class="f"><h3>The billing screen<span class="ta">பில்லிங் திரை</span></h3>
+<div class="shots"><figure><img src="img/02-billing-empty.jpg" alt="Empty billing screen" loading="lazy"><figcaption>Ready for the first item · முதல் பொருளுக்குத் தயார்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ul>
+<li><b>Top left – scan box</b>: the cursor is always here; the scanner types into it.</li>
+<li><b>Middle – the bill</b>: product, quantity or weight, rate, discount, amount.</li>
+<li><b>Below – product panel</b>: search box, category buttons and product tiles to tap.</li>
+<li><b>Right – total</b> in large figures, customer, <b>Payment</b> and the key buttons.</li>
+<li>The bill is saved on the PC after every change: a refresh or power cut does not lose it.</li></ul></div>
+<div lang="ta"><h4>தமிழ்</h4><ul>
+<li><b>மேல் இடது – ஸ்கேன் பெட்டி</b>: கர்சர் எப்போதும் இங்கே இருக்கும்; ஸ்கேனர் இதில் தட்டச்சு செய்யும்.</li>
+<li><b>நடுவில் – பில்</b>: பொருள், எண்ணிக்கை அல்லது எடை, விலை, தள்ளுபடி, தொகை.</li>
+<li><b>கீழே – பொருள் பேனல்</b>: தேடல் பெட்டி, வகை பொத்தான்கள், தொட்டுச் சேர்க்கும் பொருள் கட்டங்கள்.</li>
+<li><b>வலது – மொத்தத் தொகை</b> பெரிய எழுத்தில், வாடிக்கையாளர், <b>Payment</b> மற்றும் விசைப் பொத்தான்கள்.</li>
+<li>ஒவ்வொரு மாற்றத்திற்கும் பில் கணினியில் சேமிக்கப்படும்: ரிஃப்ரெஷ் அல்லது மின்தடை வந்தாலும் இழக்காது.</li></ul></div></div>
+</article>
+
+<article class="f"><h3>Scan products<span class="ta">பொருட்களை ஸ்கேன் செய்தல்</span></h3>
+<div class="shots"><figure><img src="img/04-bill.jpg" alt="Bill with three lines" loading="lazy"><figcaption>A bill with packed and loose items · பாக்கெட் மற்றும் உதிரிப் பொருட்களுடன் பில்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Scan the barcode. One beep = added. The same barcode again adds one more.</li>
+<li>Many of one item: type the number in <b>Qty</b> first, then scan; or type <kbd>3*</kbd> before the code.</li>
+<li>Choose a line with <kbd>↑</kbd> <kbd>↓</kbd>; <kbd>+</kbd> / <kbd>−</kbd> change the pieces; <kbd>F4</kbd> types an exact quantity or weight; <kbd>Del</kbd> removes the line.</li>
+<li>An offer (e.g. "5% off") is shown under the line and on the receipt automatically.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>பார்கோடை ஸ்கேன் செய்யவும். ஒரு பீப் ஒலி = சேர்க்கப்பட்டது. அதே பார்கோடை மீண்டும் ஸ்கேன் செய்தால் ஒன்று கூடும்.</li>
+<li>ஒரே பொருள் பல எண்ணிக்கை: முதலில் <b>Qty</b> பெட்டியில் எண்ணை உள்ளிட்டு ஸ்கேன் செய்யவும்; அல்லது குறியீட்டுக்கு முன் <kbd>3*</kbd> என உள்ளிடவும்.</li>
+<li><kbd>↑</kbd> <kbd>↓</kbd> மூலம் வரியைத் தேர்ந்தெடுக்கவும்; <kbd>+</kbd> / <kbd>−</kbd> எண்ணிக்கையை மாற்றும்; <kbd>F4</kbd> சரியான அளவு அல்லது எடையை உள்ளிட; <kbd>Del</kbd> வரியை நீக்கும்.</li>
+<li>சலுகை (எ.கா. "5% off") வரியின் கீழும் ரசீதிலும் தானாகத் தெரியும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Barcode will not scan? Tap the product<span class="ta">பார்கோடு ஸ்கேன் ஆகவில்லையா? பொருளைத் தொடவும்</span></h3>
+<div class="shots"><figure><img src="img/53-billing-tap-to-add.jpg" alt="Product panel with tiles" loading="lazy"><figcaption>Search, categories and tiles · தேடல், வகைகள், பொருள் கட்டங்கள்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>In the product panel, tap <b>★ Best sellers</b>, <b>⚖ Loose (kg)</b> or a category such as <b>Vegetables</b>.</li>
+<li>Tap the product's tile to add it. Each tile shows price and stock; a faded tile is out of stock.</li>
+<li>Or type in <b>Search product</b>: English or Tamil name, PLU or code. <kbd>Enter</kbd> adds the first match; <kbd>Esc</kbd> clears.</li>
+<li>If the scanner fires while the cursor is in the search box, the barcode is still added normally.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>பொருள் பேனலில் <b>★ Best sellers</b>, <b>⚖ Loose (kg)</b> அல்லது <b>Vegetables</b> போன்ற வகையைத் தொடவும்.</li>
+<li>பொருளின் கட்டத்தைத் தொட்டால் பில்லில் சேரும். ஒவ்வொரு கட்டத்திலும் விலையும் இருப்பும் தெரியும்; மங்கலான கட்டம் = இருப்பு இல்லை.</li>
+<li>அல்லது <b>Search product</b> இல் தட்டச்சு செய்யவும்: ஆங்கிலம் அல்லது தமிழ் பெயர், PLU அல்லது குறியீடு. <kbd>Enter</kbd> முதல் பொருளைச் சேர்க்கும்; <kbd>Esc</kbd> அழிக்கும்.</li>
+<li>தேடல் பெட்டியில் கர்சர் இருக்கும்போது ஸ்கேன் செய்தாலும் பொருள் சரியாகச் சேரும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Loose fruit and vegetables by weight<span class="ta">உதிரிப் பழம், காய்கறி – எடையில்</span></h3>
+<div class="shots"><figure><img src="img/03-weight-dialog.jpg" alt="Weight dialog" loading="lazy"><figcaption>Type the weight in kg · எடையை கிலோவில் உள்ளிடவும்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Type the item's <b>PLU</b> (e.g. <kbd>101</kbd>) and <kbd>Enter</kbd>, or tap its tile.</li>
+<li>Type the weight in kg with up to 3 decimals: <kbd>0.375</kbd> = 375 g. The amount appears before you press <kbd>Enter</kbd>.</li>
+<li>Quick way: <kbd>0.375*101</kbd> in the scan box.</li>
+<li>A label printed by the shop's weighing scale is scanned like any barcode; weight and price come from the label.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>பொருளின் <b>PLU</b> எண்ணை (எ.கா. <kbd>101</kbd>) உள்ளிட்டு <kbd>Enter</kbd> அழுத்தவும், அல்லது அதன் கட்டத்தைத் தொடவும்.</li>
+<li>எடையை கிலோவில் 3 தசம இலக்கம் வரை உள்ளிடவும்: <kbd>0.375</kbd> = 375 கிராம். <kbd>Enter</kbd> அழுத்தும் முன் தொகை தெரியும்.</li>
+<li>விரைவு வழி: ஸ்கேன் பெட்டியில் <kbd>0.375*101</kbd>.</li>
+<li>கடையின் எடை இயந்திரம் அச்சிடும் லேபிளை சாதாரண பார்கோடு போல ஸ்கேன் செய்யலாம்; எடையும் விலையும் லேபிளில் இருந்தே வரும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Search a product (F2)<span class="ta">பொருளைத் தேடுதல் (F2)</span></h3>
+<div class="shots"><figure><img src="img/06-search-tamil.jpg" alt="Search in Tamil" loading="lazy"><figcaption>Searching in Tamil · தமிழில் தேடுதல்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Press <kbd>F2</kbd>. Type part of the name in English or Tamil, the SKU or the PLU.</li>
+<li><kbd>↑</kbd> <kbd>↓</kbd> to choose, <kbd>Enter</kbd> to add.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li><kbd>F2</kbd> அழுத்தவும். பெயரின் ஒரு பகுதியை ஆங்கிலம் அல்லது தமிழில், அல்லது SKU / PLU ஐ உள்ளிடவும்.</li>
+<li><kbd>↑</kbd> <kbd>↓</kbd> மூலம் தேர்ந்தெடுத்து, <kbd>Enter</kbd> அழுத்திச் சேர்க்கவும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>New barcode – add the product on the spot<span class="ta">புதிய பார்கோடு – அங்கேயே பொருளைச் சேர்த்தல்</span></h3>
+<div class="shots">
+<figure><img src="img/05-unknown-barcode.jpg" alt="New barcode message" loading="lazy"><figcaption>Nothing was added · எதுவும் சேர்க்கப்படவில்லை</figcaption></figure>
+<figure><img src="img/42-quick-add-at-counter.jpg" alt="Quick add form at the counter" loading="lazy"><figcaption>Short form · சிறிய படிவம்</figcaption></figure>
+<figure><img src="img/43-new-product-billed.jpg" alt="New product on the bill" loading="lazy"><figcaption>Saved and billed · சேமித்து பில்லில் சேர்ந்தது</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>The screen says <b>"New barcode – not in the system yet"</b>. Nothing was added; the bill is unchanged.</li>
+<li><kbd>Enter</kbd> = <b>Add as a NEW product and bill it</b>. Type the name as printed, choose the category, MRP, selling price (empty = MRP), GST and <b>how many are on the shelf now</b>. <kbd>Enter</kbd> moves to the next box and saves at the end.</li>
+<li>If the product already exists under another barcode, press <kbd>L</kbd> and link this barcode to it.</li>
+<li>A cashier needs a manager's user name and PIN. Price above MRP and duplicate names are refused.</li></ol>
+<div class="warn"><p><b>Never sell an unknown pack as a "similar" item.</b></p></div></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>திரையில் <b>"New barcode – not in the system yet"</b> என வரும். எதுவும் சேர்க்கப்படவில்லை; பில் மாறவில்லை.</li>
+<li><kbd>Enter</kbd> = <b>புதிய பொருளாகச் சேர்த்து பில் போடு</b>. பாக்கெட்டில் உள்ளபடி பெயர், வகை, MRP, விற்பனை விலை (காலியாக விட்டால் MRP), GST, <b>இப்போது அலமாரியில் உள்ள எண்ணிக்கை</b> ஆகியவற்றை உள்ளிடவும். <kbd>Enter</kbd> அடுத்த பெட்டிக்குச் செல்லும்; கடைசியில் சேமிக்கும்.</li>
+<li>அந்தப் பொருள் வேறு பார்கோடில் ஏற்கனவே இருந்தால், <kbd>L</kbd> அழுத்தி இந்தப் பார்கோடை அதனுடன் இணைக்கவும்.</li>
+<li>காசாளருக்கு மேலாளரின் பெயரும் PIN உம் தேவை. MRP க்கு மேல் விலையும், ஒரே பெயர் இருமுறையும் ஏற்கப்படாது.</li></ol>
+<div class="warn"><p><b>தெரியாத பாக்கெட்டை "ஒத்த" பொருளாக ஒருபோதும் விற்க வேண்டாம்.</b></p></div></div></div>
+</article>
+
+<article class="f"><h3>Change price or give a discount (F5 / F6)<span class="ta">விலை மாற்றம் அல்லது தள்ளுபடி (F5 / F6)</span></h3>
+<div class="shots"><figure><img src="img/07-price-change-approval.jpg" alt="Price change with manager approval" loading="lazy"><figcaption>Manager approval with PIN · மேலாளர் PIN அனுமதி</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Choose the line, press <kbd>F5</kbd> (new price) or <kbd>F6</kbd> (discount) and type the reason.</li>
+<li>If your role cannot do it, the manager types their user name and PIN in the same box.</li>
+<li>The price can never be above MRP. Every change is in the audit log and in the owner's Loss watch.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>வரியைத் தேர்ந்தெடுத்து <kbd>F5</kbd> (புதிய விலை) அல்லது <kbd>F6</kbd> (தள்ளுபடி) அழுத்தி, காரணத்தை உள்ளிடவும்.</li>
+<li>உங்கள் பொறுப்பில் அனுமதி இல்லை என்றால், மேலாளர் தன் பெயரையும் PIN ஐயும் அதே பெட்டியில் உள்ளிடுவார்.</li>
+<li>விலை MRP க்கு மேல் போக முடியாது. ஒவ்வொரு மாற்றமும் தணிக்கைப் பதிவிலும் உரிமையாளரின் Loss watch இலும் பதிவாகும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Customer (F7)<span class="ta">வாடிக்கையாளர் (F7)</span></h3>
+<div class="shots"><figure><img src="img/54-customer-search.jpg" alt="Customer search" loading="lazy"><figcaption>Type part of the name or phone · பெயர் அல்லது தொலைபேசியின் ஒரு பகுதி</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Optional: a walk-in customer needs nothing.</li>
+<li><kbd>F7</kbd> shows recent customers at once. Type any part of the <b>name</b> (English or Tamil) or of the <b>phone number</b>.</li>
+<li><kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd>, or tap the row. The row shows loyalty points and any credit owed.</li>
+<li>Not found? What you typed moves into <b>New customer</b>; add the phone and press <b>Add</b>.</li>
+<li><b>Make it walk-in</b> removes the customer from the bill.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>விருப்பமானது: சாதாரண (walk-in) வாடிக்கையாளருக்கு எதுவும் தேவையில்லை.</li>
+<li><kbd>F7</kbd> அழுத்தினால் சமீபத்திய வாடிக்கையாளர்கள் உடனே தெரிவார்கள். <b>பெயரின்</b> (ஆங்கிலம்/தமிழ்) அல்லது <b>தொலைபேசி எண்ணின்</b> எந்தப் பகுதியையும் தட்டச்சு செய்யவும்.</li>
+<li><kbd>↑</kbd> <kbd>↓</kbd> மற்றும் <kbd>Enter</kbd>, அல்லது வரியைத் தொடவும். புள்ளிகளும் நிலுவைக் கடனும் வரியில் தெரியும்.</li>
+<li>கிடைக்கவில்லையா? நீங்கள் தட்டச்சு செய்தது <b>New customer</b> பெட்டிக்குச் செல்லும்; தொலைபேசி எண்ணைச் சேர்த்து <b>Add</b> அழுத்தவும்.</li>
+<li><b>Make it walk-in</b> பில்லில் இருந்து வாடிக்கையாளரை நீக்கும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Hold, recall and cancel a bill (F8 / F9)<span class="ta">பில்லை நிறுத்தி வைத்தல், மீண்டும் எடுத்தல், ரத்து செய்தல் (F8 / F9)</span></h3>
+<div class="shots"><figure><img src="img/13-recall-held.jpg" alt="Recall a held bill" loading="lazy"><figcaption>Held bills · நிறுத்தி வைத்த பில்கள்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Customer forgot something? <kbd>F8</kbd> <b>Hold</b> with a short label, and serve the next customer.</li>
+<li><kbd>F9</kbd> <b>Recall</b> brings the held bill back exactly as it was.</li>
+<li><kbd>Ctrl</kbd>+<kbd>Backspace</kbd> <b>Cancel bill</b> needs a reason (and a manager PIN for cashiers). Cancelled bills with their value appear in Loss watch.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>வாடிக்கையாளர் ஏதாவது மறந்தாரா? <kbd>F8</kbd> <b>Hold</b> அழுத்தி சிறு பெயர் கொடுத்து, அடுத்த வாடிக்கையாளரைக் கவனிக்கவும்.</li>
+<li><kbd>F9</kbd> <b>Recall</b> நிறுத்திய பில்லை அப்படியே திரும்பக் கொண்டுவரும்.</li>
+<li><kbd>Ctrl</kbd>+<kbd>Backspace</kbd> <b>Cancel bill</b> க்கு காரணம் தேவை (காசாளருக்கு மேலாளர் PIN உம்). ரத்தான பில்கள் அவற்றின் தொகையுடன் Loss watch இல் தெரியும்.</li></ol></div></div>
+</article>
+</section>
+
+<!-- ============================================================ 3 PAYMENT -->
+<section class="ch" id="payment"><h2>3. Payment and the bill<span class="ta">3. பணம் செலுத்துதல் மற்றும் பில்</span></h2>
+
+<article class="f"><h3>Take payment (F12, F10, F3)<span class="ta">பணம் பெறுதல் (F12, F10, F3)</span></h3>
+<div class="shots"><figure><img src="img/08-payment-split.jpg" alt="Payment with split tender" loading="lazy"><figcaption>Cash + UPI split · ரொக்கம் + UPI பிரித்து</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li><b>Fastest:</b> <kbd>F10</kbd> = paid in exact cash, saved at once. <kbd>F3</kbd> = all UPI: check the phone shows <b>successful</b>, then <kbd>Enter</kbd>.</li>
+<li><kbd>F12</kbd> opens the payment screen. Type the cash received or press ₹100 / ₹200 / ₹500 / ₹2000; the <b>change</b> shows in green, money still due in red.</li>
+<li>Split: fill more than one box (e.g. UPI + cash). Card: check the card machine says <b>approved</b>.</li>
+<li><kbd>Enter</kbd> completes. Pressing twice never makes two bills.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li><b>மிக விரைவு:</b> <kbd>F10</kbd> = சரியான ரொக்கம், உடனே சேமிக்கப்படும். <kbd>F3</kbd> = முழுவதும் UPI: தொலைபேசியில் <b>successful</b> எனத் தெரிந்த பின் <kbd>Enter</kbd>.</li>
+<li><kbd>F12</kbd> பணம் செலுத்தும் திரையைத் திறக்கும். பெற்ற ரொக்கத்தை உள்ளிடவும் அல்லது ₹100 / ₹200 / ₹500 / ₹2000 அழுத்தவும்; <b>மீதி பணம்</b> பச்சையில், இன்னும் வர வேண்டியது சிவப்பில் தெரியும்.</li>
+<li>பிரித்துச் செலுத்த: ஒன்றுக்கு மேற்பட்ட பெட்டிகளை நிரப்பவும் (எ.கா. UPI + ரொக்கம்). கார்டு: இயந்திரத்தில் <b>approved</b> என வந்ததைச் சரிபார்க்கவும்.</li>
+<li><kbd>Enter</kbd> பில்லை முடிக்கும். இருமுறை அழுத்தினாலும் இரண்டு பில் ஆகாது.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>WhatsApp bill (optional)<span class="ta">வாட்ஸ்அப் பில் (விருப்பம்)</span></h3>
+<div class="shots">
+<figure><img src="img/45-whatsapp-at-payment.jpg" alt="WhatsApp number at payment" loading="lazy"><figcaption>Mobile number at payment · பணம் செலுத்தும்போது கைபேசி எண்</figcaption></figure>
+<figure><img src="img/46-whatsapp-sent.jpg" alt="Opened in WhatsApp" loading="lazy"><figcaption>Press Send in WhatsApp · வாட்ஸ்அப்பில் Send அழுத்தவும்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Only if the customer asks. Type their <b>10-digit mobile</b> in <b>WhatsApp bill to</b> on the payment screen (a saved customer's number is already filled).</li>
+<li>After saving, WhatsApp opens with the bill written out. <b>Check the number and press Send.</b></li>
+<li>Later: the green <b>WhatsApp</b> button under "Last bill", or any bill in Sales &amp; Returns.</li>
+<li>It is free and is a copy: the paper bill is still given.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>வாடிக்கையாளர் கேட்டால் மட்டும். பணம் செலுத்தும் திரையில் <b>WhatsApp bill to</b> இல் அவரின் <b>10 இலக்க கைபேசி எண்ணை</b> உள்ளிடவும் (சேமித்த வாடிக்கையாளரின் எண் தானாக வரும்).</li>
+<li>சேமித்த பிறகு பில் விவரத்துடன் வாட்ஸ்அப் திறக்கும். <b>எண்ணைச் சரிபார்த்து Send அழுத்தவும்.</b></li>
+<li>பின்னர் அனுப்ப: "Last bill" கீழ் உள்ள பச்சை <b>WhatsApp</b> பொத்தான், அல்லது Sales &amp; Returns இல் எந்த பில்லும்.</li>
+<li>இது இலவசம், ஒரு நகல் மட்டுமே: அச்சிட்ட பில் கட்டாயம் கொடுக்க வேண்டும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Printed bill – every customer, every time<span class="ta">அச்சிட்ட பில் – ஒவ்வொரு வாடிக்கையாளருக்கும், ஒவ்வொரு முறையும்</span></h3>
+<div class="shots">
+<figure><img src="img/09-sale-saved.jpg" alt="Sale saved" loading="lazy"><figcaption>Bill saved, change to give · பில் சேமிப்பு, மீதி பணம்</figcaption></figure>
+<figure><img src="img/10-receipt-80mm.jpg" alt="80 mm receipt" loading="lazy"><figcaption>80 mm receipt · 80 mm ரசீது</figcaption></figure>
+<figure><img src="img/12-invoice-a4.jpg" alt="A4 invoice" loading="lazy"><figcaption>A4 invoice for businesses · நிறுவனங்களுக்கு A4 இன்வாய்ஸ்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>The receipt prints by itself when the bill is saved. <b>Always hand it over.</b></li>
+<li>Paper out or printer off? Fix it, then <b>Reprint</b> under "Last bill". A reprint is marked DUPLICATE and never makes a new sale.</li>
+<li>A4 invoice (for a business with GSTIN): open the bill → <b>A4 invoice</b>.</li>
+<li>At closing, Cash Closing lists any bill that was never printed.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>பில் சேமித்தவுடன் ரசீது தானாக அச்சாகும். <b>எப்போதும் வாடிக்கையாளரிடம் கொடுக்கவும்.</b></li>
+<li>காகிதம் தீர்ந்ததா, பிரிண்டர் அணைந்ததா? சரிசெய்து "Last bill" கீழ் <b>Reprint</b> அழுத்தவும். மறு அச்சில் DUPLICATE எனக் குறிக்கப்படும்; புதிய விற்பனை ஆகாது.</li>
+<li>A4 இன்வாய்ஸ் (GSTIN உள்ள நிறுவனங்களுக்கு): பில்லைத் திறந்து → <b>A4 invoice</b>.</li>
+<li>கணக்கு முடிக்கும்போது, அச்சிடப்படாத பில்கள் Cash Closing இல் பட்டியலிடப்படும்.</li></ol></div></div>
+</article>
+</section>
+
+<!-- ============================================================ 4 RETURNS -->
+<section class="ch" id="returns"><h2>4. Returns and refunds<span class="ta">4. பொருள் திருப்பம் மற்றும் பணத் திருப்பம்</span></h2>
+
+<article class="f"><h3>Take back items<span class="ta">பொருட்களைத் திரும்பப் பெறுதல்</span></h3>
+<div class="shots">
+<figure><img src="img/14-return-form.jpg" alt="Return form" loading="lazy"><figcaption>Return against the original bill · அசல் பில்லுக்கு எதிராகத் திருப்பம்</figcaption></figure>
+<figure><img src="img/15-credit-note.jpg" alt="Credit note" loading="lazy"><figcaption>Credit note · கிரெடிட் நோட்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li><b>Sales &amp; Returns</b> → find the bill by number, date or customer → <b>Return items</b>.</li>
+<li>Type the quantity returned for each line (weights to 3 decimals). It can never be more than was sold and not yet returned.</li>
+<li>Refund is at the <b>price actually paid</b> (after discounts and offers). Choose cash / UPI / card / credit, the reason, and where the item goes: back on sale, quarantine or waste.</li>
+<li>Managers only, or with a manager's PIN. A credit note prints.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li><b>Sales &amp; Returns</b> → பில் எண், தேதி அல்லது வாடிக்கையாளர் மூலம் பில்லைக் கண்டுபிடித்து → <b>Return items</b>.</li>
+<li>ஒவ்வொரு வரிக்கும் திரும்பிய அளவை உள்ளிடவும் (எடை 3 தசமம் வரை). விற்றதைவிட அதிகமாகவோ, ஏற்கனவே திரும்பியதைச் சேர்த்தோ முடியாது.</li>
+<li>திருப்பித் தரும் பணம் <b>உண்மையில் செலுத்திய விலையில்</b> (தள்ளுபடிக்குப் பின்) கணக்கிடப்படும். ரொக்கம் / UPI / கார்டு / கடன், காரணம், பொருள் எங்கே போகும் (மீண்டும் விற்பனை, தனியாக வைத்தல், வீண்) ஆகியவற்றைத் தேர்ந்தெடுக்கவும்.</li>
+<li>மேலாளர் மட்டும், அல்லது மேலாளர் PIN உடன். கிரெடிட் நோட் அச்சாகும்.</li></ol></div></div>
+</article>
+</section>
+
+<!-- ============================================================ 5 CLOSING -->
+<section class="ch" id="closing"><h2>5. Closing the shift<span class="ta">5. ஷிஃப்ட் முடித்தல்</span></h2>
+
+<article class="f"><h3>Count the drawer and close<span class="ta">பணப்பெட்டியை எண்ணி முடித்தல்</span></h3>
+<div class="shots">
+<figure><img src="img/16-cash-closing.jpg" alt="Cash closing" loading="lazy"><figcaption>Expected cash, cash in/out, count · எதிர்பார்க்கும் ரொக்கம், உள்/வெளி, எண்ணிக்கை</figcaption></figure>
+<figure><img src="img/17-shift-detail.jpg" alt="Shift report" loading="lazy"><figcaption>Shift report · ஷிஃப்ட் அறிக்கை</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>During the day, record cash taken out or put in (bank deposit, petty cash) under <b>Cash in / out of the drawer</b>.</li>
+<li>At closing, count notes and coins by denomination. The <b>Difference</b> appears before you close.</li>
+<li>Enter the cash to leave for the next shift, then <b>Close shift</b>. A shift report prints and both backups run.</li>
+<li>A red box lists any bill never printed: reprint it. Only cash moves the drawer; UPI and card do not.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>நாளின் போது வெளியே எடுத்த அல்லது வைத்த பணத்தை (வங்கி வைப்பு, சிறு செலவு) <b>Cash in / out of the drawer</b> இல் பதிவு செய்யவும்.</li>
+<li>முடிக்கும்போது நோட்டுகள், நாணயங்களை மதிப்பு வாரியாக எண்ணவும். முடிப்பதற்கு முன் <b>Difference</b> (வேறுபாடு) தெரியும்.</li>
+<li>அடுத்த ஷிஃப்ட்டுக்கு விட வேண்டிய பணத்தை உள்ளிட்டு <b>Close shift</b> அழுத்தவும். ஷிஃப்ட் அறிக்கை அச்சாகும்; இரு காப்புப் பிரதிகளும் (backup) தானாக எடுக்கப்படும்.</li>
+<li>அச்சிடப்படாத பில்கள் சிவப்புப் பெட்டியில் தெரியும்: மறு அச்சிடவும். ரொக்கம் மட்டுமே பணப்பெட்டியைப் பாதிக்கும்; UPI, கார்டு பாதிக்காது.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>UPI and card settlements<span class="ta">UPI மற்றும் கார்டு தீர்வு</span></h3>
+<div class="shots"><figure><img src="img/34-settlements.jpg" alt="Settlements" loading="lazy"><figcaption>Match the bank's credit · வங்கி வரவுடன் பொருத்துதல்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>When the bank credits UPI or card money, open <b>Cash Closing → UPI / card settlements</b>.</li>
+<li>Enter the amount credited and the fee; the system matches it with the day's payments and shows anything unmatched.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>வங்கி UPI அல்லது கார்டு பணத்தை வரவு வைத்தவுடன் <b>Cash Closing → UPI / card settlements</b> திறக்கவும்.</li>
+<li>வரவான தொகையையும் கட்டணத்தையும் உள்ளிடவும்; அன்றைய பணம் செலுத்தல்களுடன் பொருத்தி, பொருந்தாதவற்றைக் காட்டும்.</li></ol></div></div>
+</article>
+</section>
+
+<!-- ============================================================ 6 OWNER TOOLS -->
+<section class="ch" id="owner"><h2>6. Owner tools (owner and manager)<span class="ta">6. உரிமையாளர் கருவிகள் (உரிமையாளர், மேலாளர்)</span></h2>
+
+<article class="f"><h3>Owner tools home<span class="ta">உரிமையாளர் கருவிகள் முகப்பு</span></h3>
+<div class="shots"><figure><img src="img/47-owner-tools.jpg" alt="Owner tools" loading="lazy"><figcaption>Every daily owner job on one screen · தினசரி வேலைகள் ஒரே திரையில்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><p>Left menu → <b>Owner tools</b>: Add products, Today's prices, Buy list, Loss watch, Day summary on WhatsApp, Credit reminders. Cashiers do not see it.</p></div>
+<div lang="ta"><h4>தமிழ்</h4><p>இடது மெனு → <b>Owner tools</b>: பொருள் சேர்த்தல், இன்றைய விலை, வாங்க வேண்டிய பட்டியல், இழப்புக் கண்காணிப்பு, வாட்ஸ்அப்பில் நாள் சுருக்கம், கடன் நினைவூட்டல். காசாளர்களுக்கு இது தெரியாது.</p></div></div>
+</article>
+
+<article class="f"><h3>Add products<span class="ta">பொருட்களைச் சேர்த்தல்</span></h3>
+<div class="shots"><figure><img src="img/44-quick-add-page.jpg" alt="Quick add products" loading="lazy"><figcaption>Starter-list suggestions while typing · தட்டச்சு செய்யும்போது பரிந்துரைகள்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li><b>Owner tools → Add products</b> (or <b>Quick add product</b> in the menu).</li>
+<li>Scan the barcode (empty for loose items), type the name. Matching products from the 20,000-item starter list appear: pick one so nothing is entered twice.</li>
+<li>Category, sold by piece or kg, MRP, selling price, GST, opening stock, cost. The margin shows as you type.</li>
+<li><kbd>Enter</kbd> on the last box saves; the form clears for the next product and remembers category, unit and GST.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li><b>Owner tools → Add products</b> (அல்லது மெனுவில் <b>Quick add product</b>).</li>
+<li>பார்கோடை ஸ்கேன் செய்யவும் (உதிரிப் பொருளுக்கு காலியாக விடவும்), பெயரை உள்ளிடவும். 20,000 பொருள் தொடக்கப் பட்டியலில் பொருந்துபவை தெரியும்: இரட்டிப்பு ஆகாமல் இருக்க அதையே தேர்ந்தெடுக்கவும்.</li>
+<li>வகை, துண்டு அல்லது கிலோ, MRP, விற்பனை விலை, GST, தொடக்க இருப்பு, கொள்முதல் விலை. லாபம் உடனே தெரியும்.</li>
+<li>கடைசிப் பெட்டியில் <kbd>Enter</kbd> சேமிக்கும்; அடுத்த பொருளுக்கு படிவம் காலியாகும், வகை/அலகு/GST நினைவில் இருக்கும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Today's prices and the price board<span class="ta">இன்றைய விலை மற்றும் விலைப் பலகை</span></h3>
+<div class="shots">
+<figure><img src="img/48-todays-prices.jpg" alt="Today's prices" loading="lazy"><figcaption>Change many prices at once · பல விலைகளை ஒரே நேரத்தில் மாற்றுதல்</figcaption></figure>
+<figure><img src="img/49-price-board.jpg" alt="Price board" loading="lazy"><figcaption>A4 board in Tamil and English · தமிழ்/ஆங்கில A4 பலகை</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Every morning after the market: <b>Owner tools → Today's prices</b>. Loose items are listed with stock, buying rate and selling price.</li>
+<li>Type the new prices; <kbd>Enter</kbd> moves down. Changed rows turn yellow; red means below cost or above MRP.</li>
+<li><b>Save all</b>. If one price is wrong, nothing is saved and the message says which.</li>
+<li><b>Print price board</b> → stick it near the produce.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>தினமும் காலையில் சந்தைக்குப் பிறகு: <b>Owner tools → Today's prices</b>. உதிரிப் பொருட்கள் இருப்பு, கொள்முதல் விலை, விற்பனை விலையுடன் தெரியும்.</li>
+<li>புதிய விலைகளை உள்ளிடவும்; <kbd>Enter</kbd> கீழே செல்லும். மாறிய வரிகள் மஞ்சளாகும்; சிவப்பு = கொள்முதலைவிடக் குறைவு அல்லது MRP க்கு மேல்.</li>
+<li><b>Save all</b> அழுத்தவும். ஏதேனும் ஒரு விலை தவறு என்றால் எதுவும் சேமிக்கப்படாது; எது என்று செய்தி சொல்லும்.</li>
+<li><b>Print price board</b> → பழம்/காய்கறி அருகே ஒட்டவும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Buy list – what to buy tomorrow<span class="ta">வாங்க வேண்டிய பட்டியல் – நாளை என்ன வாங்குவது</span></h3>
+<div class="shots"><figure><img src="img/50-buy-list.jpg" alt="Buy list" loading="lazy"><figcaption>Grouped by supplier · விநியோகஸ்தர் வாரியாக</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Worked out from real sales of the last 7 days, stock now, and orders not yet received.</li>
+<li>Fresh produce, dairy and bakery for <b>1 day</b>, other goods for <b>7 days</b> (you can change these). "Lasts: today" = already out.</li>
+<li><b>Send order on WhatsApp</b> opens the order addressed to that supplier.</li>
+<li>It is a suggestion: check the shelf, weather and festivals.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>கடந்த 7 நாள் உண்மையான விற்பனை, தற்போதைய இருப்பு, இன்னும் வராத ஆர்டர்கள் ஆகியவற்றில் இருந்து கணக்கிடப்படும்.</li>
+<li>பழம், காய்கறி, பால், பேக்கரி <b>1 நாளுக்கு</b>, மற்றவை <b>7 நாளுக்கு</b> (மாற்றலாம்). "Lasts: today" = ஏற்கனவே தீர்ந்தது.</li>
+<li><b>Send order on WhatsApp</b> அந்த விநியோகஸ்தருக்கு ஆர்டரைத் திறக்கும்.</li>
+<li>இது ஒரு பரிந்துரை மட்டுமே: அலமாரி, வானிலை, பண்டிகைகளைக் கவனிக்கவும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Loss watch<span class="ta">இழப்புக் கண்காணிப்பு (Loss watch)</span></h3>
+<div class="shots"><figure><img src="img/51-loss-watch.jpg" alt="Loss watch" loading="lazy"><figcaption>Per cashier, with plain flags · காசாளர் வாரியாக, எளிய எச்சரிக்கைகளுடன்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>For each cashier: bills, cancelled bills and items removed (with ₹ value), price changes, manual discounts, refunds, cash difference, reprints, unprinted bills.</li>
+<li>A red <b>"to check"</b> list explains anything unusual. A flag is a reason to look (reason, CCTV time, the bill), not proof.</li>
+<li>Today / Yesterday / Last 7 days / This month. The dashboard shows today's count.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>ஒவ்வொரு காசாளருக்கும்: பில்கள், ரத்தான பில்கள், நீக்கிய பொருட்கள் (₹ மதிப்புடன்), விலை மாற்றங்கள், கைமுறை தள்ளுபடிகள், பணத் திருப்பங்கள், பணப்பெட்டி வேறுபாடு, மறு அச்சுகள், அச்சிடாத பில்கள்.</li>
+<li>சிவப்பு <b>"to check"</b> பட்டியல் அசாதாரணமானவற்றை விளக்கும். இது பார்க்க வேண்டிய காரணம் (காரணம், CCTV நேரம், பில்) மட்டுமே; குற்றச்சாட்டு அல்ல.</li>
+<li>இன்று / நேற்று / கடந்த 7 நாள் / இந்த மாதம். டாஷ்போர்டில் இன்றைய எண்ணிக்கை தெரியும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Day summary on WhatsApp and credit reminders<span class="ta">வாட்ஸ்அப்பில் நாள் சுருக்கம், கடன் நினைவூட்டல்</span></h3>
+<div class="shots"><figure><img src="img/52-day-summary.jpg" alt="Day summary" loading="lazy"><figcaption>One message to the owner's phone · உரிமையாளரின் கைபேசிக்கு ஒரே செய்தி</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Set the owner's number once: <b>Settings → WhatsApp bills &amp; owner summary</b>.</li>
+<li>After the last shift: <b>Owner tools → Day summary → Send to the owner on WhatsApp</b>. Sales, payments, margin, wastage, cash closing, top sellers and anything unusual.</li>
+<li><b>Credit reminders</b>: customers who owe money, largest first; <b>Send reminder</b> opens a polite English/Tamil message.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>உரிமையாளர் எண்ணை ஒருமுறை அமைக்கவும்: <b>Settings → WhatsApp bills &amp; owner summary</b>.</li>
+<li>கடைசி ஷிஃப்ட்டுக்குப் பிறகு: <b>Owner tools → Day summary → Send to the owner on WhatsApp</b>. விற்பனை, பணம் வந்த வழிகள், லாபம், வீண், பணப்பெட்டி, அதிகம் விற்றவை, அசாதாரணமானவை.</li>
+<li><b>Credit reminders</b>: கடன் வைத்துள்ள வாடிக்கையாளர்கள், பெரிய தொகை முதலில்; <b>Send reminder</b> மரியாதையான ஆங்கில/தமிழ் செய்தியைத் திறக்கும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Owner dashboard<span class="ta">உரிமையாளர் டாஷ்போர்டு</span></h3>
+<div class="shots"><figure><img src="img/20-owner-dashboard.jpg" alt="Owner dashboard" loading="lazy"><figcaption>Today, this month, 14-day chart · இன்று, இந்த மாதம், 14 நாள் வரைபடம்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ul>
+<li>Today's net sales, returns, gross margin, expenses; cash, UPI, card and credit; expected drawer cash.</li>
+<li><b>Needs attention</b>: low stock, expiring soon, expired lots, unsettled UPI/card, Loss watch, Buy list.</li>
+<li>A red bar appears if either backup is not up to date.</li></ul></div>
+<div lang="ta"><h4>தமிழ்</h4><ul>
+<li>இன்றைய நிகர விற்பனை, திருப்பங்கள், மொத்த லாபம், செலவுகள்; ரொக்கம், UPI, கார்டு, கடன்; பணப்பெட்டியில் இருக்க வேண்டிய ரொக்கம்.</li>
+<li><b>Needs attention</b>: குறைந்த இருப்பு, விரைவில் காலாவதி, காலாவதியானவை, தீர்வாகாத UPI/கார்டு, Loss watch, Buy list.</li>
+<li>ஏதேனும் ஒரு காப்புப் பிரதி பழையதானால் சிவப்புப் பட்டை தெரியும்.</li></ul></div></div>
+</article>
+</section>
+
+<!-- ============================================================ 7 PRODUCTS & STOCK -->
+<section class="ch" id="stock"><h2>7. Products, purchases and stock<span class="ta">7. பொருட்கள், கொள்முதல், இருப்பு</span></h2>
+
+<article class="f"><h3>Products and the starter list<span class="ta">பொருட்களும் தொடக்கப் பட்டியலும்</span></h3>
+<div class="shots">
+<figure><img src="img/21-products-candidates.jpg" alt="Products list" loading="lazy"><figcaption>Starter list – inactive until verified · சரிபார்க்கும் வரை செயலற்றவை</figcaption></figure>
+<figure><img src="img/22-product-detail.jpg" alt="Product detail" loading="lazy"><figcaption>Product, barcodes, stock lots · பொருள், பார்கோடுகள், இருப்புத் தொகுதிகள்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>20,000 products are loaded as <b>inactive candidates</b> without prices; they cannot be billed until verified.</li>
+<li>Open a product → <b>Edit</b>: brand, MRP, price, cost, GST and HSN (as the accountant confirms), carton size, reorder level, shelf, expiry tracking.</li>
+<li>Add the pack's barcode under <b>Barcodes</b>, then <b>Verify &amp; activate</b>. A different pack size is a separate product.</li>
+<li>Every price change is recorded with your name.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>20,000 பொருட்கள் விலையின்றி <b>செயலற்ற வேட்பாளர்களாக</b> ஏற்றப்பட்டுள்ளன; சரிபார்க்கும் வரை பில் போட முடியாது.</li>
+<li>பொருளைத் திறந்து → <b>Edit</b>: பிராண்ட், MRP, விலை, கொள்முதல் விலை, GST, HSN (கணக்காளர் உறுதி செய்தபடி), அட்டைப்பெட்டி அளவு, மறு ஆர்டர் அளவு, அலமாரி, காலாவதி கண்காணிப்பு.</li>
+<li><b>Barcodes</b> இல் பாக்கெட் பார்கோடைச் சேர்த்து, <b>Verify &amp; activate</b> அழுத்தவும். வேறு அளவு பாக்கெட் = தனிப் பொருள்.</li>
+<li>ஒவ்வொரு விலை மாற்றமும் உங்கள் பெயருடன் பதிவாகும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Excel / CSV import and labels<span class="ta">Excel / CSV இறக்குமதி மற்றும் லேபிள்கள்</span></h3>
+<div class="shots">
+<figure><img src="img/23-import-preview.jpg" alt="Import preview" loading="lazy"><figcaption>Preview with row errors · வரிப் பிழைகளுடன் முன்னோட்டம்</figcaption></figure>
+<figure><img src="img/41-practice-barcodes.jpg" alt="Barcode sheet" loading="lazy"><figcaption>Barcode labels · பார்கோடு லேபிள்கள்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Many products at once: <b>Products → Import CSV / Excel</b>. Download the template and fill only the columns you change.</li>
+<li>The preview shows every error (duplicate barcode, price above MRP, barcode saved as a number). <b>If any row has an error, nothing is imported.</b> An import can be undone.</li>
+<li>Shelf labels: select products → <b>Labels</b> → print.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>பல பொருட்கள் ஒரே நேரத்தில்: <b>Products → Import CSV / Excel</b>. மாதிரிக் கோப்பைப் பதிவிறக்கி, மாற்றும் நெடுவரிசைகளை மட்டும் நிரப்பவும்.</li>
+<li>முன்னோட்டம் ஒவ்வொரு பிழையையும் காட்டும் (இரட்டைப் பார்கோடு, MRP க்கு மேல் விலை, எண்ணாக மாறிய பார்கோடு). <b>ஏதேனும் ஒரு வரியில் பிழை இருந்தாலும் எதுவும் இறக்குமதி ஆகாது.</b> இறக்குமதியைத் திரும்பப் பெறலாம்.</li>
+<li>அலமாரி லேபிள்: பொருட்களைத் தேர்ந்தெடுத்து → <b>Labels</b> → அச்சிடவும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Receive goods from a supplier<span class="ta">விநியோகஸ்தரிடம் இருந்து பொருள் பெறுதல்</span></h3>
+<div class="shots">
+<figure><img src="img/24-goods-receipt-form.jpg" alt="Goods receipt form" loading="lazy"><figcaption>Enter the supplier invoice · விநியோகஸ்தர் இன்வாய்ஸ் உள்ளீடு</figcaption></figure>
+<figure><img src="img/25-goods-receipt.jpg" alt="Goods receipt saved" loading="lazy"><figcaption>Saved receipt · சேமித்த பெறுதல்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li><b>Purchases → Receive goods</b>: supplier, invoice number and total.</li>
+<li>For each line: cartons or pieces, free and damaged units, batch, expiry, cost.</li>
+<li>The invoice total must match. The same invoice cannot be entered twice. Stock goes up at once.</li>
+<li>Purchase orders, partial deliveries, supplier returns and payments are under Purchases and Suppliers.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li><b>Purchases → Receive goods</b>: விநியோகஸ்தர், இன்வாய்ஸ் எண், மொத்தம்.</li>
+<li>ஒவ்வொரு வரிக்கும்: அட்டைப்பெட்டி அல்லது துண்டுகள், இலவசம், சேதமானவை, பேட்ச், காலாவதி தேதி, விலை.</li>
+<li>இன்வாய்ஸ் மொத்தம் பொருந்த வேண்டும். ஒரே இன்வாய்ஸை இருமுறை உள்ளிட முடியாது. இருப்பு உடனே கூடும்.</li>
+<li>கொள்முதல் ஆர்டர், பகுதி டெலிவரி, விநியோகஸ்தருக்குத் திருப்பம், பணம் செலுத்தல் – Purchases, Suppliers பகுதிகளில்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Low stock, expiry and wastage<span class="ta">குறைந்த இருப்பு, காலாவதி, வீண்</span></h3>
+<div class="shots">
+<figure><img src="img/27-low-stock.jpg" alt="Low stock" loading="lazy"><figcaption>Low stock · குறைந்த இருப்பு</figcaption></figure>
+<figure><img src="img/26-near-expiry.jpg" alt="Near expiry" loading="lazy"><figcaption>Expiring soon · விரைவில் காலாவதி</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li><b>Inventory</b> shows low stock, out of stock, near expiry, expired, dead stock and wastage.</li>
+<li>The oldest expiry is always sold first. <b>Expired stock cannot be billed.</b></li>
+<li>Spoiled or damaged: open the lot → write off as wastage, damage or expired, with a reason. It shows in reports and the day summary.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li><b>Inventory</b> இல் குறைந்த இருப்பு, இருப்பு இல்லாதவை, விரைவில் காலாவதி, காலாவதியானவை, விற்காதவை, வீண் ஆகியவை தெரியும்.</li>
+<li>முதலில் காலாவதியாகும் இருப்பு எப்போதும் முதலில் விற்கப்படும். <b>காலாவதியான பொருளுக்கு பில் போட முடியாது.</b></li>
+<li>கெட்டுப்போனது அல்லது சேதமானது: தொகுதியைத் திறந்து → வீண் / சேதம் / காலாவதி என காரணத்துடன் கழிக்கவும். அறிக்கைகளிலும் நாள் சுருக்கத்திலும் தெரியும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Stocktake (count the shelf)<span class="ta">இருப்புக் கணக்கெடுப்பு (அலமாரியை எண்ணுதல்)</span></h3>
+<div class="shots"><figure><img src="img/28-stocktake.jpg" alt="Stocktake" loading="lazy"><figcaption>Expected, counted, difference · எதிர்பார்ப்பு, எண்ணியது, வேறுபாடு</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li><b>Inventory → Stocktake</b>: count each item and type the counted quantity.</li>
+<li>The difference and its value appear. Give a reason; a manager approves. Stock is then corrected.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li><b>Inventory → Stocktake</b>: ஒவ்வொரு பொருளையும் எண்ணி, எண்ணிய அளவை உள்ளிடவும்.</li>
+<li>வேறுபாடும் அதன் மதிப்பும் தெரியும். காரணம் கொடுக்கவும்; மேலாளர் அனுமதிப்பார். பிறகு இருப்பு சரிசெய்யப்படும்.</li></ol></div></div>
+</article>
+</section>
+
+<!-- ============================================================ 8 REPORTS -->
+<section class="ch" id="reports"><h2>8. Reports<span class="ta">8. அறிக்கைகள்</span></h2>
+
+<article class="f"><h3>21 reports with drill-down<span class="ta">விவரமாகப் பார்க்கக்கூடிய 21 அறிக்கைகள்</span></h3>
+<div class="shots">
+<figure><img src="img/31-report-daily.jpg" alt="Daily sales" loading="lazy"><figcaption>Daily sales · தினசரி விற்பனை</figcaption></figure>
+<figure><img src="img/29-report-categories.jpg" alt="Category sales" loading="lazy"><figcaption>Category-wise · வகை வாரியாக</figcaption></figure>
+<figure><img src="img/32-report-tax.jpg" alt="Tax summary" loading="lazy"><figcaption>GST summary · GST சுருக்கம்</figcaption></figure>
+<figure><img src="img/33-report-shifts.jpg" alt="Shift reconciliation" loading="lazy"><figcaption>Shift reconciliation · ஷிஃப்ட் சரிபார்ப்பு</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li><b>Reports</b>: daily, item-wise, category-wise, hourly, cashier, payment methods, discounts, returns, margin, fast/slow movers, purchases, supplier dues, stock value, movements, expiry, wastage, customer credit, expenses, GST, shifts, settlements.</li>
+<li>Pick the dates; each report says which date it uses. Click a category to see every bill behind it.</li>
+<li><b>Print</b>, <b>CSV</b> or <b>Excel</b> for the accountant.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li><b>Reports</b>: தினசரி, பொருள் வாரியாக, வகை வாரியாக, மணிநேர, காசாளர், பணம் செலுத்தும் முறைகள், தள்ளுபடிகள், திருப்பங்கள், லாபம், வேகமாக/மெதுவாக விற்பவை, கொள்முதல், விநியோகஸ்தர் நிலுவை, இருப்பு மதிப்பு, நகர்வுகள், காலாவதி, வீண், வாடிக்கையாளர் கடன், செலவுகள், GST, ஷிஃப்ட்கள், தீர்வுகள்.</li>
+<li>தேதிகளைத் தேர்ந்தெடுக்கவும்; ஒவ்வொரு அறிக்கையும் எந்தத் தேதியைப் பயன்படுத்துகிறது என்று சொல்லும். வகையைக் கிளிக் செய்தால் அதன் பின் உள்ள ஒவ்வொரு பில்லும் தெரியும்.</li>
+<li>கணக்காளருக்கு <b>Print</b>, <b>CSV</b> அல்லது <b>Excel</b>.</li></ol></div></div>
+</article>
+</section>
+
+<!-- ============================================================ 9 SETTINGS -->
+<section class="ch" id="settings"><h2>9. Settings, staff and safety (owner)<span class="ta">9. அமைப்புகள், பணியாளர்கள், பாதுகாப்பு (உரிமையாளர்)</span></h2>
+
+<article class="f"><h3>Store details, staff and offers<span class="ta">கடை விவரம், பணியாளர்கள், சலுகைகள்</span></h3>
+<div class="shots">
+<figure><img src="img/40-store-settings.jpg" alt="Store settings" loading="lazy"><figcaption>Store identity and invoices · கடை விவரம், இன்வாய்ஸ்</figcaption></figure>
+<figure><img src="img/37-staff-roles.jpg" alt="Staff and roles" loading="lazy"><figcaption>Staff and what each role can do · பணியாளர்களும் பொறுப்புகளும்</figcaption></figure>
+<figure><img src="img/39-offers.jpg" alt="Offers" loading="lazy"><figcaption>Offers · சலுகைகள்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ul>
+<li><b>Store identity &amp; invoices</b>: legal name, address, phone, GSTIN, FSSAI, bill prefix, footer. Have the accountant check GST settings.</li>
+<li><b>Staff</b>: one login per person. Roles: owner, manager, cashier, purchaser, auditor. Managers get an approval PIN. Switch off logins of people who leave.</li>
+<li><b>Offers</b>: % off, ₹ off, quantity deals, combos, with dates and priority.</li>
+<li><b>Scanner, printer and scale</b>: receipt width 80/58 mm, scale-label layout (test with a real label).</li></ul></div>
+<div lang="ta"><h4>தமிழ்</h4><ul>
+<li><b>Store identity &amp; invoices</b>: சட்டப் பெயர், முகவரி, தொலைபேசி, GSTIN, FSSAI, பில் முன்னொட்டு, அடிக்குறிப்பு. GST அமைப்புகளைக் கணக்காளரிடம் சரிபார்க்கவும்.</li>
+<li><b>Staff</b>: ஒருவருக்கு ஒரு உள்நுழைவு. பொறுப்புகள்: உரிமையாளர், மேலாளர், காசாளர், கொள்முதலாளர், தணிக்கையாளர். மேலாளர்களுக்கு அனுமதி PIN. வேலை விட்டவர்களின் உள்நுழைவை நிறுத்தவும்.</li>
+<li><b>Offers</b>: % தள்ளுபடி, ₹ தள்ளுபடி, அளவுச் சலுகை, காம்போ – தேதி மற்றும் முன்னுரிமையுடன்.</li>
+<li><b>Scanner, printer and scale</b>: ரசீது அகலம் 80/58 mm, எடை இயந்திர லேபிள் அமைப்பு (உண்மையான லேபிளுடன் சோதிக்கவும்).</li></ul></div></div>
+</article>
+
+<article class="f"><h3>Audit log<span class="ta">தணிக்கைப் பதிவு</span></h3>
+<div class="shots"><figure><img src="img/38-audit-log.jpg" alt="Audit log" loading="lazy"><figcaption>Who did what, when · யார், என்ன, எப்போது</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><p>Every sale, price change, discount, refund, write-off, cancelled bill, reprint, failed login and shift reopen is recorded with the person and the approver.</p></div>
+<div lang="ta"><h4>தமிழ்</h4><p>ஒவ்வொரு விற்பனை, விலை மாற்றம், தள்ளுபடி, பணத் திருப்பம், கழிப்பு, ரத்தான பில், மறு அச்சு, தவறான உள்நுழைவு, ஷிஃப்ட் மீண்டும் திறப்பு – செய்தவர், அனுமதித்தவர் பெயருடன் பதிவாகும்.</p></div></div>
+</article>
+
+<article class="f"><h3>Two automatic backups and updates<span class="ta">இரண்டு தானியங்கி காப்புப் பிரதிகள் மற்றும் புதுப்பிப்பு</span></h3>
+<div class="shots"><figure><img src="img/36-backups.jpg" alt="Backups" loading="lazy"><figcaption>Both cards must be green · இரண்டு அட்டைகளும் பச்சையாக இருக்க வேண்டும்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ul>
+<li>Backups are made on <b>this PC</b> (start-up, every hour if anything changed, shift close, 21:30) and copied to <b>Google Drive</b>. Both are checked.</li>
+<li><b>Settings → Backups</b>: both cards green. Red = read the message (often: open Google Drive and sign in) and press <b>Back up now</b>.</li>
+<li><b>Update</b>: put the new ZIP in Downloads → double-click <b>Madhuram Update</b> → <kbd>Enter</kbd>. It backs up, updates, checks and restarts; if anything fails it puts the old version back.</li>
+<li>Restore (rare, owner only): follow <b>BACKUP_RESTORE.md</b>.</li></ul></div>
+<div lang="ta"><h4>தமிழ்</h4><ul>
+<li>காப்புப் பிரதிகள் <b>இந்தக் கணினியில்</b> (தொடக்கத்தில், மாற்றம் இருந்தால் ஒவ்வொரு மணிநேரமும், ஷிஃப்ட் முடிவில், இரவு 21:30) எடுக்கப்பட்டு <b>Google Drive</b> க்கும் நகலெடுக்கப்படும். இரண்டும் சரிபார்க்கப்படும்.</li>
+<li><b>Settings → Backups</b>: இரண்டு அட்டைகளும் பச்சை. சிவப்பு என்றால் செய்தியைப் படிக்கவும் (பெரும்பாலும்: Google Drive திறந்து உள்நுழையவும்), பிறகு <b>Back up now</b>.</li>
+<li><b>புதுப்பிப்பு</b>: புதிய ZIP ஐ Downloads இல் வைத்து → <b>Madhuram Update</b> ஐ இருமுறை கிளிக் → <kbd>Enter</kbd>. அது backup எடுத்து, புதுப்பித்து, சரிபார்த்து, மீண்டும் தொடங்கும்; ஏதேனும் தோல்வியடைந்தால் பழைய பதிப்பைத் திரும்ப வைக்கும்.</li>
+<li>மீட்டெடுத்தல் (அரிதாக, உரிமையாளர் மட்டும்): <b>BACKUP_RESTORE.md</b> படிகளைப் பின்பற்றவும்.</li></ul></div></div>
+</article>
+</section>
+
+<!-- ============================================================ 10 KEYS -->
+<section class="ch" id="keys"><h2>10. Keys at the counter<span class="ta">10. கவுண்டர் விசைகள்</span></h2>
+<div class="f"><div class="scrollx"><table>
+<thead><tr><th>Key</th><th>English</th><th>தமிழ்</th></tr></thead>
+<tbody>
+<tr><td><kbd>F1</kbd></td><td>Billing / back to the scan box</td><td lang="ta">பில்லிங் / ஸ்கேன் பெட்டிக்குத் திரும்ப</td></tr>
+<tr><td><kbd>F2</kbd></td><td>Search a product</td><td lang="ta">பொருளைத் தேட</td></tr>
+<tr><td><kbd>F3</kbd></td><td>Pay all by UPI</td><td lang="ta">முழுவதும் UPI மூலம்</td></tr>
+<tr><td><kbd>F4</kbd></td><td>Quantity or weight</td><td lang="ta">எண்ணிக்கை அல்லது எடை</td></tr>
+<tr><td><kbd>F5</kbd></td><td>Change price</td><td lang="ta">விலை மாற்றம்</td></tr>
+<tr><td><kbd>F6</kbd></td><td>Discount</td><td lang="ta">தள்ளுபடி</td></tr>
+<tr><td><kbd>F7</kbd></td><td>Customer</td><td lang="ta">வாடிக்கையாளர்</td></tr>
+<tr><td><kbd>F8</kbd> / <kbd>F9</kbd></td><td>Hold / recall a bill</td><td lang="ta">பில்லை நிறுத்தி வைக்க / மீண்டும் எடுக்க</td></tr>
+<tr><td><kbd>F10</kbd></td><td>Exact cash – save at once</td><td lang="ta">சரியான ரொக்கம் – உடனே சேமி</td></tr>
+<tr><td><kbd>F12</kbd></td><td>Payment screen</td><td lang="ta">பணம் செலுத்தும் திரை</td></tr>
+<tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Choose a line</td><td lang="ta">வரியைத் தேர்ந்தெடுக்க</td></tr>
+<tr><td><kbd>+</kbd> <kbd>−</kbd></td><td>One more / one less piece</td><td lang="ta">ஒன்று கூட / ஒன்று குறைய</td></tr>
+<tr><td><kbd>Del</kbd></td><td>Remove the chosen line</td><td lang="ta">தேர்ந்தெடுத்த வரியை நீக்க</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Backspace</kbd></td><td>Cancel the bill</td><td lang="ta">பில்லை ரத்து செய்ய</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Close a box, back to the scanner</td><td lang="ta">பெட்டியை மூடி ஸ்கேனருக்குத் திரும்ப</td></tr>
+<tr><td><kbd>3*</kbd>code · <kbd>0.375*101</kbd></td><td>Three of an item · 0.375 kg of PLU 101</td><td lang="ta">ஒரு பொருள் மூன்று · PLU 101 இல் 0.375 கிலோ</td></tr>
+</tbody></table></div></div>
+</section>
+
+<!-- ============================================================ 11 RULES -->
+<section class="ch" id="rules"><h2>11. Golden rules<span class="ta">11. முக்கிய விதிகள்</span></h2>
+<div class="rules">
+<div><b>Your own login only.</b><span class="ta">உங்கள் சொந்த உள்நுழைவு மட்டுமே.</span></div>
+<div><b>A paper bill for every customer.</b><span class="ta">ஒவ்வொரு வாடிக்கையாளருக்கும் அச்சிட்ட பில்.</span></div>
+<div><b>UPI or card: see "successful" before Complete.</b><span class="ta">UPI / கார்டு: Complete அழுத்தும் முன் "successful" எனப் பார்க்கவும்.</span></div>
+<div><b>Never sell an unknown pack as a similar item.</b><span class="ta">தெரியாத பாக்கெட்டை ஒத்த பொருளாக விற்க வேண்டாம்.</span></div>
+<div><b>Do not sell expired stock; tell the manager.</b><span class="ta">காலாவதியானதை விற்க வேண்டாம்; மேலாளரிடம் சொல்லவும்.</span></div>
+<div><b>Count the drawer honestly; report differences.</b><span class="ta">பணப்பெட்டியை நேர்மையாக எண்ணுங்கள்; வேறுபாட்டைத் தெரிவியுங்கள்.</span></div>
+<div><b>Practise on "Madhuram Practice", never on the real store.</b><span class="ta">பயிற்சிக்கு "Madhuram Practice" மட்டும்; உண்மையான கடையில் அல்ல.</span></div>
+<div><b>Problem? Photo of the screen to the owner.</b><span class="ta">பிரச்சனையா? திரையைப் புகைப்படம் எடுத்து உரிமையாளருக்கு அனுப்புங்கள்.</span></div>
+</div>
+</section>
+
+<footer class="band" style="padding-inline:0">Screenshots are from the practice database (practice names, prices and bills). Version 2026.11.23. · திரைப்படங்கள் பயிற்சித் தரவில் இருந்து எடுக்கப்பட்டவை.</footer>
+</div></main>
+</body>
+</html>
