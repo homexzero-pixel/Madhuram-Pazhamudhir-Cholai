@@ -30,3 +30,19 @@ class LockoutTests(TestCase):
                 S.override_price(line, self.cashier, "70", "x", "karthik", "0000")
         with self.assertRaisesMessage(Exception, "Too many wrong attempts"):
             S.override_price(line, self.cashier, "70", "x", "karthik", "1234")
+
+
+class UserNameCaseTests(TestCase):
+    """'Owner', 'owner' and ' OWNER ' are the same login; create_owner refuses a duplicate in another case."""
+
+    def test_login_ignores_capitals_and_spaces(self):
+        from django.core.management import call_command
+
+        call_command("create_owner", username="Owner", password="secret-123", pin="2580")
+        for typed in ("Owner", "owner", " OWNER "):
+            c = Client()
+            c.get("/accounts/login/")
+            c.post("/accounts/login/", {"username": typed, "password": "secret-123"})
+            self.assertIn("_auth_user_id", c.session, typed)
+        with self.assertRaises(Exception):
+            call_command("create_owner", username="owner", password="secret-123", pin="2580")

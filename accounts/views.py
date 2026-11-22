@@ -13,7 +13,16 @@ def client_ip(request):
 
 class LoginView(auth_views.LoginView):
     def post(self, request, *args, **kwargs):
-        ident = f"{request.POST.get('username', '').strip()}|{client_ip(request)}"
+        # User names are not case-sensitive: "Owner", "owner" and " OWNER " all log in as the same person.
+        typed = request.POST.get("username", "").strip()
+        if typed:
+            from .models import User
+
+            real = User.objects.filter(username__iexact=typed).values_list("username", flat=True).first()
+            if real and real != request.POST.get("username"):
+                request.POST = request.POST.copy()
+                request.POST["username"] = real
+        ident = f"{typed.lower()}|{client_ip(request)}"
         try:
             throttle.check("login", ident)
         except throttle.Locked as exc:
