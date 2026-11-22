@@ -6,6 +6,9 @@
   <a class="btn btn-success" href="{% url 'sale_receipt' sale.pk %}?print=1&reprint=1" target="_blank"><i class="bi bi-printer"></i> Reprint receipt</a>
   <a class="btn btn-outline-success" href="{% url 'sale_receipt' sale.pk %}?w=a4" target="_blank">A4 invoice</a>
   <a class="btn btn-outline-secondary" href="{% url 'sale_list' %}">All bills</a></div></div>
+{% if store.whatsapp_enabled %}<form class="wa-row mb-3" id="wa-form" data-sale="{{ sale.pk }}"><label for="wa-n" class="fw-semibold"><i class="bi bi-whatsapp text-success"></i> Send this bill on WhatsApp</label>
+<div class="d-flex gap-2"><input id="wa-n" class="form-control" inputmode="tel" autocomplete="off" placeholder="Customer's 10-digit mobile" value="{{ sale.customer.phone|default:'' }}" style="max-width:260px"><button class="btn btn-wa"><i class="bi bi-whatsapp"></i> Open in WhatsApp</button></div>
+<span class="small text-muted" id="wa-msg">Opens the bill in the shop's WhatsApp with this number. Press Send there.</span></form>{% endif %}
 <div class="tiles">
   <div class="tile"><div class="k">Bill total</div><div class="v">{{ sale.total|money }}</div><div class="s">Gross {{ sale.gross|money }} − discount {{ sale.discount|money }}</div></div>
   <div class="tile"><div class="k">Paid</div><div class="v">{{ sale.paid|money }}</div><div class="s">{% for p in sale.payments.all %}{{ p.get_method_display }} {{ p.amount|money }}{% if p.reference %} ({{ p.reference }}){% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}{% if sale.change %} · change {{ sale.change|money }}{% endif %}</div></div>
@@ -35,3 +38,8 @@
 {% if sale.returns.exists %}<div class="card"><div class="card-header">Returns on this bill</div><table class="table"><tbody>
 {% for r in sale.returns.all %}<tr><td><a href="{% url 'return_detail' r.pk %}">{{ r.number }}</a></td><td>{{ r.created_at|date:"d-m-Y H:i" }}</td><td>{{ r.reason }}</td><td>{{ r.get_method_display }}</td><td class="r">{{ r.total|money }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 {% endblock %}
+{% block scripts %}{% if store.whatsapp_enabled %}{% load static %}<script src="{% static 'js/whatsapp.js' %}?v={{ asset_v }}"></script>
+<script>document.getElementById('wa-form').addEventListener('submit', async e => { e.preventDefault(); const m = document.getElementById('wa-msg'), n = document.getElementById('wa-n').value;
+  if (!WA.valid(n)) { m.className = 'small text-danger'; m.textContent = "Enter the customer's 10-digit mobile number."; return; }
+  try { const r = await WA.send(e.target.dataset.sale, n); m.className = 'small text-success fw-semibold'; m.textContent = 'Opened in WhatsApp for ' + r.to + ' – press Send there.'; }
+  catch (err) { m.className = 'small text-danger'; m.textContent = err.message; } });</script>{% endif %}{% endblock %}

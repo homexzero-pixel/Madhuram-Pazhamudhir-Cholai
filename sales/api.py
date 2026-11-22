@@ -264,6 +264,29 @@ def product_quick_add(request, body):
 
 @require_POST
 @api
+def sale_whatsapp(request, body, pk):
+    """Build the WhatsApp bill for a saved sale and return the links that open it in the shop's WhatsApp."""
+    from core.models import StoreSettings
+
+    from . import whatsapp as W
+    from .views import _visible_sales
+
+    sale = get_object_or_404(_visible_sales(request.user).prefetch_related("lines", "payments"), pk=pk)
+    cfg = StoreSettings.load()
+    if not cfg.whatsapp_enabled:
+        raise S.BillingError("WhatsApp bills are turned off (Settings → WhatsApp bills).")
+    raw = body.get("phone") or (sale.customer.phone if sale.customer and sale.customer.phone else "")
+    try:
+        phone = W.normalise_phone(raw)
+    except W.PhoneError as exc:
+        raise S.BillingError(str(exc)) from None
+    text = W.bill_text(sale, cfg)
+    audit("bill_whatsapp", f"Bill {sale.bill_no} opened in WhatsApp for {W.mask(phone)}", user=request.user, obj=sale)
+    return JsonResponse({"ok": True, "text": text, "open": cfg.whatsapp_open, "to": W.mask(phone), **W.links(phone, text)})
+
+
+@require_POST
+@api
 def printed(request, body, pk):
     from .models import Sale
 

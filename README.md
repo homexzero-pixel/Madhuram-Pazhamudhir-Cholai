@@ -17,6 +17,7 @@ All data is in one SQLite database file on the PC. **Two automatic, checked back
 |---|---|
 | **Billing** | Scan → bill → payment → receipt in a few keystrokes. Exact barcode match only; unknown codes are refused, the bill stays intact, and a manager can link the code. Loose produce by PLU with weight to 3 decimals. Configurable scale-label barcodes with check digit. Search by English or Tamil name, SKU, PLU or barcode. **F10 exact cash and F3 all-UPI one-key payment**, hold/recall, cancel with reason, manager-PIN price override and discount, split tender (cash + UPI + card + customer credit), change due. A retried or double-clicked payment can never create two bills. |
 | **Receipts** | 80 mm and 58 mm thermal layouts, A4 invoice, reprint marked DUPLICATE, Tamil product names. |
+| **WhatsApp bills** | Free: type the customer's mobile at payment and the bill opens in the shop's own WhatsApp (Desktop app or Web) ready to send. Resend any old bill. Masked number in the audit log. A paid automatic option is described in the Owner guide. |
 | **Quick add** | Scan a new barcode at the counter → "Add as a new product" → name, MRP, price, GST, shelf count → it is on the bill. A separate Quick add screen enters products one after another with Enter only, and picks from the starter catalogue so nothing is duplicated. |
 | **Products** | 20,000-SKU starter catalogue loaded as *inactive candidates* (no invented prices, barcodes or tax rates). Base product vs sellable SKU, brand, variant, pack, purchase/sale unit conversion, MRP/cost/price, HSN, GST treatment, preferred supplier, reorder level, shelf, batch/expiry tracking. CSV/Excel import with preview, duplicate and row-level checks, all-or-nothing apply and undo. Code 128 shelf/item labels. |
 | **Purchasing** | Suppliers, multi-item purchase orders, partial deliveries, goods receipts against the supplier invoice (total matched), cartons → pieces, free and damaged quantities, batch, expiry and real unit cost per lot, duplicate-invoice block, supplier returns, payments and outstanding balance. |
@@ -48,6 +49,7 @@ All data is in one SQLite database file on the PC. **Two automatic, checked back
 | [Module status](docs/MODULE_STATUS.md) | What was built, tested, and still needs store data, accountant approval or hardware |
 | [Acceptance results](docs/ACCEPTANCE_RESULTS.md) | The specification's 11 acceptance tests, actual results |
 | [Database schema](docs/SCHEMA.md) | Tables and columns |
+| [Changing the software](docs/CHANGING_THE_SOFTWARE.md) | How to add features later and install updates safely |
 
 ## Files
 
@@ -72,7 +74,7 @@ Data lives outside the program folder, in `%LOCALAPPDATA%\MadhuramPOS\store\` (l
 pip install -r requirements.txt
 MPC_MODE=demo python manage.py migrate && MPC_MODE=demo python manage.py seed_demo
 MPC_MODE=demo python manage.py serve            # http://127.0.0.1:8765
-MPC_MODE=test python manage.py test             # 37 automated tests
+MPC_MODE=test python manage.py test             # 40 automated tests
 pip install requests && python scripts/run_acceptance.py   # real-process acceptance run → docs/ACCEPTANCE_RESULTS.md
 ```
 

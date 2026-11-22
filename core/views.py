@@ -42,6 +42,7 @@ SECTIONS = {
                                                  "hardware_tested"]),
     "rules": ("Loyalty & stock alerts", ["loyalty_enabled", "loyalty_rupees_per_point", "loyalty_point_value",
                                          "near_expiry_days", "dead_stock_days"]),
+    "whatsapp": ("WhatsApp bills", ["whatsapp_enabled", "whatsapp_open", "whatsapp_message", "whatsapp_tamil"]),
     "backup": ("Backups", ["backup_extra_dir"]),
 }
 

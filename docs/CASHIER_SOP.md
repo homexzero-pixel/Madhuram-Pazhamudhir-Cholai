@@ -77,6 +77,15 @@ types their user name and PIN. Both are recorded. The price can never be above M
 ![Split payment](img/08-payment-split.jpg)
 ![Sale saved](img/09-sale-saved.jpg)
 
+### WhatsApp bill
+
+If the customer wants the bill on WhatsApp, type their **10-digit mobile number** in **WhatsApp bill to** on the payment screen (a
+saved customer's number is filled in already), then complete the sale as usual. WhatsApp opens with the bill written out and the
+number filled in: **check it and press Send** in WhatsApp. To send the last bill afterwards, press the green **WhatsApp** button under
+"Last bill". Any older bill: **Sales & Returns → open the bill → Send this bill on WhatsApp**.
+
+![WhatsApp bill at payment](img/45-whatsapp-at-payment.jpg)
+
 **Pressed Complete twice, or the network blinked?** The same bill can never be saved twice. Press Complete again if unsure.
 
 ### Receipt did not print

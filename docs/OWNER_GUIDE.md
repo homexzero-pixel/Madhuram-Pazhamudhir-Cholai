@@ -138,6 +138,39 @@ the discounted price, so offer effects are reversed automatically.
 
 ![Offers](img/39-offers.jpg)
 
+## WhatsApp bills
+
+**Free, built in.** At payment the cashier types the customer's mobile number; after the bill is saved, it opens in **the shop's own
+WhatsApp** on the counter PC with the number and the full bill filled in, and the cashier presses **Send**. The message has the
+shop name, bill number and date, every item with quantity × rate, discounts, the total, how it was paid and the change, "You saved ₹…
+on MRP", GST included, loyalty points and your thank-you line.
+
+One-time setup on the counter PC:
+1. Install **WhatsApp** for Windows from the Microsoft Store (free) and link it to the shop's WhatsApp Business number
+   (WhatsApp Business app on the shop phone → Linked devices). The phone stays with the shop; the PC sends from its number.
+2. **Settings → WhatsApp bills**: keep *Open bills in* = **WhatsApp Desktop app**. If you prefer the browser, choose
+   **WhatsApp Web** and log in at web.whatsapp.com once.
+3. The first time, Edge asks "Open WhatsApp?". Tick **Always allow** and press Open.
+
+Good to know:
+- Costs nothing: no API, no monthly fee. It needs the internet only to send; billing itself stays offline. If the internet is down,
+  WhatsApp sends the message when it comes back.
+- Only the masked number (e.g. +91 98xxxxxx10) is written to the audit log. The number is not stored unless the customer has a profile.
+- Send bills only to customers who ask for them. Do not use the shop's number for bulk offers; WhatsApp can block numbers reported as spam.
+- The message is a copy of the bill. The printed receipt / A4 invoice stays the tax document.
+
+### Later: fully automatic WhatsApp (paid)
+
+If you want bills to go out **without pressing Send**, with a PDF invoice attached, the program can be extended to use the
+**WhatsApp Business Platform (Cloud API)** from Meta. What that involves:
+- a Meta Business account with the business verified, and a phone number used only for the API (not on the WhatsApp app);
+- a bill message template approved by Meta;
+- a charge per message from Meta (the bill is a "utility" message; check Meta's current price for India), plus a monthly fee if you go
+  through a reseller such as Interakt, AiSensy, WATI or Gupshup instead of Meta directly;
+- the internet at the counter, and the API key added to the program's settings.
+
+The bill message and the "send" step are already separate in the program (`sales/whatsapp.py`), so this is an addition, not a rewrite.
+
 ## Customers
 
 Optional. Add a phone number to give loyalty points (₹100 spent = 1 point by default, in Settings). **Credit accounts** need a

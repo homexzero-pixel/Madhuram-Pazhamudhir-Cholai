@@ -8,7 +8,8 @@
   const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const dlgEl = $('#dlg'), dlg = new bootstrap.Modal(dlgEl);
-  let S = null, sel = -1, busy = false, pending = null;
+  let S = null, sel = -1, busy = false, pending = null, lastSale = null;
+  const WA_ON = document.getElementById('pos').dataset.wa === '1' && !!window.WA;
 
   async function call(url, body) {
     const opt = body === undefined ? { headers: { Accept: 'application/json' } }
@@ -269,6 +270,9 @@
         ${credit ? `<label for="p-credit" class="fw-semibold">Credit</label><input id="p-credit" class="form-control form-control-lg" inputmode="decimal" placeholder="0"><div class="small text-muted">Limit left ${inr(S.customer.credit_left)}</div>` : ''}
       </div>
       <div class="mt-2 d-flex gap-2"><button type="button" class="btn btn-outline-success" data-all="upi">All UPI</button><button type="button" class="btn btn-outline-success" data-all="card">All card</button></div>
+      ${WA_ON ? `<div class="wa-row mt-3"><label for="p-wa" class="fw-semibold"><i class="bi bi-whatsapp"></i> WhatsApp bill to</label>
+        <input id="p-wa" class="form-control form-control-lg" inputmode="tel" autocomplete="off" placeholder="Customer's mobile (optional)" value="${esc((S.customer && S.customer.phone) || '')}">
+        <span class="small text-muted">Opens the bill in WhatsApp after saving – press Send there.</span></div>` : ''}
       <div class="alert alert-warning mt-3 mb-0 small">For UPI and card, check the payment shows <b>successful</b> on the phone / card machine before pressing Complete.</div>
       <p class="text-danger fs-5 mt-2 mb-0" id="pay-err"></p></div>`,
       `<button class="btn btn-outline-secondary" data-bs-dismiss="modal">Back (Esc)</button><button class="btn btn-success btn-lg px-5" id="pay-ok">Complete sale (Enter)</button>`,
@@ -286,6 +290,8 @@
     $('#dlg-body').querySelectorAll('[data-all]').forEach(b => b.onclick = () => { ['#p-cash', '#p-upi', '#p-card'].forEach(i => $(i).value = ''); $('#p-' + b.dataset.all).value = total.toFixed(2); upd(); });
     let sending = false;
     const go = async (extra) => {
+      const wa = $('#p-wa') ? $('#p-wa').value.trim() : '';
+      if (wa && !WA.valid(wa)) { $('#pay-err').textContent = 'WhatsApp: enter the 10-digit mobile number, or clear the box.'; $('#p-wa').focus(); return; }
       if (sending) return; sending = true; $('#pay-ok').disabled = true;
       const pays = [];
       if (!$('#p-cash').value && !val('#p-upi') && !val('#p-card') && !val('#p-credit')) $('#p-cash').value = total.toFixed(2);  // Enter on an empty box = exact cash
@@ -297,7 +303,7 @@
       try { d = await call('/api/pos/checkout/', Object.assign({ draft: S.draft, payments: pays, customer: S.customer && S.customer.id }, extra || {})); }
       catch (e) { $('#pay-err').textContent = 'Network problem. Press Complete again – the same bill can never be saved twice.'; sending = false; $('#pay-ok').disabled = false; return; }
       sending = false; if ($('#pay-ok')) $('#pay-ok').disabled = false;
-      if (d.ok) { close(); done(d); return; }
+      if (d.ok) { close(); done(d, wa); return; }
       if (d.needs_approval) { pending = done; close(); setTimeout(() => approve(d.error, a => call('/api/pos/checkout/', Object.assign({ draft: d.draft_prev || S.draft, payments: pays, customer: S.customer && S.customer.id }, a))), 300); return; }
       $('#pay-err').textContent = d.error;
     };
@@ -307,14 +313,30 @@
     if (mode === 'upi') { $('#p-upi').value = total.toFixed(2); upd(); setTimeout(() => $('#pay-ok').focus(), 60); }  // F3: all UPI, confirm with Enter
   }
 
-  function done(d) {
+  function done(d, wa) {
+    lastSale = { id: d.sale, phone: wa || (S.customer && S.customer.phone) || '' };
     $('#last-sale').classList.remove('d-none');
     $('#last-no').textContent = d.bill_no; $('#last-change').textContent = inr(d.change);
     $('#last-print').href = d.receipt + '?print=1&reprint=1';
     $('#last-open').href = '/sales/' + d.sale + '/';
     flash(`<b>Bill ${esc(d.bill_no)} saved.</b> ${Number(d.change) ? 'Give change <b>' + inr(d.change) + '</b>' : ''}`, 'success', 6000);
     beep(true);
-    if ($('#pos').dataset.autoprint === '1') printReceipt(d.receipt + '?print=1');
+    if (wa) sendWa(d.sale, wa, d.bill_no);
+    if ($('#pos').dataset.autoprint === '1') setTimeout(() => printReceipt(d.receipt + '?print=1'), wa ? 400 : 0);
+  }
+  async function sendWa(saleId, phone, billNo) {
+    try { const r = await WA.send(saleId, phone); flash(`<i class="bi bi-whatsapp"></i> Bill ${esc(billNo || '')} opened in WhatsApp for ${esc(r.to)} – <b>press Send in WhatsApp</b>.`, 'success', 6000); }
+    catch (e) { flash(esc(e.message), 'danger', 6000); }
+  }
+  function waDialog() {
+    if (!lastSale) return;
+    open('<i class="bi bi-whatsapp text-success"></i> Send the last bill on WhatsApp', `<label class="form-label" for="wa-n">Customer's mobile number</label>
+      <input id="wa-n" class="form-control form-control-lg" inputmode="tel" autocomplete="off" value="${esc(lastSale.phone)}" placeholder="98765 43210">
+      <p class="small text-muted mt-2 mb-0">The bill opens in the shop's WhatsApp with this number. Check it and press Send.</p><p class="text-danger mb-0" id="wa-err"></p>`,
+      `<button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel (Esc)</button><button class="btn btn-wa btn-lg" id="wa-ok"><i class="bi bi-whatsapp"></i> Open in WhatsApp</button>`, () => { $('#wa-n').focus(); $('#wa-n').select(); });
+    const go = async () => { const n = $('#wa-n').value.trim(); if (!WA.valid(n)) { $('#wa-err').textContent = 'Enter the 10-digit mobile number.'; return; }
+      try { const r = await WA.send(lastSale.id, n); lastSale.phone = n; close(); flash(`<i class="bi bi-whatsapp"></i> Opened in WhatsApp for ${esc(r.to)} – press Send there.`, 'success', 5000); } catch (e) { $('#wa-err').textContent = e.message; } };
+    $('#wa-ok').onclick = go; $('#wa-n').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
   }
   function printReceipt(url) {
     // Print through a hidden frame; if the printer fails, the bill is already saved and can be reprinted.
@@ -342,6 +364,7 @@
     }
     if (e.key === 'Escape') focusScan();
   });
+  if ($('#last-wa')) $('#last-wa').onclick = waDialog;
   document.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', () => keyMap[b.dataset.k] && keyMap[b.dataset.k]()));
   $('#lines').addEventListener('click', e => { const tr = e.target.closest('tr'); if (tr) { sel = +tr.dataset.i; render(); focusScan(); } });
   $('#lines').addEventListener('dblclick', () => lineAction('qty'));

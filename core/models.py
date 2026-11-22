@@ -53,6 +53,14 @@ class StoreSettings(models.Model):
     near_expiry_days = models.PositiveSmallIntegerField(default=7)
     dead_stock_days = models.PositiveSmallIntegerField(default=60)
 
+    WHATSAPP_OPEN = [("app", "WhatsApp Desktop app on this PC (fastest)"), ("web", "WhatsApp Web in the browser")]
+    whatsapp_enabled = models.BooleanField("Send bills on WhatsApp", default=True,
+                                           help_text="Free: opens the bill as a message in the shop's own WhatsApp; the cashier presses Send.")
+    whatsapp_open = models.CharField("Open bills in", max_length=3, choices=WHATSAPP_OPEN, default="app")
+    whatsapp_message = models.CharField("Last line of the WhatsApp bill", max_length=200, blank=True,
+                                        default="Thank you for shopping with us! நன்றி, மீண்டும் வருக! 🙏")
+    whatsapp_tamil = models.BooleanField("Show Tamil item names on WhatsApp bills", default=False)
+
     backup_keep = models.PositiveSmallIntegerField(default=30, help_text="Not used any more: backups are kept automatically (all from 2 days, daily for 60 days, monthly for 2 years).")
     backup_extra_dir = models.CharField(max_length=255, blank=True, help_text="Second backup place: your Google Drive for desktop folder, e.g. G:\\My Drive (found automatically by Setup_Backups.bat). Each backup is copied and checked into its 'Madhuram backups' folder.")
     is_demo = models.BooleanField(default=False)

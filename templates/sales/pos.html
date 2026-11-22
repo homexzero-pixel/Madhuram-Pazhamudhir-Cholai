@@ -2,7 +2,7 @@
 {% block title %}Billing{% endblock %}
 {% block body_class %}pos-page{% endblock %}
 {% block content %}
-<div class="pos" id="pos" data-autoprint="{{ store.auto_print|yesno:'1,0' }}" data-width="{{ store.receipt_width }}">
+<div class="pos" id="pos" data-wa="{{ store.whatsapp_enabled|yesno:'1,0' }}" data-autoprint="{{ store.auto_print|yesno:'1,0' }}" data-width="{{ store.receipt_width }}">
   <section class="pos-main">
     <div class="status-strip" id="status-strip"></div>
     <form class="scanbar" id="scan-form" autocomplete="off">
@@ -44,7 +44,7 @@
     <div class="small text-muted">↑ ↓ choose a line · <kbd>+</kbd> <kbd>−</kbd> change pieces · <kbd>Esc</kbd> back to scanner</div>
     <div id="last-sale" class="card d-none"><div class="card-body py-2 small">
       Last bill <b id="last-no"></b> · change <b id="last-change"></b>
-      <div class="mt-1 d-flex gap-2"><a class="btn btn-sm btn-outline-success" id="last-print" target="_blank">Reprint</a><a class="btn btn-sm btn-outline-secondary" id="last-open">Open bill</a></div>
+      <div class="mt-1 d-flex gap-2"><a class="btn btn-sm btn-outline-success" id="last-print" target="_blank">Reprint</a><a class="btn btn-sm btn-outline-secondary" id="last-open">Open bill</a>{% if store.whatsapp_enabled %}<button class="btn btn-sm btn-wa" id="last-wa"><i class="bi bi-whatsapp"></i> WhatsApp</button>{% endif %}</div>
     </div></div>
   </aside>
 </div>
@@ -61,4 +61,4 @@
 </div>
 {{ categories|json_script:"qa-cats" }}
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/quickadd.js' %}?v={{ asset_v }}"></script><script src="{% static 'js/pos.js' %}?v={{ asset_v }}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/quickadd.js' %}?v={{ asset_v }}"></script><script src="{% static 'js/whatsapp.js' %}?v={{ asset_v }}"></script><script src="{% static 'js/pos.js' %}?v={{ asset_v }}"></script>{% endblock %}

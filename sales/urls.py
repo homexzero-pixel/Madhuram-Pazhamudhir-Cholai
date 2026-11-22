@@ -22,6 +22,7 @@ urlpatterns = [
     path("api/customers/search/", api.customer_search),
     path("api/customers/quick-add/", api.customer_quick_add),
     path("api/sales/<int:pk>/printed/", api.printed),
+    path("api/sales/<int:pk>/whatsapp/", api.sale_whatsapp),
     path("sales/", views.sale_list, name="sale_list"),
     path("sales/<int:pk>/", views.sale_detail, name="sale_detail"),
     path("sales/<int:pk>/receipt/", views.sale_receipt, name="sale_receipt"),
