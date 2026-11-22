@@ -2,7 +2,7 @@
 {% block title %}Billing{% endblock %}
 {% block body_class %}pos-page{% endblock %}
 {% block content %}
-<div class="pos" id="pos" data-wa="{{ store.whatsapp_enabled|yesno:'1,0' }}" data-autoprint="{{ store.auto_print|yesno:'1,0' }}" data-width="{{ store.receipt_width }}">
+<div class="pos" id="pos" data-wa="{{ store.whatsapp_enabled|yesno:'1,0' }}" data-width="{{ store.receipt_width }}">
   <section class="pos-main">
     <div class="status-strip" id="status-strip"></div>
     <form class="scanbar" id="scan-form" autocomplete="off">

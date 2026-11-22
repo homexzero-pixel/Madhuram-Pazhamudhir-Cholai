@@ -322,7 +322,8 @@
     flash(`<b>Bill ${esc(d.bill_no)} saved.</b> ${Number(d.change) ? 'Give change <b>' + inr(d.change) + '</b>' : ''}`, 'success', 6000);
     beep(true);
     if (wa) sendWa(d.sale, wa, d.bill_no);
-    if ($('#pos').dataset.autoprint === '1') setTimeout(() => printReceipt(d.receipt + '?print=1'), wa ? 400 : 0);
+    // The paper bill is compulsory: it prints for every sale (WhatsApp is only an extra copy).
+    setTimeout(() => printReceipt(d.receipt + '?print=1'), wa ? 400 : 0);
   }
   async function sendWa(saleId, phone, billNo) {
     try { const r = await WA.send(saleId, phone); flash(`<i class="bi bi-whatsapp"></i> Bill ${esc(billNo || '')} opened in WhatsApp for ${esc(r.to)} – <b>press Send in WhatsApp</b>.`, 'success', 6000); }

@@ -24,7 +24,7 @@ class StoreSettings(models.Model):
     credit_note_prefix = models.CharField(max_length=6, default="MCN")
     bill_footer = models.CharField(max_length=200, blank=True, default="Thank you! Visit again. நன்றி, மீண்டும் வருக!")
     receipt_width = models.CharField(max_length=3, choices=RECEIPT_WIDTHS, default="80")
-    auto_print = models.BooleanField(default=True, help_text="Open the print dialog as soon as a bill is saved.")
+    auto_print = models.BooleanField(default=True, help_text="Always on: a paper bill is printed for every sale.")
     require_tax_setup = models.BooleanField(
         default=False, help_text="Block billing of items whose GST treatment is not set. Turn on after the accountant has reviewed tax data."
     )

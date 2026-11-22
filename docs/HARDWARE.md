@@ -20,10 +20,13 @@ scale → *Hardware tested* (e.g. "Scanner XYZ-100 tested 12-12-2026 by Priya") 
 ## Thermal receipt printer (58 mm / 80 mm) – supported through Windows printing, untested
 
 - Install the printer's **Windows driver**. Set the paper width (80 mm or 58 mm) in the driver and in Settings → Receipt width.
-- In Edge, print one receipt and choose this printer, margins **None**, scale **100 %**, headers and footers **off**. Edge
-  remembers these settings.
-- For printing without the dialog, start Edge with `--kiosk-printing` (edit `Start_Store.bat`: `msedge --kiosk-printing --app=...`).
-  The receipt then goes straight to the default printer.
+- The receipt page sets its own paper width and zero margins, so no page headers or footers are printed.
+- **A paper bill prints for every sale; this cannot be switched off.** `Start_Store.bat` opens the billing window with
+  `--kiosk-printing`, so each bill goes **straight to the Windows default printer with no print dialog**. Therefore:
+  **Windows Settings → Bluetooth & devices → Printers → the thermal printer → Set as default** (and turn off
+  "Let Windows manage my default printer"). The billing window uses its own Edge profile, so this works even if Edge is open for
+  other things.
+- Cash Closing shows a red warning listing any bill in the shift that was never printed, with a Reprint button for each.
 - If printing fails, the bill is already saved. Reprint it from the "Last bill" box or Sales & Returns; it is marked DUPLICATE.
 - **Not built**: opening the cash drawer through the printer (ESC/POS drawer kick). Most drawers connected to the printer can be
   set in the printer driver to open on every print; check the driver's "cash drawer" option.

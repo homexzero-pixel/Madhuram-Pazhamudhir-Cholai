@@ -8,6 +8,6 @@ if not exist .venv\Scripts\python.exe (
 )
 set MPC_MODE=store
 title Madhuram STORE - keep this window open
-start "" cmd /c "timeout /t 4 >nul & (start msedge --app=http://127.0.0.1:8765/billing/ || start http://127.0.0.1:8765/billing/)"
+start "" /min cmd /c Open_Billing_Window.bat 8765
 .venv\Scripts\python.exe manage.py serve --port 8765 --no-browser
 pause

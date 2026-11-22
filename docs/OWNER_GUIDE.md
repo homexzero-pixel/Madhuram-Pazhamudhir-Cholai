@@ -140,6 +140,7 @@ the discounted price, so offer effects are reversed automatically.
 
 ## WhatsApp bills
 
+**Optional, and always in addition to the paper bill**, which prints for every sale and cannot be switched off.
 **Free, built in.** At payment the cashier types the customer's mobile number; after the bill is saved, it opens in **the shop's own
 WhatsApp** on the counter PC with the number and the full bill filled in, and the cashier presses **Send**. The message has the
 shop name, bill number and date, every item with quantity × rate, discounts, the total, how it was paid and the change, "You saved ₹…

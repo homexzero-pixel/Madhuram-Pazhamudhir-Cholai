@@ -43,7 +43,8 @@ To start automatically at switch-on, put a shortcut to `Start_Store.bat` in the 
 1. **Settings → Store identity & invoices**: legal name, address, phone, GSTIN, FSSAI, invoice prefix. Have the accountant check
    these ([GST_AND_INVOICES.md](GST_AND_INVOICES.md)).
 2. **Settings → Staff**: add each cashier with their own login. Give managers an approval PIN.
-3. **Settings → Scanner, printer and scale**: see [HARDWARE.md](HARDWARE.md).
+3. **Receipt printer**: install its Windows driver and make it the **default printer** (the paper bill prints for every sale,
+   straight to the default printer). **Settings → Scanner, printer and scale**: see [HARDWARE.md](HARDWARE.md).
 4. **Settings → Backups**: both cards (this PC and Google Drive) must be green. If Google Drive is red, run `Setup_Backups.bat`.
 5. **Products**: verify and price the items you actually sell ([OWNER_GUIDE.md](OWNER_GUIDE.md#products)).
 6. **Purchases → Receive goods**: enter opening stock with a clearly marked invoice number such as `OPENING-2026-11`.

@@ -126,8 +126,9 @@ def cash_home(request):
     summary = S.cash_summary(shift) if shift else None
     recent = Shift.objects.select_related("cashier", "closed_by").all()[:15]
     last = Shift.objects.filter(status=Shift.CLOSED).order_by("-closed_at").first()
+    unprinted = shift.sales.filter(print_count=0) if shift else []
     return render(request, "sales/cash_home.html", {
-        "nav": "cash", "shift": shift, "summary": summary, "recent": recent, "last": last,
+        "nav": "cash", "shift": shift, "summary": summary, "recent": recent, "last": last, "unprinted": unprinted,
         "moves": shift.cash_moves.all() if shift else [], "kinds": CashMovement.KINDS,
         "notes": [2000, 500, 200, 100, 50, 20, 10, 5, 2, 1],
     })
@@ -198,7 +199,8 @@ def shift_detail(request, pk):
         raise PermissionDenied
     shift = get_object_or_404(Shift.objects.select_related("cashier", "closed_by"), pk=pk)
     return render(request, "sales/shift_detail.html", {"nav": "cash", "shift": shift, "summary": S.cash_summary(shift),
-                                                       "moves": shift.cash_moves.all(), "sales": shift.sales.all()[:200]})
+                                                       "moves": shift.cash_moves.all(), "sales": shift.sales.all()[:200],
+                                                       "unprinted": shift.sales.filter(print_count=0)})
 
 
 # ------------------------------------------------------------------ settlements

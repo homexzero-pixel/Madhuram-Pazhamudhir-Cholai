@@ -38,6 +38,8 @@
 <table class="table table-sm mt-3"><tbody>{% for m in moves %}<tr><td>{{ m.at|date:"H:i" }}</td><td>{{ m.get_kind_display }}</td><td>{{ m.reason }} {{ m.reference }}</td><td class="r">{{ m.signed|money }}</td></tr>{% empty %}<tr><td class="text-muted">None yet. Cash expenses are recorded under Expenses.</td></tr>{% endfor %}</tbody></table>
 </div></div></div>
 </div>
+{% if unprinted %}<div class="alert alert-danger"><b><i class="bi bi-printer"></i> {{ unprinted|length }} bill{{ unprinted|length|pluralize }} in this shift {{ unprinted|length|pluralize:"was,were" }} never printed.</b> Every customer must get a paper bill. Reprint:
+{% for s in unprinted %}<a class="btn btn-sm btn-light ms-1" href="{% url 'sale_receipt' s.pk %}?print=1" target="_blank">{{ s.bill_no }}</a>{% endfor %}</div>{% endif %}
 <div class="card mt-3"><div class="card-header">Count the drawer and close shift {{ shift.pk }}</div><div class="card-body">
 <form method="post" action="{% url 'shift_close' shift.pk %}" data-confirm="Close the shift with this count?">{% csrf_token %}
 <div class="row g-2">{% for n in notes %}<div class="col-6 col-md-2 col-xl-1"><label class="form-label small" for="n{{ n }}">₹{{ n }} ×</label><input id="n{{ n }}" name="n{{ n }}" class="form-control denom" data-v="{{ n }}" inputmode="numeric"></div>{% endfor %}</div>

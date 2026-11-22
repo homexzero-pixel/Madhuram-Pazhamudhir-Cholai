@@ -35,7 +35,7 @@ SECTIONS = {
     "store": ("Store identity & invoices", ["name", "name_ta", "legal_name", "tagline", "address", "phone", "email", "gstin",
                                             "state_name", "state_code", "fssai", "invoice_prefix", "credit_note_prefix",
                                             "bill_footer", "require_tax_setup"]),
-    "hardware": ("Scanner, printer and scale", ["receipt_width", "auto_print", "scanner_note", "printer_note", "scale_note",
+    "hardware": ("Scanner, printer and scale", ["receipt_width", "scanner_note", "printer_note", "scale_note",
                                                  "scale_enabled", "scale_prefixes", "scale_label_length", "scale_item_start",
                                                  "scale_item_length", "scale_value_start", "scale_value_length",
                                                  "scale_value_type", "scale_value_decimals", "scale_check_digit",

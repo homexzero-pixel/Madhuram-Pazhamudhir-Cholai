@@ -53,3 +53,21 @@ class WhatsAppBillTests(TestCase):
         self.assertEqual(r.status_code, 404)                 # another cashier cannot send this bill
         cfg = StoreSettings.load(); cfg.whatsapp_enabled = False; cfg.save()
         self.assertIn("turned off", self.post(self.cashier, {"phone": "9876543210"})["error"])
+
+
+class PaperBillTests(TestCase):
+    """The paper bill is compulsory: cash closing lists any bill of the shift that was never printed."""
+
+    def test_unprinted_bill_is_flagged_until_printed(self):
+        cashier = T.user("priya", "cashier")
+        rice = T.item("RICE", "Rice 1 kg", 75, barcode="111", stock_qty=10)
+        S.start_shift(cashier, 500)
+        d = S.current_draft(cashier)
+        S.add_item(d, rice, 1)
+        sale, _ = S.checkout(d.uuid, cashier, [{"method": "cash", "tendered": "100"}])
+        c = Client(); c.force_login(cashier)
+        self.assertContains(c.get("/cash/"), "never printed")
+        self.assertContains(c.get("/cash/"), sale.bill_no)
+        c.post(f"/api/sales/{sale.pk}/printed/", json.dumps({}), content_type="application/json")
+        self.assertNotContains(c.get("/cash/"), "never printed")
+        self.assertNotIn("auto_print", c.get("/billing/").content.decode())   # nothing at the counter can switch printing off

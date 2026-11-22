@@ -3,6 +3,8 @@
 {% block content %}
 <div class="page-head"><div><h1>Shift {{ shift.pk }} · {{ shift.cashier.display }}</h1><p>{{ shift.counter }} · business date {{ shift.business_date|date:"d-m-Y" }} · opened {{ shift.opened_at|date:"d-m-Y H:i" }}{% if shift.closed_at %} · closed {{ shift.closed_at|date:"d-m-Y H:i" }} by {{ shift.closed_by.display }}{% endif %}{% if shift.reopen_count %} · <span class="text-danger">reopened {{ shift.reopen_count }}×</span>{% endif %}</p></div>
 <div class="d-flex gap-2"><button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button><a class="btn btn-outline-secondary" href="{% url 'cash_home' %}">Back</a></div></div>
+{% if unprinted %}<div class="alert alert-danger"><b><i class="bi bi-printer"></i> {{ unprinted|length }} bill{{ unprinted|length|pluralize }} never printed:</b>
+{% for s in unprinted %}<a class="btn btn-sm btn-light ms-1" href="{% url 'sale_receipt' s.pk %}?print=1" target="_blank">{{ s.bill_no }}</a>{% endfor %}</div>{% endif %}
 <div class="tiles">
 <div class="tile"><div class="k">Expected cash</div><div class="v">{{ summary.expected|money }}</div></div>
 <div class="tile"><div class="k">Counted</div><div class="v">{{ shift.counted|money }}</div><div class="s">{% for k, v in shift.denominations.items %}₹{{ k }}×{{ v }} {% endfor %}</div></div>

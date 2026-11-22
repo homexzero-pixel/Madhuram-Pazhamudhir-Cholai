@@ -77,9 +77,15 @@ types their user name and PIN. Both are recorded. The price can never be above M
 ![Split payment](img/08-payment-split.jpg)
 ![Sale saved](img/09-sale-saved.jpg)
 
-### WhatsApp bill
+### Paper bill: every customer, every time
 
-If the customer wants the bill on WhatsApp, type their **10-digit mobile number** in **WhatsApp bill to** on the payment screen (a
+The paper bill prints by itself as soon as the sale is saved. **Always hand it to the customer**, even if they also get it on
+WhatsApp. If it did not print (paper out, printer off), fix the printer and press **Reprint** under "Last bill". At closing,
+Cash Closing lists any bill that was never printed.
+
+### WhatsApp bill (optional, extra)
+
+Only if the customer asks. If the customer wants the bill on WhatsApp, type their **10-digit mobile number** in **WhatsApp bill to** on the payment screen (a
 saved customer's number is filled in already), then complete the sale as usual. WhatsApp opens with the bill written out and the
 number filled in: **check it and press Send** in WhatsApp. To send the last bill afterwards, press the green **WhatsApp** button under
 "Last bill". Any older bill: **Sales & Returns → open the bill → Send this bill on WhatsApp**.
