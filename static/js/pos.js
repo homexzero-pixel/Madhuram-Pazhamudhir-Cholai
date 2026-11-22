@@ -69,7 +69,7 @@
     scan.value = ''; qtyBox.value = '';
     const d = await call('/api/pos/scan/', { code, qty: q });
     if (d.ok) { beep(true); sel = S.lines.findIndex(l => l.id === d.added); render(); if (d.note) flash(esc(d.note), 'info', 1500); return; }
-    if (d.unknown) { beep(false); return unknownDialog(d.unknown, d.can_link); }
+    if (d.unknown) { beep(false); return unknownDialog(d.unknown, d.can_link, d.can_add); }
     if (d.needs_qty) return weightDialog(d.item, code);
     if (d.needs_approval) return approve(d.error, a => call('/api/pos/scan/', Object.assign({ code, qty: q }, a)));
     beep(false); flash(esc(d.error), 'danger', 5000);
@@ -78,6 +78,7 @@
   // ---------------- dialogs
   function open(title, body, foot, onShown) {
     $('#dlg-title').innerHTML = title; $('#dlg-body').innerHTML = body; $('#dlg-foot').innerHTML = foot || '';
+    dlgEl.querySelector('.modal-dialog').classList.toggle('modal-xl', !!open.wide); open.wide = false;
     dlgEl.addEventListener('shown.bs.modal', function h() { dlgEl.removeEventListener('shown.bs.modal', h); if (onShown) onShown(); }, { once: true });
     dlg.show();
   }
@@ -101,7 +102,32 @@
     $('#w-ok').onclick = go; w.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
   }
 
-  function unknownDialog(code, canLink) {
+  // New product scanned: add it on the spot (or link the code to a product that already exists).
+  function unknownDialog(code, canLink, canAdd) {
+    open('<span class="text-primary"><i class="bi bi-upc-scan"></i> New barcode – not in the system yet</span>',
+      `<div class="alert alert-warning fs-5 mb-3">Barcode <b class="font-monospace">${esc(code)}</b> is not in the system.<br><b>Nothing was added. The bill is unchanged.</b></div>
+       <div class="d-grid gap-2">
+         <button class="btn btn-primary btn-lg py-3 fs-4" id="u-add"><i class="bi bi-plus-circle"></i> Add as a NEW product and bill it <kbd>Enter</kbd></button>
+         <button class="btn btn-outline-primary btn-lg" id="u-link"><i class="bi bi-link-45deg"></i> It is a product we already sell – link this barcode <kbd>L</kbd></button>
+       </div>${canAdd ? '' : '<p class="small text-muted mt-2 mb-0">Your role needs a manager\'s user name and PIN to add or link products.</p>'}`,
+      `<button class="btn btn-outline-secondary" data-bs-dismiss="modal">Back to bill (Esc)</button>`, () => $('#u-add').focus());
+    $('#u-add').onclick = () => quickAddDialog(code, canAdd);
+    $('#u-link').onclick = () => linkDialog(code, canLink);
+    $('#u-add').addEventListener('keydown', e => { if (e.key.toLowerCase() === 'l') { e.preventDefault(); linkDialog(code, canLink); } });
+  }
+
+  function quickAddDialog(code, canAdd) {
+    open.wide = true;
+    open('<i class="bi bi-plus-circle"></i> New product', QuickAdd.html({ code, lockCode: true, stockRequired: true, needApprover: !canAdd }),
+      `<span class="me-auto small text-muted">Enter = next box · Ctrl+Enter = save</span><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel (Esc)</button><button class="btn btn-primary btn-lg" id="qa-ok">Save and add to bill</button>`);
+    const qa = QuickAdd.bind($('#dlg-body'), { code, stockRequired: true, onSaved: it => {
+      close(); flash(`New product <b>${esc(it.name)}</b> (${esc(it.sku)}) saved at ${inr(it.price)}.`, 'success', 2500);
+      setTimeout(() => doScan(code), 200);
+    } });
+    $('#qa-ok').onclick = () => qa.save();
+  }
+
+  function linkDialog(code, canLink) {
     open('<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> Unknown barcode</span>',
       `<div class="alert alert-danger fs-5 mb-3">Barcode <b class="font-monospace">${esc(code)}</b> is not linked to any product.<br><b>Nothing was added. The bill is unchanged.</b></div>
        <p>Ask a manager or purchaser to link it to the correct product. Do not sell it as a different item.</p>
@@ -229,7 +255,7 @@
     $('#cadd').onclick = async () => { const d = await call('/api/customers/quick-add/', { name: $('#cn').value, phone: $('#cph').value }); if (d.ok) close(); else $('#c-err').textContent = d.error; };
   }
 
-  function payDialog() {
+  function payDialog(mode) {
     if (!S.lines.length) return flash('The bill is empty.', 'warning');
     if (!S.shift) return flash('Open a cashier shift before taking payment.', 'danger', 5000);
     const total = Number(S.total);
@@ -262,6 +288,7 @@
     const go = async (extra) => {
       if (sending) return; sending = true; $('#pay-ok').disabled = true;
       const pays = [];
+      if (!$('#p-cash').value && !val('#p-upi') && !val('#p-card') && !val('#p-credit')) $('#p-cash').value = total.toFixed(2);  // Enter on an empty box = exact cash
       if ($('#p-cash').value) pays.push({ method: 'cash', tendered: $('#p-cash').value });
       if (val('#p-upi')) pays.push({ method: 'upi', amount: $('#p-upi').value, reference: $('#r-upi').value });
       if (val('#p-card')) pays.push({ method: 'card', amount: $('#p-card').value, reference: $('#r-card').value });
@@ -276,6 +303,8 @@
     };
     $('#pay-ok').onclick = () => go();
     $('#pay-box').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });  // dies with the dialog
+    if (mode === 'cash') { $('#p-cash').value = total.toFixed(2); upd(); go(); }                       // F10: exact cash, one key
+    if (mode === 'upi') { $('#p-upi').value = total.toFixed(2); upd(); setTimeout(() => $('#pay-ok').focus(), 60); }  // F3: all UPI, confirm with Enter
   }
 
   function done(d) {
@@ -298,7 +327,7 @@
   // ---------------- keyboard
   const keyMap = {
     F2: searchDialog, F4: () => (sel >= 0 ? lineAction('qty') : qtyBox.focus()), F5: () => lineAction('price'), F6: () => lineAction('discount'),
-    F7: customerDialog, F8: holdDialog, F9: recallDialog, F12: payDialog, Delete: () => lineAction('remove'), cancel: cancelDialog,
+    F7: customerDialog, F8: holdDialog, F9: recallDialog, F12: () => payDialog(), F10: () => payDialog('cash'), F3: () => payDialog('upi'), Delete: () => lineAction('remove'), cancel: cancelDialog,
   };
   document.addEventListener('keydown', e => {
     if (dlgEl.classList.contains('show')) return;

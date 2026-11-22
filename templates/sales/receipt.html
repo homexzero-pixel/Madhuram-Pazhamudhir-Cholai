@@ -1,6 +1,6 @@
 {% load static mpc %}<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>{{ sale.bill_no }}</title>
-<link href="{% static 'css/app.css' %}" rel="stylesheet">
+<link href="{% static 'css/app.css' %}?v={{ asset_v }}" rel="stylesheet">
 <style>body{background:#eee;margin:0}.bar{padding:8px;text-align:center;font:14px system-ui}@media print{.bar{display:none}body{background:#fff}}
 {% if w == "58" %}@page{size:58mm auto;margin:0}{% elif w == "80" %}@page{size:80mm auto;margin:0}{% else %}@page{size:A4;margin:10mm}{% endif %}</style>
 </head><body>

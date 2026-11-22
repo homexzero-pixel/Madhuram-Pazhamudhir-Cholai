@@ -18,6 +18,7 @@ urlpatterns = [
     path("api/pos/customer/", api.pos_customer),
     path("api/pos/checkout/", api.pos_checkout),
     path("api/pos/link-barcode/", api.pos_link_barcode),
+    path("api/products/quick-add/", api.product_quick_add),
     path("api/customers/search/", api.customer_search),
     path("api/customers/quick-add/", api.customer_quick_add),
     path("api/sales/<int:pk>/printed/", api.printed),

@@ -366,3 +366,11 @@ def practice_barcodes(request):
     except (ValueError, IndexError):
         pass
     return render(request, "catalog/practice.html", {"rows": rows})
+
+
+@require("products")
+def quick_add_page(request):
+    """Fast entry: scan → name → price → GST → stock → Enter, then the next product."""
+    cats = [{"id": c.pk, "name": c.name, "dept": c.department.name} for c in Category.objects.select_related("department")]
+    recent = Item.objects.filter(is_active=True).order_by("-updated_at")[:12]
+    return render(request, "catalog/quick_add.html", {"nav": "quick", "categories": cats, "recent": recent})

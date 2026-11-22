@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% load static mpc %}
+{% block title %}Quick add products{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><i class="bi bi-lightning-charge"></i> Quick add products</h1>
+<p>Scan the pack, type the name, MRP, price, GST and stock, then press <kbd>Enter</kbd> on the last box. The form clears for the next product and remembers the category, unit and GST.</p></div>
+<div class="d-flex gap-2"><a class="btn btn-outline-primary" href="{% url 'import_start' %}"><i class="bi bi-upload"></i> Many at once: Excel import</a><a class="btn btn-outline-secondary" href="{% url 'item_add' %}">Full product form</a></div></div>
+<div class="row g-3">
+  <div class="col-xxl-8"><div class="card"><div class="card-body" id="qa-root"></div>
+    <div class="card-footer d-flex align-items-center gap-2"><span class="small text-muted me-auto"><kbd>Enter</kbd> next box · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save · ↓ to choose from the starter list</span>
+    <button class="btn btn-outline-secondary" id="qa-clear">Clear</button><button class="btn btn-primary btn-lg" id="qa-ok"><i class="bi bi-check2-circle"></i> Save product</button></div></div></div>
+  <div class="col-xxl-4"><div class="card"><div class="card-header d-flex justify-content-between"><span>Added now</span><span class="badge text-bg-primary" id="qa-count">0</span></div>
+    <ul class="list-group list-group-flush" id="qa-done"><li class="list-group-item text-muted small" id="qa-none">Products you add appear here, ready to sell.</li></ul></div>
+    <div class="card mt-3"><div class="card-header">Recently changed products</div><ul class="list-group list-group-flush small">
+    {% for it in recent %}<li class="list-group-item d-flex justify-content-between"><a href="{% url 'item_detail' it.pk %}">{{ it.name }}</a><span>{{ it.price|money }}</span></li>{% endfor %}</ul></div></div>
+</div>
+{{ categories|json_script:"qa-cats" }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/quickadd.js' %}?v={{ asset_v }}"></script>
+<script>
+(function () {
+  const root = document.getElementById('qa-root'); let n = 0, qa;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function fresh() {
+    root.innerHTML = QuickAdd.html({});
+    qa = QuickAdd.bind(root, { onSaved: it => {
+      n++; document.getElementById('qa-count').textContent = n; const none = document.getElementById('qa-none'); if (none) none.remove();
+      document.getElementById('qa-done').insertAdjacentHTML('afterbegin', `<li class="list-group-item qa-new"><div class="d-flex justify-content-between"><a href="/products/${it.id}/"><b>${esc(it.name)}</b></a><b>₹${esc(it.price)}</b></div>
+        <div class="small text-muted">${esc(it.sku)} · stock ${esc(it.on_hand)} · GST ${it.gst === '' ? 'not set' : esc(it.gst) + ' %'} · <a href="/products/labels/?ids=${it.id}">label</a></div></li>`);
+      fresh();
+    } });
+  }
+  document.getElementById('qa-ok').onclick = () => qa.save();
+  document.getElementById('qa-clear').onclick = fresh;
+  fresh();
+})();
+</script>{% endblock %}

@@ -27,7 +27,24 @@ the 376 base products have a Tamil name; the rest show "Tamil name needed". **Pr
 
 ![Candidates](img/21-products-candidates.jpg)
 
-To start selling an item:
+### Quick add: the fastest way to put products on sale
+
+**Quick add product** (left menu) is one short form, made for entering a shelf of products in a row:
+
+1. **Scan** the pack's barcode (leave it empty for loose items) and press **Enter**.
+2. Type the **name** as printed. Matching items from the 20,000-item starter list appear; choose one with ↓ and **Enter** to activate
+   it (its category, unit and Tamil name are filled in, and no duplicate is made). Otherwise keep typing for a new product.
+3. **Category**, **Sold by** (piece or kg), **MRP**, **Selling price** (empty = MRP), **GST**, **Opening stock** and **Cost** (optional).
+   The margin and the % below MRP are shown as you type.
+4. **Enter** on the last box saves. The form clears and keeps the category, unit and GST for the next product.
+
+It refuses a price above MRP, a barcode that already belongs to another product, and a name that is already on sale. Each product
+appears under **Added now**, with a link to print its shelf label. The same form opens at the billing counter when a new barcode is
+scanned (see the Cashier SOP). For hundreds of products at once, use the Excel import below.
+
+![Quick add](img/44-quick-add-page.jpg)
+
+To start selling an item with every detail (the full form):
 
 1. Find the candidate (or **New product** for another brand or size). Check the brand, pack size and MRP on the physical pack.
 2. **Edit**: set brand, name, MRP, selling price and cost; the GST treatment and HSN once the accountant confirms them; purchase unit

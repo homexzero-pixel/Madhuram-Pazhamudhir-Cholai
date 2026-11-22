@@ -36,4 +36,4 @@
 {{ chart|json_script:"c14-data" }}
 {% endblock %}
 {% block scripts %}<script src="{% static 'vendor/chartjs/chart.umd.js' %}"></script>
-<script>const d=JSON.parse(document.getElementById('c14-data').textContent);new Chart(document.getElementById('c14'),{type:'bar',data:{labels:d.labels,datasets:[{label:'Net sales ₹',data:d.values,backgroundColor:'#12612a',borderRadius:4}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'₹'+v.toLocaleString('en-IN')}}}}});</script>{% endblock %}
+<script>const d=JSON.parse(document.getElementById('c14-data').textContent);new Chart(document.getElementById('c14'),{type:'bar',data:{labels:d.labels,datasets:[{label:'Net sales ₹',data:d.values,backgroundColor:'#2f6fed',hoverBackgroundColor:'#1f56c8',borderRadius:6}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'₹'+v.toLocaleString('en-IN')}}}}});</script>{% endblock %}

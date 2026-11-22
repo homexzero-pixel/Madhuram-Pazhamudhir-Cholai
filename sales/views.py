@@ -20,7 +20,10 @@ from .models import CashMovement, Payment, ReturnLine, Sale, SaleReturn, Settlem
 
 @require("bill")
 def pos(request):
-    return render(request, "sales/pos.html", {"nav": "billing"})
+    from catalog.models import Category
+
+    cats = [{"id": c.pk, "name": c.name, "dept": c.department.name} for c in Category.objects.select_related("department")]
+    return render(request, "sales/pos.html", {"nav": "billing", "categories": cats})
 
 
 def _visible_sales(user):

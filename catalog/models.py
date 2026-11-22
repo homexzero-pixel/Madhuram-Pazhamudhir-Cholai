@@ -126,6 +126,8 @@ class Item(models.Model):
             "brand": self.brand, "pack": self.pack_size, "unit": self.unit_label, "weighed": self.weighed,
             "price": str(self.price) if self.price is not None else None, "mrp": str(self.mrp) if self.mrp is not None else None,
             "on_hand": str(self.on_hand), "active": self.is_active, "status": self.status,
+            "category": self.category_id, "unit_code": self.sale_unit,
+            "gst": "" if self.tax_class == "unset" or self.gst_rate is None else f"{self.gst_rate:g}",
         }
 
 

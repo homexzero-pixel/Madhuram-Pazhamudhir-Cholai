@@ -30,6 +30,7 @@
       <div id="cust" class="fw-semibold">Walk-in customer</div>
     </div></div>
     <button class="btn btn-success btn-lg py-3 fs-4" id="pay-btn" data-k="F12"><i class="bi bi-cash-coin"></i> Payment <kbd>F12</kbd></button>
+    <div class="d-flex gap-2"><button class="btn btn-outline-primary flex-fill py-2 fw-semibold" data-k="F10"><i class="bi bi-lightning-charge"></i> Exact cash <kbd>F10</kbd></button><button class="btn btn-outline-primary flex-fill py-2 fw-semibold" data-k="F3"><i class="bi bi-phone"></i> All UPI <kbd>F3</kbd></button></div>
     <div class="keys">
       <button class="btn btn-outline-secondary" data-k="F2">Search <kbd>F2</kbd></button>
       <button class="btn btn-outline-secondary" data-k="F4">Qty / weight <kbd>F4</kbd></button>
@@ -58,5 +59,6 @@
     <div class="modal-footer" id="dlg-foot"></div>
   </div></div>
 </div>
+{{ categories|json_script:"qa-cats" }}
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/pos.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/quickadd.js' %}?v={{ asset_v }}"></script><script src="{% static 'js/pos.js' %}?v={{ asset_v }}"></script>{% endblock %}

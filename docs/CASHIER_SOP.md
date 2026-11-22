@@ -31,12 +31,24 @@ Each line shows the offer that applied (e.g. "Pomegranate & papaya 5% off"). The
 
 ![Search in Tamil](img/06-search-tamil.jpg)
 
-### Unknown barcode
+### New product scanned (barcode not in the system)
 
-The screen turns red and says **nothing was added**. The bill is unchanged. **Never sell the pack as a "similar" item.**
-Put the pack aside and call a manager. They can find the right product and link the barcode with their PIN, and it is then added.
+The screen says **"New barcode – not in the system yet"** and **nothing was added**; the bill is unchanged.
+**Never sell the pack as a "similar" item.** Choose:
 
-![Unknown barcode](img/05-unknown-barcode.jpg)
+- **Enter – Add as a NEW product and bill it.** A short form opens with the barcode already filled in. Type the name as printed on the
+  pack, choose the category, then **MRP**, **selling price** (leave it empty to use the MRP), **GST** and **how many are on the shelf
+  now** (count them). Press **Enter** to go to the next box, and **Enter** on the last box to save. The product is created and goes on
+  the bill at once. While you type the name, matching items from the 20,000-item starter list appear; pick one with ↓ and Enter so
+  that no duplicate is made.
+- **L – It is a product we already sell.** Find it and link this barcode (for example a new pack design of the same item).
+
+A cashier needs a **manager's user name and PIN** in the same form. The price can never be above MRP. If the name is already on sale,
+the system asks you to link the barcode instead. Everything is recorded in the audit log.
+
+![New barcode](img/05-unknown-barcode.jpg)
+![Quick add at the counter](img/42-quick-add-at-counter.jpg)
+![New product billed](img/43-new-product-billed.jpg)
 
 ### Not enough stock / expired
 
@@ -52,7 +64,9 @@ types their user name and PIN. Both are recorded. The price can never be above M
 
 ## Payment
 
-1. Press **F12**.
+**Fastest:** **F10** = paid in exact cash, the bill is saved at once. **F3** = all UPI (check the phone, then Enter).
+
+1. Press **F12**. (Pressing **Enter** with all boxes empty means exact cash.)
 2. Cash: type the cash received, or use the **Exact / ₹100 / ₹200 / ₹500 / ₹2000** buttons. The change is shown in green; if money
    is still due it says **Still to pay** in red.
 3. UPI or card: **check the phone or card machine shows *successful*** before you complete. Type the amount (or press
@@ -112,6 +126,7 @@ UPI, card and credit never change the drawer.
 | F2 | Search | F8 | Hold |
 | F4 | Quantity / weight | F9 | Recall |
 | F5 | Change price | F12 | Payment |
+| F10 | Exact cash – complete at once | F3 | All UPI |
 | F6 | Discount | Del | Remove line |
 | ↑ ↓ | Choose line | + − | One more / less |
 | Esc | Close dialog, back to scanner | Ctrl+Backspace | Cancel bill |

@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("", views.item_list, name="item_list"),
     path("new/", views.item_edit, name="item_add"),
+    path("quick/", views.quick_add_page, name="quick_add"),
     path("<int:pk>/", views.item_detail, name="item_detail"),
     path("<int:pk>/edit/", views.item_edit, name="item_edit"),
     path("<int:pk>/verify/", views.item_verify, name="item_verify"),

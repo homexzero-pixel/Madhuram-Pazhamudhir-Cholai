@@ -85,7 +85,8 @@ def pos_scan(request, body):
         # Bill untouched. The screen offers 'link this barcode' to authorised staff.
         audit("unknown_barcode", f"Unknown code scanned: {code}", user=request.user)
         return JsonResponse({"ok": False, "unknown": code, "error": f"Unknown barcode {code}. Nothing was added to the bill.",
-                             "can_link": request.user.can("link_barcode"), **state(request.user)})
+                             "can_link": request.user.can("link_barcode"), "can_add": request.user.can("products"),
+                             **state(request.user)})
     item = resolved.item
     entered = body.get("qty")
     quantity = resolved.qty
@@ -245,6 +246,20 @@ def pos_link_barcode(request, body):
         Barcode.objects.create(code=code, item=item, qty_per_scan=per, note=f"Linked at counter by {who.username}")
         audit("barcode_link", f"Barcode {code} linked to {item.sku} {item.name}", user=request.user, approved_by=who, obj=item)
     return JsonResponse({"ok": True, "linked": code, **state(request.user)})
+
+
+@require_POST
+@api
+def product_quick_add(request, body):
+    """Create a sellable product in one step (new barcode at the counter, or Products → Quick add)."""
+    from catalog.quick import QuickAddError, quick_add
+
+    who = authorise(request.user, "products", body.get("approver", ""), body.get("pin", ""))
+    try:
+        item = quick_add(body, request.user, approved_by=who)
+    except QuickAddError as exc:
+        raise S.BillingError(str(exc)) from None
+    return JsonResponse({"ok": True, "item": item.as_dict(), **state(request.user)})
 
 
 @require_POST
