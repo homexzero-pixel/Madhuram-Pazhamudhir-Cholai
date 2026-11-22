@@ -1,0 +1,41 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Today's prices{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><i class="bi bi-tags"></i> Today's prices</h1>
+<p>Type the new selling price (and today's buying rate, if you like). <kbd>Enter</kbd> moves down. Nothing changes until you press <b>Save all</b>; then every change is recorded with your name.</p></div>
+<div class="d-flex gap-2"><a class="btn btn-outline-primary" href="{% url 'price_board' %}?f={{ f }}&q={{ q|urlencode }}" target="_blank"><i class="bi bi-easel"></i> Print price board</a></div></div>
+<form class="d-flex gap-2 flex-wrap mb-3" method="get">{% for k, l in filters %}<button class="btn {% if f == k %}btn-primary{% else %}btn-outline-secondary{% endif %}" name="f" value="{{ k }}">{{ l }}</button>{% endfor %}
+<input class="form-control" style="max-width:260px" name="q" value="{{ q }}" placeholder="Search name / Tamil / PLU"><input type="hidden" name="f" value="{{ f }}"></form>
+<form method="post" id="pf">{% csrf_token %}
+<div class="card"><div class="table-responsive"><table class="table align-middle price-grid"><thead><tr><th>Product</th><th>PLU</th><th class="r">Stock</th><th class="r">MRP</th><th class="r">Buying rate ₹</th><th class="r">Selling price ₹</th><th class="r">Margin</th></tr></thead><tbody>
+{% for it in items %}<tr data-mrp="{{ it.mrp|default:'' }}">
+<td><b>{{ it.name }}</b>{% if it.name_ta %}<div class="ta small text-muted">{{ it.name_ta }}</div>{% endif %}</td><td>{{ it.plu }}</td>
+<td class="r">{{ it.on_hand|q }} {{ it.unit_label }}</td><td class="r">{{ it.mrp|default_if_none:"—" }}</td>
+<td class="r"><input type="hidden" name="oc_{{ it.pk }}" value="{{ it.cost|default_if_none:'' }}"><input class="form-control num r pc" name="c_{{ it.pk }}" value="{{ it.cost|default_if_none:'' }}" inputmode="decimal" autocomplete="off"></td>
+<td class="r"><input type="hidden" name="op_{{ it.pk }}" value="{{ it.price|default_if_none:'' }}"><input class="form-control form-control-lg num r fw-bold pp" name="p_{{ it.pk }}" value="{{ it.price|default_if_none:'' }}" inputmode="decimal" autocomplete="off"></td>
+<td class="r mg small"></td></tr>
+{% empty %}<tr><td colspan="7" class="text-muted">No products here. Choose another filter, or activate products first.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="card-footer d-flex align-items-center gap-2"><span class="me-auto small text-muted" id="chg">No changes yet.</span><button class="btn btn-primary btn-lg"><i class="bi bi-check2-circle"></i> Save all</button></div></div></form>
+{% endblock %}
+{% block scripts %}<script>
+(function () {
+  const rows = [...document.querySelectorAll('.price-grid tbody tr[data-mrp]')], ins = [...document.querySelectorAll('.pp')];
+  const upd = tr => {
+    const p = parseFloat(tr.querySelector('.pp').value), c = parseFloat(tr.querySelector('.pc').value), mrp = parseFloat(tr.dataset.mrp), mg = tr.querySelector('.mg');
+    let t = ''; if (p > 0 && c > 0) t = `₹${(p - c).toFixed(2)} · ${(100 * (p - c) / p).toFixed(0)} %`; if (mrp && p > mrp) t = '<span class="text-danger fw-bold">above MRP</span>';
+    if (p > 0 && c > 0 && p < c) t = '<span class="text-danger fw-bold">below cost</span>'; mg.innerHTML = t;
+    const changed = [...tr.querySelectorAll('input.form-control')].some(i => i.value !== i.previousElementSibling.value); tr.classList.toggle('changed', changed);
+    const n = document.querySelectorAll('tr.changed').length; document.getElementById('chg').textContent = n ? `${n} product${n > 1 ? 's' : ''} changed – press Save all.` : 'No changes yet.';
+  };
+  rows.forEach(tr => { upd(tr); tr.querySelectorAll('input.form-control').forEach(i => i.addEventListener('input', () => upd(tr))); });
+  document.getElementById('pf').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || !e.target.classList.contains('form-control')) return;
+    e.preventDefault(); const list = e.target.classList.contains('pp') ? ins : [...document.querySelectorAll('.pc')], i = list.indexOf(e.target);
+    if (list[i + 1]) { list[i + 1].focus(); list[i + 1].select(); }
+  });
+  window.addEventListener('beforeunload', e => { if (document.querySelector('tr.changed') && !document.getElementById('pf').dataset.sending) { e.preventDefault(); e.returnValue = ''; } });
+  document.getElementById('pf').addEventListener('submit', e => e.target.dataset.sending = '1');
+  if (ins[0]) { ins[0].focus(); ins[0].select(); }
+})();
+</script>{% endblock %}

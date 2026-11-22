@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Owner tools{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><i class="bi bi-stars"></i> Owner tools</h1><p>The jobs an owner does every day, each on one screen.</p></div></div>
+<div class="owner-grid">
+{% if "products" in can %}<a class="owner-card" href="{% url 'todays_prices' %}"><i class="bi bi-tags"></i><h2>Today's prices</h2><p>Change the fruit and vegetable rates every morning in one screen, then print the price board for the shop.</p></a>{% endif %}
+{% if "purchase" in can %}<a class="owner-card" href="{% url 'buy_list' %}"><i class="bi bi-cart-check"></i><h2>Buy list</h2><p>What to buy tomorrow, worked out from what actually sold. Grouped by supplier; send the order on WhatsApp.</p></a>{% endif %}
+{% if "reports" in can %}<a class="owner-card" href="{% url 'loss_watch' %}"><i class="bi bi-shield-exclamation"></i><h2>Loss watch</h2><p>Cancelled bills, removed items, price changes, discounts, refunds, cash shortages and unprinted bills, per cashier.</p></a>
+<a class="owner-card" href="{% url 'day_summary' %}"><i class="bi bi-whatsapp"></i><h2>Today's summary on WhatsApp</h2><p>Sales, payments, margin, wastage, cash closing and anything unusual – on the owner's phone in one message.</p></a>{% endif %}
+{% if "reports" in can %}<a class="owner-card" href="{% url 'credit_reminders' %}"><i class="bi bi-journal-text"></i><h2>Credit (udhaar) reminders</h2><p>Who owes how much, with a polite WhatsApp reminder in English and Tamil.</p></a>{% endif %}
+</div>
+{% endblock %}

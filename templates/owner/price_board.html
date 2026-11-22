@@ -1,0 +1,17 @@
+{% load static mpc %}<!doctype html><html lang="ta"><head><meta charset="utf-8"><title>Price board {{ today|date:"d-m-Y" }}</title>
+<style>
+@page { size: A4; margin: 10mm; }
+body { font-family: "Nirmala UI", "Noto Sans Tamil", "Latha", "Segoe UI", sans-serif; margin: 0; color: #111; }
+.bar { padding: 8px; text-align: center; font: 14px system-ui; background: #eef2f8; } @media print { .bar { display: none; } }
+h1 { text-align: center; margin: 6px 0 2px; font-size: 26px; } .sub { text-align: center; color: #444; margin-bottom: 10px; }
+.grid { display: grid; grid-template-columns: repeat({% if big %}3{% else %}4{% endif %}, 1fr); gap: 6px; }
+.t { border: 2px solid #1f56c8; border-radius: 10px; padding: 8px 10px; break-inside: avoid; text-align: center; }
+.ta { font-size: {% if big %}22px{% else %}16px{% endif %}; font-weight: 700; line-height: 1.2; }
+.en { font-size: {% if big %}13px{% else %}11px{% endif %}; color: #333; }
+.p { font-size: {% if big %}34px{% else %}24px{% endif %}; font-weight: 800; color: #1f56c8; margin-top: 2px; } .u { font-size: 14px; color: #333; }
+</style></head><body>
+<div class="bar"><button onclick="window.print()">Print</button> · <a href="?size={% if big %}small{% else %}big{% endif %}">{% if big %}Smaller (more per page){% else %}Bigger{% endif %}</a> · {{ items|length }} items · print on A4 and stick near the produce</div>
+<h1>{{ cfg.name_ta|default:cfg.name }} – இன்றைய விலை</h1><div class="sub">{{ cfg.name }} · Today's prices · {{ today|date:"d-m-Y" }}</div>
+<div class="grid">{% for it in items %}<div class="t"><div class="ta">{{ it.name_ta|default:it.name|short }}</div>{% if it.name_ta %}<div class="en">{{ it.name|short }}</div>{% endif %}
+<div class="p">₹{{ it.price|rupees }}<span class="u"> / {% if it.weighed %}கிலோ kg{% else %}pc{% endif %}</span></div></div>{% endfor %}</div>
+</body></html>

@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Loss watch{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><i class="bi bi-shield-exclamation"></i> Loss watch</h1>
+<p>{{ start|date:"d-m-Y" }}{% if end != start %} to {{ end|date:"d-m-Y" }}{% endif %} · every action that can hide a loss, per cashier. A flag is a reason to look (reason, CCTV time, the bill), not proof of wrongdoing.</p></div>
+<div class="d-flex gap-2 flex-wrap">{% for l, a, b in ranges %}<a class="btn btn-outline-secondary btn-sm" href="?start={{ a|date:'Y-m-d' }}&end={{ b|date:'Y-m-d' }}">{{ l }}</a>{% endfor %}<a class="btn btn-outline-primary btn-sm" href="{% url 'audit_log' %}">Audit log</a></div></div>
+{% for row in rows %}<div class="card mb-3 {% if row.flags %}border-danger{% endif %}"><div class="card-header d-flex justify-content-between"><span><i class="bi bi-person"></i> {{ row.name }}</span>
+<span>{% if row.flags %}<span class="badge text-bg-danger">{{ row.flags|length }} to check</span>{% else %}<span class="badge text-bg-success">nothing unusual</span>{% endif %}</span></div>
+<div class="card-body">
+{% if row.flags %}<ul class="text-danger fw-semibold mb-3">{% for f in row.flags %}<li>{{ f }}</li>{% endfor %}</ul>{% endif %}
+<div class="lw-grid">
+<div><span>Bills</span><b>{{ row.r.bills|default:0|q }}</b><small>{{ row.r.sales|default:0|money }}</small></div>
+<div><span>Bills cancelled</span><b>{{ row.r.bill_cancel|default:0|q }}</b><small>{{ row.r.bill_cancel_value|default:0|money }}</small></div>
+<div><span>Items removed</span><b>{{ row.r.line_remove|default:0|q }}</b><small>{{ row.r.line_remove_value|default:0|money }}</small></div>
+<div><span>Price changes</span><b>{{ row.r.overrides|default:0|q }}</b><small>{{ row.r.overrides_value|default:0|money }} below list</small></div>
+<div><span>Manual discounts</span><b>{{ row.r.discounts|default:0|q }}</b><small>{{ row.r.discounts_value|default:0|money }}</small></div>
+<div><span>Refunds</span><b>{{ row.r.refunds|default:0|q }}</b><small>{{ row.r.refunds_value|default:0|money }} · cash {{ row.r.cash_refunds_value|default:0|money }}</small></div>
+<div><span>Cash difference</span><b class="{% if row.r.variance < 0 %}text-danger{% endif %}">{{ row.r.variance|default:0|money }}</b><small>{{ row.r.shifts|default:0|q }} shift(s) closed</small></div>
+<div><span>Reprints · unprinted</span><b>{{ row.r.reprint|default:0|q }} · {{ row.r.unprinted|default:0|q }}</b><small>unknown barcodes {{ row.r.unknown_barcode|default:0|q }}</small></div>
+</div></div></div>
+{% empty %}<div class="alert alert-info">No billing activity in this period.</div>{% endfor %}
+<p class="small text-muted">Flags: cancelled bills ≥ 2 a day or ≥ ₹1,000 a day · items removed on more than 15 % of bills · ≥ 3 price changes a day · manual discounts above ₹200 a day or 2 % of sales · cash refunds ≥ ₹500 a day or ≥ 3 refunds a day · any cash shortage · any bill not printed · ≥ 5 reprints a day.</p>
+{% endblock %}

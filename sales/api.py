@@ -1,5 +1,6 @@
 """JSON endpoints used by the billing screen. Every change is saved on the server at once,
 so a browser refresh or a power cut never loses the bill on the counter."""
+from decimal import Decimal
 import json
 from functools import wraps
 
@@ -136,7 +137,8 @@ def pos_line_qty(request, body, pk):
 @api
 def pos_line_remove(request, body, pk):
     line = _my_line(request, pk)
-    audit("line_remove", f"Removed {line.item.name} × {line.qty:f} before payment", user=request.user, obj=line.item)
+    value = (line.qty * (line.price_override if line.price_override is not None else (line.item.price or 0))).quantize(Decimal("0.01"))
+    audit("line_remove", f"Removed {line.item.name} × {line.qty:f} (₹{value}) before payment", user=request.user, obj=line.item, value=value)
     line.delete()
     return JsonResponse({"ok": True, **state(request.user)})
 

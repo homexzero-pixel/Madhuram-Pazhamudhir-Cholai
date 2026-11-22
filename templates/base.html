@@ -18,6 +18,7 @@
     {% if mode == "demo" %}<div class="demo-flag">PRACTICE DATA · பயிற்சி</div>{% endif %}
     <nav class="nav-main">
       {% if "bill" in can %}<a href="{% url 'pos' %}" class="{% if nav == 'billing' %}active{% endif %}"><i class="bi bi-upc-scan"></i> Billing <kbd>F1</kbd></a>{% endif %}
+      {% if "reports" in can or "purchase" in can %}<a href="{% url 'owner_home' %}" class="{% if nav == 'owner' %}active{% endif %}"><i class="bi bi-stars"></i> Owner tools</a>{% endif %}
       {% if "reports" in can %}<a href="{% url 'dashboard' %}" class="{% if nav == 'dashboard' %}active{% endif %}"><i class="bi bi-speedometer2"></i> Owner dashboard</a>{% endif %}
       <a href="{% url 'item_list' %}" class="{% if nav == 'products' %}active{% endif %}"><i class="bi bi-box-seam"></i> Products</a>
       {% if "products" in can %}<a href="{% url 'quick_add' %}" class="{% if nav == 'quick' %}active{% endif %}"><i class="bi bi-lightning-charge"></i> Quick add product</a>{% endif %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Credit reminders{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><i class="bi bi-journal-text"></i> Credit (udhaar) reminders</h1>
+<p>Customers who owe the shop, largest first. The reminder is polite, in English and Tamil, and opens in the shop's WhatsApp – press Send there. Collect payments in Customers.</p></div>
+<div class="text-end"><div class="text-muted small">Total to collect</div><div class="fs-3 fw-bold">{{ total|money }}</div></div></div>
+<div class="card"><table class="table align-middle"><thead><tr><th>Customer</th><th>Phone</th><th class="r">Owes</th><th class="r">Limit</th><th></th></tr></thead><tbody>
+{% for r in rows %}<tr><td><a href="{% url 'customer_detail' r.c.pk %}"><b>{{ r.c.name }}</b></a></td><td>{{ r.c.phone|default:"—" }}</td>
+<td class="r fw-bold {% if r.bal > r.c.credit_limit %}text-danger{% endif %}">{{ r.bal|money }}</td><td class="r">{{ r.c.credit_limit|money }}</td>
+<td class="text-end">{% if r.wa %}<a class="btn btn-sm btn-wa" href="{{ r.wa }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> Send reminder</a>{% else %}<span class="small text-muted">no valid mobile number</span>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="5" class="text-muted">Nobody owes the shop anything.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

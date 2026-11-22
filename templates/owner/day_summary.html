@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Today's summary{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><i class="bi bi-whatsapp text-success"></i> Day summary for the owner</h1>
+<p>One message with the day's numbers and anything unusual. Opens in the shop's WhatsApp, addressed to the owner – press Send there.</p></div>
+<form class="d-flex gap-2" method="get"><input class="form-control" type="date" name="day" value="{{ day|date:'Y-m-d' }}"><button class="btn btn-outline-secondary">Show</button></form></div>
+<div class="row g-3"><div class="col-lg-7"><div class="card"><div class="card-body"><pre class="wa-preview">{{ text }}</pre></div></div></div>
+<div class="col-lg-5"><div class="card"><div class="card-body">
+{% if wa %}<a class="btn btn-wa btn-lg w-100 py-3" href="{{ wa }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> Send to the owner on WhatsApp</a>
+<p class="small text-muted mt-2 mb-0">To {{ cfg.owner_whatsapp }}. Best after the last shift is closed.</p>
+{% else %}<div class="alert alert-warning mb-0">Add the owner's WhatsApp number in <a href="{% url 'settings_edit' 'whatsapp' %}">Settings → WhatsApp bills &amp; owner summary</a>.</div>{% endif %}
+<hr><button class="btn btn-outline-secondary w-100" onclick="navigator.clipboard.writeText(document.querySelector('.wa-preview').textContent).then(()=>this.textContent='Copied ✓')"><i class="bi bi-clipboard"></i> Copy the text</button>
+</div></div></div></div>
+{% endblock %}

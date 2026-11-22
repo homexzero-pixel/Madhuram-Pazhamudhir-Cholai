@@ -57,3 +57,9 @@ def cell(value):
             return fmt_qty(value)
         return inr(value)
     return value
+
+
+@register.filter
+def short(name):
+    """'Banganapalli mango · Conventional · Loose kg' → 'Banganapalli mango' (for price boards)."""
+    return str(name or "").split(" · ")[0]

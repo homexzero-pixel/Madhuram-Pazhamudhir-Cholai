@@ -2,6 +2,60 @@
 
 For the owner and managers. Screenshots are from the practice database.
 
+## Owner tools (left menu)
+
+Built from an owner's day: morning rates, what to buy, where money can leak, and the day on your phone.
+
+![Owner tools](img/47-owner-tools.jpg)
+
+### Today's prices – every morning after the mandi
+
+**Owner tools → Today's prices.** All loose (by kg) items in one list, with stock, today's **buying rate** and **selling
+price**. Type the new prices; **Enter** moves to the next row. The margin and % appear as you type, in red if the price is below cost
+or above MRP. Changed rows turn yellow. Nothing is saved until **Save all**; then every change is in the audit log with your name.
+If one price is wrong (for example above MRP), nothing is saved and the message says which one. Use the buttons for *Fresh produce* or
+*Everything on sale*, or search.
+
+**Print price board** prints today's rates on A4 in big Tamil and English letters (3 or 4 per row) to stick near the produce.
+
+![Today's prices](img/48-todays-prices.jpg)
+![Price board](img/49-price-board.jpg)
+
+### Buy list – what to buy tomorrow
+
+**Owner tools → Buy list** works out quantities from what actually sold: average daily sales over the last 7 days (you can change
+this), stock now and anything already ordered but not received. Fresh produce, dairy and bakery are bought for **1 day**, other goods
+for **7 days**, and never below the reorder level. Quantities are rounded to whole pieces, 0.5 kg or whole cartons. It is grouped by
+the product's **preferred supplier**, with the approximate value; **Send order on WhatsApp** opens the order addressed to that
+supplier. "Lasts" shows how many days the stock will last; *today* means it is already out. It is a suggestion: check the shelf,
+weather, festivals and mandi rates.
+
+![Buy list](img/50-buy-list.jpg)
+
+### Loss watch – where money can leak
+
+**Owner tools → Loss watch** shows, per cashier: bills, **cancelled bills** and **items removed before payment** (with ₹ value),
+**price changes** at the counter, **manual discounts**, **refunds** (cash refunds separately), **cash difference** at closing,
+**reprints**, **bills never printed** and unknown barcodes. A red **"to check"** list explains what stands out, e.g. "3 bills
+cancelled (₹1,240) – check the reasons and the CCTV time". A flag is a reason to look, not proof. Today / Yesterday / Last 7 days /
+This month. The dashboard shows today's count under *Needs attention*.
+
+![Loss watch](img/51-loss-watch.jpg)
+
+### Today's summary on WhatsApp
+
+Set **the owner's WhatsApp number** in Settings → WhatsApp bills & owner summary. **Owner tools → Today's summary** prepares one
+message: net sales, bills and average bill, cash / UPI / card / credit, returns, gross margin, expenses, wastage, cash-closing
+difference, top 5 sellers, month to date, and *Needs a look* (low stock, expiring lots, loss-watch flags, backups). **Send to the
+owner on WhatsApp** opens it addressed to you. Best after the last shift is closed. Any past day can be chosen.
+
+![Day summary](img/52-day-summary.jpg)
+
+### Credit (udhaar) reminders
+
+**Owner tools → Credit reminders** lists customers who owe the shop, largest first, red if above their limit. **Send reminder**
+opens a polite message (English and Tamil) with the amount, addressed to the customer. Record payments in Customers as usual.
+
 ## Dashboard
 
 **Owner dashboard** shows today and this month: net sales, returns, gross margin, expenses, tenders and the expected cash in the

@@ -14,6 +14,7 @@ urlpatterns = [
     path("", include("sales.urls")),
     path("expenses/", include("expenses.urls")),
     path("reports/", include("reports.urls")),
+    path("owner/", include("owner.urls")),
     # Static files are served by the app itself: it runs on one shop PC without a separate web server.
     re_path(r"^static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
 ]

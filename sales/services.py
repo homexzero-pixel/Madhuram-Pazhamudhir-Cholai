@@ -334,11 +334,12 @@ def cancel(draft, user, reason, approver="", pin=""):
         raise BillingError("Enter why the bill is cancelled.")
     who = authorise(user, "cancel_bill", approver, pin)
     lines = [f"{l.item.sku}×{l.qty:f}" for l in draft.lines.all()]
+    value = quote(draft).total if lines else 0
     draft.status, draft.cancel_reason, draft.cancelled_by = DraftBill.CANCELLED, reason[:200], who
     draft.save()
     if lines:
         audit("bill_cancel", f"Bill cancelled before payment ({len(lines)} lines): {reason}", user=user, approved_by=who,
-              obj=draft, lines=", ".join(lines))
+              obj=draft, lines=", ".join(lines), value=value)
 
 
 # --------------------------------------------------------------------------- pricing

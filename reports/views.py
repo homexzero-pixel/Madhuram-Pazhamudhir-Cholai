@@ -27,6 +27,7 @@ def dashboard(request):
     from django.conf import settings
 
     from core.backup import health as backup_health
+    from owner import losswatch
     from catalog.models import Item
     from inventory.models import StockLot
     from sales.models import Payment, Sale
@@ -46,6 +47,7 @@ def dashboard(request):
         "expired": StockLot.objects.filter(qty__gt=0, status="sellable", expiry__lt=today).count(),
         "unsettled": Payment.objects.filter(method__in=["upi", "card"], settlement__isnull=True).aggregate(s=Sum("amount"))["s"] or ZERO,
         "recent": Sale.objects.select_related("cashier")[:8], "today": today,
+        "loss_flags": sum(len(r["flags"]) for r in losswatch.build(today, today)),
         "backup_problems": [h for h in backup_health() if not h["ok"]] if settings.MODE != "test" else [],
     })
 

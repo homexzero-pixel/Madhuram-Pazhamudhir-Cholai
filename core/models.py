@@ -59,6 +59,8 @@ class StoreSettings(models.Model):
     whatsapp_open = models.CharField("Open bills in", max_length=3, choices=WHATSAPP_OPEN, default="app")
     whatsapp_message = models.CharField("Last line of the WhatsApp bill", max_length=200, blank=True,
                                         default="Thank you for shopping with us! நன்றி, மீண்டும் வருக! 🙏")
+    owner_whatsapp = models.CharField("Owner's WhatsApp number", max_length=15, blank=True,
+                                      help_text="The day's summary is sent here from Owner tools (10-digit mobile).")
     whatsapp_tamil = models.BooleanField("Show Tamil item names on WhatsApp bills", default=False)
 
     backup_keep = models.PositiveSmallIntegerField(default=30, help_text="Not used any more: backups are kept automatically (all from 2 days, daily for 60 days, monthly for 2 years).")

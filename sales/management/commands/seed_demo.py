@@ -89,6 +89,8 @@ class Command(BaseCommand):
             it = T.item(sku, name, price, unit=unit, barcode=bc, cost=cost, dept=dept, cat=cat, plu=plu, mrp=mrp, name_ta=ta,
                         tax_class=TaxClass.TAXABLE if gst else TaxClass.EXEMPT, gst=gst)
             it.reorder_level = D(5)
+            if unit == "kg":
+                it.mrp = None   # loose produce carries no MRP
             if sku == "TRYJUICE":
                 it.purchase_unit, it.units_per_purchase = "carton", D(24)
                 Barcode.objects.create(code="18901000000030", item=it, qty_per_scan=24, note="Carton of 24")
@@ -101,7 +103,7 @@ class Command(BaseCommand):
         for base, price, cost, plu in PRODUCE:
             it = Item.objects.filter(base__name=base, sale_unit=Item.KG).order_by("sku").first()
             if it and not it.is_active:
-                it.price = it.mrp = D(price)
+                it.price, it.mrp = D(price), None   # loose produce carries no MRP
                 it.cost, it.plu, it.is_active, it.status = D(cost), plu, True, Item.VERIFIED
                 it.tax_class, it.reorder_level, it.track_expiry = TaxClass.EXEMPT, D(10), False
                 it.save()
@@ -176,7 +178,7 @@ class Command(BaseCommand):
                 when = stamp + timedelta(minutes=random.randint(30, 12 * 60))
                 if back == 0 and when > timezone.now():
                     when = timezone.now() - timedelta(minutes=random.randint(1, 60))
-                Sale.objects.filter(pk=sale.pk).update(business_date=day, created_at=when)
+                Sale.objects.filter(pk=sale.pk).update(business_date=day, created_at=when, print_count=1)  # the practice bills were "printed"
             Expense.objects.create(spent_on=day, category=cats["Tea & staff welfare"], description="Tea for staff", amount=D(60), method="cash",
                                    shift=shift, created_by=self.manager)
             if back == days:

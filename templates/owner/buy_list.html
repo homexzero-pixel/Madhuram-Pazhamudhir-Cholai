@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Buy list{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><i class="bi bi-cart-check"></i> Buy list</h1>
+<p>From what actually sold in the last <b>{{ days }} days</b>: enough fresh produce, dairy and bakery for <b>{{ fresh }} day{{ fresh|pluralize }}</b>, and other goods for <b>{{ other }} days</b>, never below the reorder level. Stock already ordered and not yet received is counted.</p></div>
+<div class="d-flex gap-2 d-print-none"><button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Print</button><a class="btn btn-outline-primary" href="{% url 'purchase_home' %}">Purchases</a></div></div>
+<form class="row g-2 align-items-end mb-3 d-print-none" method="get">
+<div class="col-auto"><label class="form-label small">Sales of the last … days</label><input class="form-control" name="days" type="number" min="1" max="60" value="{{ days }}"></div>
+<div class="col-auto"><label class="form-label small">Fresh: buy for … days</label><input class="form-control" name="fresh" type="number" min="1" max="14" value="{{ fresh }}"></div>
+<div class="col-auto"><label class="form-label small">Other goods: buy for … days</label><input class="form-control" name="other" type="number" min="1" max="60" value="{{ other }}"></div>
+<div class="col-auto"><button class="btn btn-primary">Work it out</button></div>
+<div class="col text-end"><span class="text-muted">Approx. total</span> <b class="fs-4">{{ total|money }}</b></div></form>
+{% for g in groups %}<div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+<span><i class="bi bi-building"></i> {% if g.supplier %}{{ g.supplier.name }}{% if g.supplier.phone %} · {{ g.supplier.phone }}{% endif %}{% else %}<span class="text-danger">No supplier set</span> <span class="small text-muted">(set "Preferred supplier" on the product)</span>{% endif %}</span>
+<span class="d-flex gap-2 align-items-center"><span class="text-muted small">{{ g.rows|length }} items · approx. {{ g.value|money }}</span>
+{% if g.wa %}<a class="btn btn-sm btn-wa d-print-none" href="{{ g.wa }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> Send order on WhatsApp</a>{% elif g.supplier %}<span class="small text-muted d-print-none">add a mobile number to send on WhatsApp</span>{% endif %}</span></div>
+<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Product</th><th class="r">Sold per day</th><th class="r">Stock</th><th class="r">On order</th><th class="r">Lasts</th><th class="r">Buy</th><th class="r">Approx. ₹</th></tr></thead><tbody>
+{% for r in g.rows %}<tr><td><b>{{ r.item.name }}</b>{% if r.item.name_ta %} <span class="ta small text-muted">{{ r.item.name_ta }}</span>{% endif %}{% if r.fresh %} <span class="badge text-bg-success">fresh</span>{% endif %}</td>
+<td class="r">{{ r.avg|q }}</td><td class="r">{{ r.stock|q }}</td><td class="r">{% if r.on_order %}{{ r.on_order|q }}{% endif %}</td>
+<td class="r">{% if r.days_left is None %}<span class="text-muted">no sales</span>{% elif r.days_left < 1 %}<b class="text-danger">today</b>{% else %}{{ r.days_left }} days{% endif %}</td>
+<td class="r fw-bold fs-6">{% if r.packs %}{{ r.packs }} {{ r.pack_unit }} <span class="small text-muted">({{ r.qty|q }} {{ r.item.unit_label }})</span>{% else %}{{ r.qty|q }} {{ r.item.unit_label }}{% endif %}</td>
+<td class="r">{{ r.value|money }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% empty %}<div class="alert alert-success">Nothing to buy: stock covers the expected sales.</div>{% endfor %}
+<p class="small text-muted">A suggestion, not an order: check the shelf, the weather, festivals and the mandi rate before buying.</p>
+{% endblock %}
