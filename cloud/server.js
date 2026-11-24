@@ -88,19 +88,57 @@ function createApp() {
   return app;
 }
 
+// Explains a database problem in plain words (no password is ever shown).
+function dbHelp(err) {
+  const c = config.db;
+  const seen = `DB_HOST=${c.host || '(empty)'} · DB_PORT=${c.port} · DB_NAME=${c.database || '(empty)'} · DB_USER=${c.user || '(empty)'} · ` +
+    `DB_PASSWORD=${c.password ? '(set)' : '(NOT set)'}`;
+  let what;
+  if (!c.database || !c.user) what = 'The database settings are missing. Add the environment variables DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD in hPanel, then Redeploy.';
+  else if (err.code === 'ER_ACCESS_DENIED_ERROR') what = 'The database user name or password is wrong. Copy them again from hPanel → Databases (the names start with u…_), then Redeploy.';
+  else if (err.code === 'ER_BAD_DB_ERROR') what = 'There is no database with that name. Copy the exact database name from hPanel → Databases (it starts with u…_), then Redeploy.';
+  else if (['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EHOSTUNREACH'].includes(err.code)) {
+    what = 'The database server cannot be reached. In hPanel → Databases, look for "MySQL host" and put that in DB_HOST (try 127.0.0.1 if it says localhost), then Redeploy.';
+  } else what = 'The database could not be prepared.';
+  return { what, seen, code: err.code || '', detail: String(err.message || '').replace(c.password || '\u0000', '***').slice(0, 300) };
+}
+
 async function main() {
-  await db.migrate();
-  const app = createApp();
-  require('./src/backups').schedule();
-  app.listen(config.port, () => console.log(`Madhuram cloud running on port ${config.port}`));
-}
-
-if (require.main === module) {
-  main().catch((err) => {
-    console.error('Could not start:', err.message);
-    console.error('Check DB_HOST, DB_USER, DB_PASSWORD and DB_NAME (Hostinger: Databases → MySQL Databases).');
-    process.exit(1);
+  // Start listening at once, so Hostinger sees the app running even while the database is not ready.
+  let app = null;
+  let problem = null;
+  const shell = express();
+  shell.use((req, res, next) => {
+    if (app) return app(req, res, next);
+    const p = problem || { what: 'Starting… connecting to the database. Reload in a few seconds.', seen: '', code: '', detail: '' };
+    res.status(503).type('html').send(`<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+      <meta http-equiv="refresh" content="20"><title>Madhuram – setup needed</title>
+      <body style="font-family:Segoe UI,Arial,sans-serif;max-width:720px;margin:40px auto;padding:0 16px;color:#1c2433">
+      <h1 style="color:#1f56c8">Madhuram Store – almost there</h1><p style="font-size:18px"><b>${escapeHtml(p.what)}</b></p>
+      ${p.seen ? `<p>What the app received:<br><code>${escapeHtml(p.seen)}</code></p>` : ''}
+      ${p.code || p.detail ? `<p style="color:#6b7689">Technical detail: ${escapeHtml(p.code)} ${escapeHtml(p.detail)}</p>` : ''}
+      <p style="color:#6b7689">This page checks again by itself every 20 seconds.</p></body>`);
   });
-}
+  shell.listen(config.port, () => console.log(`Madhuram cloud listening on port ${config.port}`));
 
-module.exports = { createApp };
+  for (;;) {
+    try {
+      await db.migrate();
+      app = createApp();
+      problem = null;
+      require('./src/backups').schedule();
+      console.log('Database ready. Madhuram cloud is running.');
+      return;
+    } catch (err) {
+      problem = dbHelp(err);
+      console.error('Database problem:', problem.code, problem.detail);
+      await db.end().catch(() => {});
+      await new Promise((r) => setTimeout(r, 20000));
+    }
+  }
+}
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+if (require.main === module) main();
+
+module.exports = { createApp, main };
