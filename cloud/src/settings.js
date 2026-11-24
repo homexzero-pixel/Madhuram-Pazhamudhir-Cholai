@@ -1,0 +1,58 @@
+'use strict';
+const db = require('./db');
+
+// Store settings, kept as key/value rows. Anything not saved yet uses these defaults.
+const DEFAULTS = {
+  name: 'Madhuram Pazhamudhir Cholai',
+  name_ta: 'மதுரம் பழமுதிர் சோலை',
+  tagline: 'Supermarket · Fresh fruits, vegetables & daily needs',
+  address: '',
+  phone: '',
+  gstin: '',
+  fssai: '',
+  invoice_prefix: 'MPC',
+  bill_footer: 'Thank you! Visit again. நன்றி, மீண்டும் வருக!',
+  receipt_width: '80',
+  require_tax_setup: '0',
+  counters: 'Counter 1,Counter 2,Counter 3,Counter 4,Counter 5,Counter 6',
+  scale_enabled: '0',
+  scale_prefixes: '20,21,22,23,24,25,26,27,28,29',
+  scale_item_start: '2',
+  scale_item_length: '5',
+  scale_value_start: '7',
+  scale_value_length: '5',
+  scale_value_type: 'weight',
+  scale_value_decimals: '3',
+  scale_check_digit: '1',
+};
+const PUBLIC = Object.keys(DEFAULTS);       // safe to send to every logged-in screen
+
+let cache = null;
+let cachedAt = 0;
+
+async function load() {
+  if (cache && Date.now() - cachedAt < 10000) return cache;
+  const rows = await db.query('SELECT k, v FROM settings');
+  const s = { ...DEFAULTS };
+  for (const r of rows) s[r.k] = r.v;
+  cache = s;
+  cachedAt = Date.now();
+  return s;
+}
+
+async function save(values) {
+  for (const [k, v] of Object.entries(values)) {
+    if (!(k in DEFAULTS)) continue;
+    await db.query('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v)', [k, String(v ?? '').slice(0, 2000)]);
+  }
+  cache = null;
+}
+
+async function publicSettings() {
+  const s = await load();
+  return Object.fromEntries(PUBLIC.map((k) => [k, s[k]]));
+}
+
+const counters = (s) => s.counters.split(',').map((c) => c.trim()).filter(Boolean);
+
+module.exports = { DEFAULTS, load, save, publicSettings, counters, reset: () => { cache = null; } };
