@@ -59,11 +59,18 @@ class Command(BaseCommand):
 
         from cholai.wsgi import application
 
-        extra = {}
-        if os.environ.get("MPC_HTTPS") == "1":
-            # Online hosting: trust only the local nginx in front of us for the client IP and https scheme.
-            extra = {"trusted_proxy": "127.0.0.1", "trusted_proxy_headers": {"x-forwarded-for", "x-forwarded-proto"},
-                     "trusted_proxy_count": 1}
+        # Only a proxy on this same PC (nginx on a VPS, or the Cloudflare tunnel on the shop server) may tell us the
+        # customer's real address and that the connection was https. Counter PCs on the shop network cannot.
+        extra = {"trusted_proxy": "127.0.0.1", "trusted_proxy_headers": {"x-forwarded-for", "x-forwarded-proto"},
+                 "trusted_proxy_count": 1, "clear_untrusted_proxy_headers": True}
+        cfg = StoreSettings.load()
+        if cfg.public_url:
+            origin = cfg.public_url.rstrip("/").split("/", 3)
+            origin = "/".join(origin[:3]) if cfg.public_url.startswith("http") else f"https://{cfg.public_url.strip('/')}"
+            settings.CSRF_TRUSTED_ORIGINS = list(getattr(settings, "CSRF_TRUSTED_ORIGINS", [])) + [origin]
+        if host in ("0.0.0.0", ""):
+            self.stdout.write("Other counter PCs on the shop network can open: " + ", ".join(
+                f"http://{ip}:{port}/" for ip in _lan_ips()) or "(no network found)")
         serve(application, host=host, port=port, threads=8, channel_timeout=120, **extra)
 
 
@@ -103,3 +110,21 @@ def _hourly_backups():
             pass
         finally:
             close_old_connections()
+
+
+def _lan_ips():
+    import socket
+
+    ips = set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.add(info[4][0])
+    except OSError:
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))
+            ips.add(s.getsockname()[0])
+    except OSError:
+        pass
+    return sorted(ip for ip in ips if not ip.startswith("127."))

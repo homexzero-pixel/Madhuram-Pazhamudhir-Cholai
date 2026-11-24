@@ -1,0 +1,12 @@
+{% load static %}<!doctype html><html lang="ta"><head><meta charset="utf-8"><title>Scan to order – {{ cfg.name }}</title>
+<style>@page{size:A4;margin:12mm}body{font-family:"Segoe UI","Nirmala UI","Noto Sans Tamil",sans-serif;text-align:center;color:#14213d;margin:0}
+.bar{background:#eef2f8;padding:8px;font:14px system-ui}@media print{.bar{display:none}}
+.logo{width:300px;margin:18px auto 0;display:block}h1{font-size:46px;margin:10px 0 0}h2{font-size:30px;margin:4px 0 18px;color:#1f56c8}
+.qr svg{width:330px;height:330px}.steps{font-size:22px;line-height:1.6;margin:16px auto;max-width:640px}.url{font:20px monospace;color:#333}.warn{background:#fff3cd;padding:10px;font:15px system-ui}</style></head><body>
+<div class="bar"><button onclick="window.print()">Print</button> · Stick near the entrance and the counters.</div>
+{% if lan %}<div class="warn">No public web address is set yet (Settings → Counters &amp; online shop), so this QR only works on the shop's Wi-Fi.</div>{% endif %}
+<img class="logo" src="{% static 'img/logo.webp' %}" alt="{{ cfg.name }}">
+<h1>Scan to order</h1><h2>ஸ்கேன் செய்து ஆர்டர் செய்யுங்கள்</h2>
+<div class="qr">{{ svg|safe }}</div>
+<div class="steps">See what is in stock now · Takeaway or home delivery · Choose your time<br>இருப்பில் உள்ளவை · கடையில் பெறுதல் அல்லது வீட்டுக்கு டெலிவரி · நேரத்தைத் தேர்ந்தெடுங்கள்</div>
+<div class="url">{{ url }}</div></body></html>

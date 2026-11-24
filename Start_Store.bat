@@ -9,5 +9,5 @@ if not exist .venv\Scripts\python.exe (
 set MPC_MODE=store
 title Madhuram STORE - keep this window open
 start "" /min cmd /c Open_Billing_Window.bat 8765
-.venv\Scripts\python.exe manage.py serve --port 8765 --no-browser
+.venv\Scripts\python.exe manage.py serve --host 0.0.0.0 --port 8765 --no-browser
 pause

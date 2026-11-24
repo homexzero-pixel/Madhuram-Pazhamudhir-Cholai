@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Which counter is this PC?{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><i class="bi bi-pc-display"></i> Which counter is this PC?</h1>
+<p>Choose once on each billing PC. This PC remembers it; its shift, cash drawer and bills are kept under that name. All counters share the same stock and bill numbers.</p></div></div>
+<div class="counter-grid">
+{% for n, sh in rows %}<form method="post">{% csrf_token %}<input type="hidden" name="name" value="{{ n }}"><input type="hidden" name="next" value="{{ next }}">
+<button class="counter-btn {% if n == current %}on{% endif %}"><i class="bi bi-display"></i><b>{{ n }}</b>
+<span>{% if n == current %}This PC{% elif sh %}Open · {{ sh.cashier.display }}{% else %}&nbsp;{% endif %}</span></button></form>{% endfor %}
+</div>
+<p class="small text-muted mt-3">Need more counters or other names? Settings → Counters &amp; online shop.</p>
+{% endblock %}

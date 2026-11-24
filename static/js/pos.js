@@ -54,7 +54,8 @@
     $('#bill-ref').textContent = S.held.length ? S.held.length + ' held' : '';
     $('#cust').innerHTML = S.customer ? `${esc(S.customer.name)} <span class="text-muted small">${esc(S.customer.phone)} · ${S.customer.points} pts</span> <button class="btn btn-sm btn-link p-0" id="cust-clear">remove</button>` : 'Walk-in customer';
     const sh = S.shift;
-    $('#status-strip').innerHTML = (sh ? `<span><i class="bi bi-circle-fill text-success"></i> Shift ${sh.id} · ${esc(sh.cashier)}</span>` : `<span class="text-danger fw-bold"><i class="bi bi-exclamation-octagon"></i> No shift open – <a href="/cash/">open a shift</a> before taking payment</span>`)
+    $('#status-strip').innerHTML = `<a class="counter-tag" href="/counter/?next=/billing/" title="Change which counter this PC is"><i class="bi bi-display"></i> ${esc(S.counter || 'Counter 1')}</a>`
+      + (sh ? `<span><i class="bi bi-circle-fill text-success"></i> Shift ${sh.id} · ${esc(sh.cashier)}</span>` : `<span class="text-danger fw-bold"><i class="bi bi-exclamation-octagon"></i> No shift open on this counter – <a href="/cash/">open a shift</a> before taking payment</span>`)
       + `<span>Enter = add · F2 search · F12 pay</span>` + (S.problems.length ? `<span class="text-danger">${esc(S.problems.join(' '))}</span>` : '');
     const rows = tb.querySelectorAll('tr');
     if (rows[sel]) rows[sel].scrollIntoView({ block: 'nearest' });

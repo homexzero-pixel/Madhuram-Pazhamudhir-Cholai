@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
 from accounts.permissions import authorise, require
+from core.counter import current as current_counter
 from catalog.models import Barcode, Item
 from core.models import audit
 from core.money import D, fmt_qty, money
@@ -65,6 +66,7 @@ def state(user):
             "credit_allowed": cust.credit_allowed, "credit_left": str(cust.credit_limit - cust.credit_balance),
         },
         "shift": None if shift is None else {"id": shift.pk, "cashier": shift.cashier.display, "mine": shift.cashier_id == user.pk},
+        "counter": current_counter(),
         "held": [{"id": h.pk, "label": h.label, "lines": h.lines.count(), "at": h.updated_at.strftime("%H:%M")} for h in held],
     }
 

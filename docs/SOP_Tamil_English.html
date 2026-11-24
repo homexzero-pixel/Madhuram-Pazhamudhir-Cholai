@@ -80,13 +80,13 @@ footer{color:var(--mut);font-size:14px}
     <div><b>All day · நாள் முழுவதும்</b>Scan or tap products, take payment, hand over the printed bill.<br><span class="ta">பொருளை ஸ்கேன் செய்யவும் அல்லது தொடவும், பணம் பெறவும், அச்சிட்ட பில்லை வாடிக்கையாளரிடம் கொடுக்கவும்.</span></div>
     <div><b>Evening · மாலை</b>Count the drawer, close the shift, send the day summary, check the buy list.<br><span class="ta">பணப்பெட்டியை எண்ணி, ஷிஃப்ட்டை முடித்து, நாள் சுருக்கத்தை அனுப்பி, வாங்க வேண்டிய பட்டியலைப் பார்க்கவும்.</span></div>
   </div>
-  <div class="meta">Program version 2026.11.23 · Practice logins: owner / manager / cashier, password <b>practice123</b>, PIN <b>1234</b> (practice data only)</div>
+  <div class="meta">Program version 2026.11.24 · Practice logins: owner / manager / cashier, password <b>practice123</b>, PIN <b>1234</b> (practice data only)</div>
 </div></header>
 
 <nav class="toc" aria-label="Chapters"><div class="scroll">
   <a href="#start">1 Start · தொடக்கம்</a><a href="#billing">2 Billing · பில்லிங்</a><a href="#payment">3 Payment · பணம்</a><a href="#returns">4 Returns · திருப்பம்</a>
   <a href="#closing">5 Closing · முடிவு</a><a href="#owner">6 Owner tools · உரிமையாளர்</a><a href="#stock">7 Products &amp; stock · பொருட்கள்</a>
-  <a href="#reports">8 Reports · அறிக்கைகள்</a><a href="#settings">9 Settings &amp; safety · அமைப்புகள்</a><a href="#keys">10 Keys · விசைகள்</a><a href="#rules">11 Golden rules · முக்கிய விதிகள்</a>
+  <a href="#reports">8 Reports · அறிக்கைகள்</a><a href="#settings">9 Settings &amp; safety · அமைப்புகள்</a><a href="#online">10 Counters &amp; online orders · கவுண்டர்கள், ஆன்லைன் ஆர்டர்</a><a href="#keys">11 Keys · விசைகள்</a><a href="#rules">12 Golden rules · முக்கிய விதிகள்</a>
 </div></nav>
 
 <main class="band"><div class="wrap">
@@ -577,8 +577,68 @@ footer{color:var(--mut);font-size:14px}
 </article>
 </section>
 
-<!-- ============================================================ 10 KEYS -->
-<section class="ch" id="keys"><h2>10. Keys at the counter<span class="ta">10. கவுண்டர் விசைகள்</span></h2>
+<!-- ============================================================ 10 COUNTERS & ONLINE -->
+<section class="ch" id="online"><h2>10. Counters, owner on mobile and online orders<span class="ta">10. கவுண்டர்கள், கைபேசியில் உரிமையாளர், ஆன்லைன் ஆர்டர்</span></h2>
+
+<article class="f"><h3>Several counters<span class="ta">பல கவுண்டர்கள்</span></h3>
+<div class="shots"><figure><img src="img/60-order-on-counter.jpg" alt="Billing on Counter 2" loading="lazy"><figcaption>The counter name is at the top · கவுண்டர் பெயர் மேலே தெரியும்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>One PC is the <b>shop server</b>; the other counters open it over the shop Wi-Fi. If the internet is down, every counter still bills.</li>
+<li>Each PC shows its name at the top of the billing screen (e.g. <b>Counter 2</b>). Click it to change.</li>
+<li>Each counter opens and closes <b>its own shift and drawer</b> in Cash Closing. Stock and bill numbers are shared.</li>
+<li>Keep the server PC switched on (on a UPS) while the shop is open.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>ஒரு கணினி <b>கடை சர்வர்</b>; மற்ற கவுண்டர்கள் கடையின் Wi-Fi மூலம் அதைத் திறக்கும். இணையம் இல்லாவிட்டாலும் எல்லா கவுண்டர்களும் பில் போடலாம்.</li>
+<li>பில்லிங் திரையின் மேலே அந்தக் கணினியின் பெயர் தெரியும் (எ.கா. <b>Counter 2</b>). மாற்ற அதைக் கிளிக் செய்யவும்.</li>
+<li>ஒவ்வொரு கவுண்டரும் Cash Closing இல் <b>தன் சொந்த ஷிஃப்ட், பணப்பெட்டியைத்</b> திறந்து முடிக்கும். இருப்பும் பில் எண்களும் பொதுவானவை.</li>
+<li>கடை திறந்திருக்கும் வரை சர்வர் கணினியை (UPS உடன்) இயங்க வைக்கவும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Owner on the mobile phone<span class="ta">கைபேசியில் உரிமையாளர்</span></h3>
+<div class="shots"><figure style="max-width:420px"><img src="img/63-owner-phone.jpg" alt="Dashboard on a phone" loading="lazy"><figcaption>Dashboard on the phone · கைபேசியில் டாஷ்போர்டு</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><p>Open the shop's web address (e.g. <b>https://billing.yourshop.in</b>) in Chrome, log in, and use ⋮ → <b>Add to Home screen</b>. The <b>☰ Menu</b> button opens every screen: dashboard, Online orders, Owner tools, reports.</p></div>
+<div lang="ta"><h4>தமிழ்</h4><p>கடையின் இணைய முகவரியை (எ.கா. <b>https://billing.yourshop.in</b>) Chrome இல் திறந்து உள்நுழைந்து, ⋮ → <b>Add to Home screen</b> செய்யவும். <b>☰ Menu</b> பொத்தான் எல்லாத் திரைகளையும் திறக்கும்: டாஷ்போர்டு, ஆன்லைன் ஆர்டர், உரிமையாளர் கருவிகள், அறிக்கைகள்.</p></div></div>
+</article>
+
+<article class="f"><h3>Customers order online<span class="ta">வாடிக்கையாளர்கள் ஆன்லைனில் ஆர்டர் செய்தல்</span></h3>
+<div class="shots">
+<figure><img src="img/61-qr-poster.jpg" alt="QR poster" loading="lazy"><figcaption>QR poster at the entrance · நுழைவாயிலில் QR போஸ்டர்</figcaption></figure>
+<figure><img src="img/55-shop-phone.jpg" alt="Online shop on a phone" loading="lazy"><figcaption>What is in stock now · இப்போது இருப்பில் உள்ளவை</figcaption></figure>
+<figure><img src="img/56-shop-checkout.jpg" alt="Checkout" loading="lazy"><figcaption>Takeaway or delivery, time slot · பெறுதல் அல்லது டெலிவரி, நேரம்</figcaption></figure>
+<figure><img src="img/57-shop-track.jpg" alt="Order tracking" loading="lazy"><figcaption>Tracking page · ஆர்டர் நிலை</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>Print the poster: <b>Online orders → QR poster for customers</b>.</li>
+<li>Customers scan it, search or tap a category, or <b>Scan</b> a pack's barcode with the phone camera. Only products in stock now can be ordered.</li>
+<li>They choose <b>Takeaway</b> or <b>Home delivery</b>, the day and time slot, and pay cash or UPI when they collect or receive.</li>
+<li>Their tracking page updates by itself. What they ordered is held for them until it is billed or cancelled.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li>போஸ்டரை அச்சிடவும்: <b>Online orders → QR poster for customers</b>.</li>
+<li>வாடிக்கையாளர்கள் அதை ஸ்கேன் செய்து, தேடி அல்லது வகையைத் தொட்டு, அல்லது கைபேசி கேமராவால் பாக்கெட் பார்கோடை <b>Scan</b> செய்து பொருட்களைச் சேர்க்கலாம். இப்போது இருப்பில் உள்ளவை மட்டுமே ஆர்டர் ஆகும்.</li>
+<li><b>கடையில் பெறுதல்</b> அல்லது <b>வீட்டுக்கு டெலிவரி</b>, நாள், நேரம் தேர்ந்தெடுத்து, பெறும்போது ரொக்கம் அல்லது UPI இல் செலுத்துவார்கள்.</li>
+<li>அவர்களின் ஆர்டர் நிலைப் பக்கம் தானாகப் புதுப்பிக்கப்படும். பில் போடும் வரை அல்லது ரத்து ஆகும் வரை அந்தப் பொருட்கள் அவருக்காக ஒதுக்கி வைக்கப்படும்.</li></ol></div></div>
+</article>
+
+<article class="f"><h3>Handling an online order<span class="ta">ஆன்லைன் ஆர்டரைக் கையாளுதல்</span></h3>
+<div class="shots">
+<figure><img src="img/58-online-orders.jpg" alt="Online orders list" loading="lazy"><figcaption>Red count and chime for new orders · புதிய ஆர்டருக்கு சிவப்பு எண்ணும் ஒலியும்</figcaption></figure>
+<figure><img src="img/59-order-detail.jpg" alt="Order detail" loading="lazy"><figcaption>Packing list and actions · பேக்கிங் பட்டியல், செயல்கள்</figcaption></figure></div>
+<div class="two"><div><h4>English</h4><ol>
+<li>A red number appears on <b>Online orders</b> and a chime sounds. Open the order.</li>
+<li><b>Accept – start packing</b> → <b>Print packing list</b> → pack and tick each item.</li>
+<li><b>WhatsApp the customer</b> sends the status message. Then <b>Packed – ready for pickup</b> or <b>Out for delivery</b>.</li>
+<li>When the customer pays: <b>Bill this order at this counter</b>. Items, customer and delivery charge go onto this counter's bill; correct weights with <kbd>F4</kbd>, take payment (<kbd>F10</kbd> / <kbd>F3</kbd>), the bill prints and the order is completed.</li>
+<li>Cannot supply? <b>Cancel order</b> with a reason – the customer sees it and the stock is released.</li></ol></div>
+<div lang="ta"><h4>தமிழ்</h4><ol>
+<li><b>Online orders</b> இல் சிவப்பு எண் தெரியும், ஒலி கேட்கும். ஆர்டரைத் திறக்கவும்.</li>
+<li><b>Accept – start packing</b> → <b>Print packing list</b> → ஒவ்வொரு பொருளையும் பேக் செய்து டிக் செய்யவும்.</li>
+<li><b>WhatsApp the customer</b> நிலைச் செய்தியை அனுப்பும். பிறகு <b>Packed – ready for pickup</b> அல்லது <b>Out for delivery</b>.</li>
+<li>வாடிக்கையாளர் பணம் செலுத்தும்போது: <b>Bill this order at this counter</b>. பொருட்கள், வாடிக்கையாளர், டெலிவரி கட்டணம் இந்தக் கவுண்டரின் பில்லில் வரும்; எடையை <kbd>F4</kbd> இல் சரிசெய்து, பணம் பெற்று (<kbd>F10</kbd> / <kbd>F3</kbd>), பில் அச்சாகும், ஆர்டர் முடியும்.</li>
+<li>தர முடியவில்லையா? காரணத்துடன் <b>Cancel order</b> – வாடிக்கையாளருக்குத் தெரியும், இருப்பு விடுவிக்கப்படும்.</li></ol></div></div>
+</article>
+</section>
+
+<!-- ============================================================ 11 KEYS -->
+<section class="ch" id="keys"><h2>11. Keys at the counter<span class="ta">11. கவுண்டர் விசைகள்</span></h2>
 <div class="f"><div class="scrollx"><table>
 <thead><tr><th>Key</th><th>English</th><th>தமிழ்</th></tr></thead>
 <tbody>
@@ -602,7 +662,7 @@ footer{color:var(--mut);font-size:14px}
 </section>
 
 <!-- ============================================================ 11 RULES -->
-<section class="ch" id="rules"><h2>11. Golden rules<span class="ta">11. முக்கிய விதிகள்</span></h2>
+<section class="ch" id="rules"><h2>12. Golden rules<span class="ta">12. முக்கிய விதிகள்</span></h2>
 <div class="rules">
 <div><b>Your own login only.</b><span class="ta">உங்கள் சொந்த உள்நுழைவு மட்டுமே.</span></div>
 <div><b>A paper bill for every customer.</b><span class="ta">ஒவ்வொரு வாடிக்கையாளருக்கும் அச்சிட்ட பில்.</span></div>
@@ -615,7 +675,7 @@ footer{color:var(--mut);font-size:14px}
 </div>
 </section>
 
-<footer class="band" style="padding-inline:0">Screenshots are from the practice database (practice names, prices and bills). Version 2026.11.23. · திரைப்படங்கள் பயிற்சித் தரவில் இருந்து எடுக்கப்பட்டவை.</footer>
+<footer class="band" style="padding-inline:0">Screenshots are from the practice database (practice names, prices and bills). Version 2026.11.24. · திரைப்படங்கள் பயிற்சித் தரவில் இருந்து எடுக்கப்பட்டவை.</footer>
 </div></main>
 </body>
 </html>

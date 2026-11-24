@@ -7,7 +7,7 @@ window (Microsoft Edge in app mode). Barcode scanners in keyboard mode and Windo
 All data is in one SQLite database file on the PC. **Two automatic, checked backups**, one on the PC and one in Google Drive
 (free), protect it even if the PC is lost.
 
-> **This version supports one billing counter.** See [Multiple counters](#multiple-counters) before adding a second till.
+> **Several counters, owner on mobile, online orders:** see [docs/MULTI_COUNTER_AND_ONLINE.md](docs/MULTI_COUNTER_AND_ONLINE.md).
 
 ![Billing screen](docs/img/04-bill.jpg)
 
@@ -17,6 +17,7 @@ All data is in one SQLite database file on the PC. **Two automatic, checked back
 |---|---|
 | **Billing** | Scan → bill → payment → receipt in a few keystrokes. **Barcode won't scan? Tap the product** on the panel below the bill (search, category buttons, best sellers). Customer search by any part of the name or phone. Exact barcode match only; unknown codes are refused, the bill stays intact, and a manager can link the code. Loose produce by PLU with weight to 3 decimals. Configurable scale-label barcodes with check digit. Search by English or Tamil name, SKU, PLU or barcode. **F10 exact cash and F3 all-UPI one-key payment**, hold/recall, cancel with reason, manager-PIN price override and discount, split tender (cash + UPI + card + customer credit), change due. A retried or double-clicked payment can never create two bills. |
 | **Receipts** | 80 mm and 58 mm thermal layouts, A4 invoice, reprint marked DUPLICATE, Tamil product names. |
+| **Counters & online** | One shop server PC, any number of counter PCs over the shop network (each with its own shift and drawer, one stock and bill series; billing continues without internet). Free Cloudflare Tunnel for the owner's mobile and for **customer online orders**: in-stock catalogue in English/Tamil, phone-camera barcode scan, takeaway or home delivery with time slots, tracking page, QR poster; staff alert, packing list, WhatsApp updates, "Bill this order" at any counter. |
 | **Owner tools** | **Today's prices** (change all fruit/veg rates in one screen, print an A4 Tamil/English price board), **Buy list** (what to buy tomorrow from real sales, by supplier, send on WhatsApp), **Loss watch** (cancelled bills, removed items, price changes, discounts, refunds, cash shortages, unprinted bills per cashier, with flags), **day summary to the owner's WhatsApp**, **credit (udhaar) reminders**. |
 | **WhatsApp bills** | Free: type the customer's mobile at payment and the bill opens in the shop's own WhatsApp (Desktop app or Web) ready to send. Resend any old bill. Masked number in the audit log. A paid automatic option is described in the Owner guide. |
 | **Quick add** | Scan a new barcode at the counter → "Add as a new product" → name, MRP, price, GST, shelf count → it is on the bill. A separate Quick add screen enters products one after another with Enter only, and picks from the starter catalogue so nothing is duplicated. |
@@ -50,13 +51,14 @@ All data is in one SQLite database file on the PC. **Two automatic, checked back
 | [Module status](docs/MODULE_STATUS.md) | What was built, tested, and still needs store data, accountant approval or hardware |
 | [Acceptance results](docs/ACCEPTANCE_RESULTS.md) | The specification's 11 acceptance tests, actual results |
 | [Database schema](docs/SCHEMA.md) | Tables and columns |
+| [Counters, mobile & online orders](docs/MULTI_COUNTER_AND_ONLINE.md) | Shop server, extra counters, owner from home, customer orders |
 | [Changing the software](docs/CHANGING_THE_SOFTWARE.md) | How to add features later and install updates safely |
 
 ## Files
 
 ```
 Setup_Windows.bat  Start_Store.bat  Try_Demo.bat  Create_Owner.bat
-Install_Madhuram.bat  Update_Madhuram.bat  Setup_Backups.bat  Backup_Now.bat  Restore_Backup.bat  Import_Pilot_Data.bat     Windows launchers
+Install_Madhuram.bat  Update_Madhuram.bat  Setup_Shop_Server.bat  Setup_Counter_PC.bat  Setup_Online_Access.bat  Setup_Backups.bat  Backup_Now.bat  Restore_Backup.bat  Import_Pilot_Data.bat     Windows launchers
 data/Madhuram_20000_SKUs.csv     starter catalogue (20,000 candidate SKUs)
 data/import_template.xlsx|csv    product import template
 docs/                            guides, screenshots, results, schema
@@ -75,15 +77,13 @@ Data lives outside the program folder, in `%LOCALAPPDATA%\MadhuramPOS\store\` (l
 pip install -r requirements.txt
 MPC_MODE=demo python manage.py migrate && MPC_MODE=demo python manage.py seed_demo
 MPC_MODE=demo python manage.py serve            # http://127.0.0.1:8765
-MPC_MODE=test python manage.py test             # 50 automated tests
+MPC_MODE=test python manage.py test             # 58 automated tests
 pip install requests && python scripts/run_acceptance.py   # real-process acceptance run → docs/ACCEPTANCE_RESULTS.md
 ```
 
 ## Multiple counters
 
-This version is built and tested for **one counter**: one PC runs the server and the database, and bill numbers come from one
-gap-free series per financial year. A second PC on the same shop network *can* open `http://<counter-PC>:8765/` if the server is
-started with `--host 0.0.0.0`. Both tills would then share one stock count and one bill series without clashes, because every write
-locks the database. But this is **not tested**, the cash-drawer shift is per counter name and is shared, and the second till stops
-when the main PC or the network is down. Independent offline tills that sync later need a separate design: a per-counter bill
-series and an outbox that sends sales when the link returns, with stock conflicts resolved centrally. That is future work.
+Supported: one PC is the shop server, the others open it over the shop network. Each PC chooses its counter name once
+(`/counter/`), and has its own shift and cash drawer; all share one stock and one gap-free bill series (every write locks the
+database). Setup: [docs/MULTI_COUNTER_AND_ONLINE.md](docs/MULTI_COUNTER_AND_ONLINE.md). If the server PC is off, counters cannot bill;
+independent offline tills that sync later are not built.

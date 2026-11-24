@@ -130,10 +130,15 @@ def cash_home(request):
     shift = S.open_shift()
     summary = S.cash_summary(shift) if shift else None
     recent = Shift.objects.select_related("cashier", "closed_by").all()[:15]
-    last = Shift.objects.filter(status=Shift.CLOSED).order_by("-closed_at").first()
+    from core.counter import current as current_counter
+
+    counter = current_counter()
+    last = Shift.objects.filter(status=Shift.CLOSED, counter=counter).order_by("-closed_at").first()
     unprinted = shift.sales.filter(print_count=0) if shift else []
+    others = [(s, S.cash_summary(s)["expected"]) for s in S.open_shifts() if s.counter != counter]
     return render(request, "sales/cash_home.html", {
         "nav": "cash", "shift": shift, "summary": summary, "recent": recent, "last": last, "unprinted": unprinted,
+        "counter": counter, "others": others,
         "moves": shift.cash_moves.all() if shift else [], "kinds": CashMovement.KINDS,
         "notes": [2000, 500, 200, 100, 50, 20, 10, 5, 2, 1],
     })

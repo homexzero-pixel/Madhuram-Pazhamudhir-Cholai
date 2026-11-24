@@ -16,8 +16,10 @@
   <aside class="side d-print-none">
     <a class="brand" href="{% url 'home' %}"><img src="{% static 'img/logo.webp' %}" alt="{{ store.name }}"></a>
     {% if mode == "demo" %}<div class="demo-flag">PRACTICE DATA · பயிற்சி</div>{% endif %}
-    <nav class="nav-main">
+    <button type="button" class="menu-toggle" aria-expanded="false" aria-controls="main-nav" onclick="const s=this.closest('.side');s.classList.toggle('open');this.setAttribute('aria-expanded',s.classList.contains('open'))"><i class="bi bi-list"></i> Menu</button>
+    <nav class="nav-main" id="main-nav">
       {% if "bill" in can %}<a href="{% url 'pos' %}" class="{% if nav == 'billing' %}active{% endif %}"><i class="bi bi-upc-scan"></i> Billing <kbd>F1</kbd></a>{% endif %}
+      {% if "bill" in can %}<a id="nav-orders" href="{% url 'order_list' %}" class="{% if nav == 'orders' %}active{% endif %}"><i class="bi bi-bag-check"></i> Online orders</a>{% endif %}
       {% if "reports" in can or "purchase" in can %}<a href="{% url 'owner_home' %}" class="{% if nav == 'owner' %}active{% endif %}"><i class="bi bi-stars"></i> Owner tools</a>{% endif %}
       {% if "reports" in can %}<a href="{% url 'dashboard' %}" class="{% if nav == 'dashboard' %}active{% endif %}"><i class="bi bi-speedometer2"></i> Owner dashboard</a>{% endif %}
       <a href="{% url 'item_list' %}" class="{% if nav == 'products' %}active{% endif %}"><i class="bi bi-box-seam"></i> Products</a>

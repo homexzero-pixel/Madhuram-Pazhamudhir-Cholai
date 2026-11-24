@@ -1,0 +1,55 @@
+{% load static mpc %}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ cfg.name }} – order online</title>
+<link href="{% static 'css/shop.css' %}?v={{ asset_v }}" rel="stylesheet">
+</head><body>
+<header class="sh-head"><img src="{% static 'img/logo.webp' %}" alt="{{ cfg.name }}" class="sh-logo">
+  <div><h1>{{ cfg.name }}</h1><p class="ta">{{ cfg.name_ta }}</p>{% if cfg.phone %}<p class="sh-phone">Call / WhatsApp: <b>{{ cfg.phone }}</b></p>{% endif %}</div></header>
+{% if not cfg.online_enabled %}
+<main class="sh-main"><div class="sh-closed"><h2>Online orders are closed right now</h2><p class="ta">இப்போது ஆன்லைன் ஆர்டர் இல்லை.</p><p>Please visit the shop{% if cfg.phone %} or call {{ cfg.phone }}{% endif %}.</p></div></main>
+{% else %}
+<main class="sh-main" id="app">
+  <div class="sh-how"><b>Order now, collect or get it delivered.</b> {% if cfg.online_pickup %}Takeaway{% endif %}{% if cfg.online_pickup and cfg.online_delivery %} or {% endif %}{% if cfg.online_delivery %}home delivery ({{ cfg.online_delivery_area }}){% endif %}. {{ cfg.online_note }}
+    <div class="ta">ஆர்டர் செய்து கடையில் பெற்றுக்கொள்ளுங்கள் அல்லது வீட்டுக்கு டெலிவரி பெறுங்கள்.</div></div>
+  <div class="sh-search"><input id="q" type="search" placeholder="Search – apple, ஆப்பிள், rice…" autocomplete="off" aria-label="Search products">
+    <button id="scan" type="button" class="sh-btn ghost" aria-label="Scan a product barcode">▦ Scan</button></div>
+  <div class="sh-cats" id="cats"><button class="on" data-cat="">All</button>{% for c in cats %}<button data-cat="{{ c.id }}">{{ c.name }}</button>{% endfor %}</div>
+  <div id="items" class="sh-grid" aria-live="polite"></div>
+</main>
+
+<div class="sh-cartbar" id="cartbar" hidden><div><b id="cb-n">0 items</b><span id="cb-t">₹0</span></div><button class="sh-btn" id="go">View cart &amp; order ›</button></div>
+
+<dialog id="dlg" class="sh-dlg">
+  <form method="dialog" id="orderform" autocomplete="on">
+    <div class="sh-dlg-h"><h2>Your order · உங்கள் ஆர்டர்</h2><button value="close" class="sh-x" aria-label="Close">×</button></div>
+    <div id="cartlines" class="sh-lines"></div>
+    <div class="sh-total"><span>Items (approx.)</span><b id="sum-items">₹0</b></div>
+    <div class="sh-total" id="row-del" hidden><span>Delivery charge</span><b id="sum-del">₹0</b></div>
+    <div class="sh-total big"><span>Total (approx.)</span><b id="sum-all">₹0</b></div>
+    <p class="sh-small">Final amount is on the bill: loose items are weighed when packed. Offers apply at billing.</p>
+    <fieldset class="sh-modes"><legend>How do you want it?</legend>
+      {% if cfg.online_pickup %}<label><input type="radio" name="mode" value="pickup" checked> <b>Takeaway</b><span>I will collect at the shop</span></label>{% endif %}
+      {% if cfg.online_delivery %}<label><input type="radio" name="mode" value="delivery" {% if not cfg.online_pickup %}checked{% endif %}> <b>Home delivery</b><span>{{ cfg.online_delivery_area }} · min ₹{{ cfg.online_min_order|floatformat:0 }}{% if cfg.online_delivery_charge %} · ₹{{ cfg.online_delivery_charge|floatformat:0 }} charge{% if cfg.online_free_delivery_above %}, free above ₹{{ cfg.online_free_delivery_above|floatformat:0 }}{% endif %}{% endif %}</span></label>{% endif %}
+    </fieldset>
+    <div class="sh-row"><label>Day<select id="day">{% for d in slot_days %}<option value="{{ forloop.counter0 }}">{{ d.label }}</option>{% endfor %}</select></label>
+      <label>Time<select id="slot"></select></label></div>
+    <label>Your name<input id="name" autocomplete="name" required maxlength="80"></label>
+    <label>Mobile number (WhatsApp)<input id="phone" inputmode="tel" autocomplete="tel" required placeholder="98765 43210"></label>
+    <label id="addr-wrap" hidden>Delivery address with landmark<textarea id="address" rows="3" autocomplete="street-address" maxlength="300"></textarea></label>
+    <label>Pay by<select id="pay"><option value="cash">Cash</option><option value="upi">UPI</option></select></label>
+    <label>Note for the shop (optional)<input id="notes" maxlength="300" placeholder="e.g. ripe bananas please"></label>
+    <input id="website" class="sh-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <p class="sh-err" id="err" role="alert"></p>
+    <button type="button" class="sh-btn wide" id="place">Place order</button>
+  </form>
+</dialog>
+
+<dialog id="scandlg" class="sh-dlg"><div class="sh-dlg-h"><h2>Scan a product</h2><button class="sh-x" id="scanclose" aria-label="Close">×</button></div>
+  <video id="cam" playsinline muted></video><p class="sh-small" id="scanmsg">Point the camera at the barcode on the pack.</p>
+  <div class="sh-row"><input id="code" inputmode="numeric" placeholder="or type the barcode number"><button class="sh-btn" id="codego" type="button">Find</button></div>
+  <div id="scanres"></div></dialog>
+{{ slot_days|json_script:"slots" }}
+<script>window.SHOP = { minOrder: {{ cfg.online_min_order }}, charge: {{ cfg.online_delivery_charge }}, freeAbove: {{ cfg.online_free_delivery_above }} };</script>
+<script src="{% static 'js/shop.js' %}?v={{ asset_v }}"></script>
+{% endif %}
+</body></html>

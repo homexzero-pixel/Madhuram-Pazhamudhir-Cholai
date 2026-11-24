@@ -14,7 +14,7 @@
 <div class="tiles">
 <div class="tile"><div class="k">Cash</div><div class="v">{{ tenders.cash|money }}</div></div><div class="tile"><div class="k">UPI</div><div class="v">{{ tenders.upi|money }}</div></div>
 <div class="tile"><div class="k">Card</div><div class="v">{{ tenders.card|money }}</div></div><div class="tile"><div class="k">Credit</div><div class="v">{{ tenders.credit|money }}</div></div>
-<div class="tile {% if shift %}good{% else %}warn{% endif %}"><div class="k">Drawer (expected)</div><div class="v">{% if cash %}{{ cash.expected|money }}{% else %}closed{% endif %}</div><div class="s">{% if shift %}Shift {{ shift.pk }} · {{ shift.cashier.display }}{% else %}No open shift{% endif %}</div></div>
+<div class="tile {% if drawers %}good{% else %}warn{% endif %}"><div class="k">Drawers (expected)</div><div class="v">{% if drawers %}{{ drawer_total|money }}{% else %}closed{% endif %}</div><div class="s">{% for s, e in drawers %}{{ s.counter }} · {{ s.cashier.display }} {{ e|money }}{% if not forloop.last %}<br>{% endif %}{% empty %}No shift open{% endfor %}</div></div>
 </div>
 <h2 class="h6 text-muted text-uppercase">This month</h2>
 <div class="tiles">

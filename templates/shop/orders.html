@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% load mpc %}
+{% block title %}Online orders{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><i class="bi bi-bag-check"></i> Online orders</h1><p>Customers order on the online shop; pack the order, then <b>Bill this order</b> at a counter. Stock and cash move only when it is billed.</p></div>
+<div class="d-flex gap-2 flex-wrap"><a class="btn btn-outline-primary" href="{% url 'order_poster' %}" target="_blank"><i class="bi bi-qr-code"></i> QR poster for customers</a>{% if "settings" in can %}<a class="btn btn-outline-secondary" href="{% url 'settings_edit' 'online' %}">Online shop settings</a>{% endif %}<a class="btn btn-outline-secondary" href="/shop/" target="_blank">Open the shop page</a></div></div>
+{% if not cfg.online_enabled %}<div class="alert alert-warning">Online orders are <b>switched off</b>. Customers see "closed". Turn them on in Settings → Counters &amp; online shop.</div>{% endif %}
+<div class="d-flex gap-2 mb-3 flex-wrap">{% for k, l in "open:Open,done:Done today,cancelled:Cancelled,all:All"|split_pairs %}<a class="btn {% if tab == k %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="?tab={{ k }}">{{ l }}{% if k == "open" and counts.new %} <span class="badge text-bg-danger">{{ counts.new }} new</span>{% endif %}</a>{% endfor %}</div>
+<div class="order-grid">{% for o, slot in rows %}<a class="order-card st-{{ o.status }}" href="{% url 'order_detail' o.pk %}">
+  <div class="d-flex justify-content-between"><b class="fs-5">{{ o.number }}</b><span class="badge {% if o.status == 'new' %}text-bg-danger{% elif o.status == 'cancelled' %}text-bg-secondary{% elif o.status == 'done' %}text-bg-success{% else %}text-bg-primary{% endif %}">{{ o.get_status_display }}</span></div>
+  <div class="fw-semibold">{% if o.mode == "delivery" %}<i class="bi bi-truck"></i> Delivery{% else %}<i class="bi bi-bag"></i> Takeaway{% endif %} · {{ slot }}</div>
+  <div>{{ o.name }} · {{ o.phone|slice:"2:" }}</div><div class="text-muted small">{{ o.lines.all|length }} items · about {{ o.est_total|money }} · {{ o.get_pay_pref_display }} · ordered {{ o.created_at|date:"d-m H:i" }}</div>
+</a>{% empty %}<p class="text-muted">No orders here.</p>{% endfor %}</div>
+{% endblock %}

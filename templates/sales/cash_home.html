@@ -1,11 +1,12 @@
 {% extends "base.html" %}{% load mpc %}
 {% block title %}Cash Closing{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Cash Closing</h1><p>Open the shift with the float, record cash in / out, then count the drawer and close.</p></div>
+<div class="page-head"><div><h1>Cash Closing · <a class="counter-tag" href="{% url 'counter_pick' %}?next=/cash/">{{ counter }}</a></h1><p>Open the shift with the float, record cash in / out, then count the drawer and close. Each counter has its own shift and drawer.</p></div>
 {% if "settlement" in can %}<a class="btn btn-outline-success" href="{% url 'settlements' %}"><i class="bi bi-bank"></i> UPI / card settlements</a>{% endif %}</div>
+{% if others %}<div class="alert alert-info"><b>Other counters open now:</b> {% for o, exp in others %}<a href="{% url 'shift_detail' o.pk %}">{{ o.counter }}</a> ({{ o.cashier.display }}, drawer {{ exp|money }}){% if not forloop.last %} · {% endif %}{% endfor %}</div>{% endif %}
 {% if not shift %}
 <div class="card mb-3"><div class="card-body">
-  <h2 class="h5">No shift is open</h2>
+  <h2 class="h5">No shift is open on {{ counter }}</h2>
   {% if last %}<p class="text-muted">Last shift {{ last.pk }} ({{ last.cashier.display }}) closed {{ last.closed_at|date:"d-m-Y H:i" }} and left <b>{{ last.retained_cash|money }}</b> in the drawer. Enter the amount you count now.</p>{% endif %}
   {% if "cash" in can %}<form method="post" action="{% url 'shift_open' %}" class="d-flex gap-2 align-items-end">{% csrf_token %}
     <div><label class="form-label" for="opening">Opening float in the drawer (₹)</label><input id="opening" name="opening" class="form-control form-control-lg" inputmode="decimal" value="{{ last.retained_cash|default_if_none:'' }}"></div>
@@ -58,8 +59,8 @@ document.querySelectorAll('.denom').forEach(i=>i.addEventListener('input',tot));
 </script>
 {% endif %}
 <h2 class="h5 mt-4">Recent shifts</h2>
-<div class="card"><div class="table-responsive"><table class="table"><thead><tr><th>Shift</th><th>Cashier</th><th>Opened</th><th>Closed</th><th class="r">Float</th><th class="r">Expected</th><th class="r">Counted</th><th class="r">Variance</th><th class="r">Left in drawer</th><th></th></tr></thead><tbody>
-{% for s in recent %}<tr><td><a href="{% url 'shift_detail' s.pk %}">{{ s.pk }}</a></td><td>{{ s.cashier.display }}</td><td>{{ s.opened_at|date:"d-m H:i" }}</td><td>{% if s.closed_at %}{{ s.closed_at|date:"d-m H:i" }}{% else %}<span class="badge text-bg-success">open</span>{% endif %}</td>
+<div class="card"><div class="table-responsive"><table class="table"><thead><tr><th>Shift</th><th>Counter</th><th>Cashier</th><th>Opened</th><th>Closed</th><th class="r">Float</th><th class="r">Expected</th><th class="r">Counted</th><th class="r">Variance</th><th class="r">Left in drawer</th><th></th></tr></thead><tbody>
+{% for s in recent %}<tr><td><a href="{% url 'shift_detail' s.pk %}">{{ s.pk }}</a></td><td>{{ s.counter }}</td><td>{{ s.cashier.display }}</td><td>{{ s.opened_at|date:"d-m H:i" }}</td><td>{% if s.closed_at %}{{ s.closed_at|date:"d-m H:i" }}{% else %}<span class="badge text-bg-success">open</span>{% endif %}</td>
 <td class="r">{{ s.opening_float|money }}</td><td class="r">{{ s.expected|money }}</td><td class="r">{{ s.counted|money }}</td><td class="r {% if s.variance %}text-danger fw-bold{% endif %}">{{ s.variance|money }}</td><td class="r">{{ s.retained_cash|money }}</td>
 <td>{% if s.status == "closed" and "reopen_shift" in can %}<form method="post" action="{% url 'shift_reopen' s.pk %}" class="d-flex gap-1">{% csrf_token %}<input name="reason" class="form-control form-control-sm" placeholder="reason to reopen" aria-label="Reason to reopen shift {{ s.pk }}"><button class="btn btn-sm btn-outline-danger">Reopen</button></form>{% endif %}</td></tr>{% endfor %}
 </tbody></table></div></div>

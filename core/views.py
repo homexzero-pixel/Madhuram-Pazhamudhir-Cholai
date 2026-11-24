@@ -43,6 +43,10 @@ SECTIONS = {
     "rules": ("Loyalty & stock alerts", ["loyalty_enabled", "loyalty_rupees_per_point", "loyalty_point_value",
                                          "near_expiry_days", "dead_stock_days"]),
     "whatsapp": ("WhatsApp bills & owner summary", ["whatsapp_enabled", "whatsapp_open", "whatsapp_message", "whatsapp_tamil", "owner_whatsapp"]),
+    "online": ("Counters & online shop", ["counter_names", "public_url", "online_enabled", "online_pickup", "online_delivery",
+                                          "online_min_order", "online_delivery_charge", "online_free_delivery_above", "online_delivery_area",
+                                          "online_open", "online_close", "online_slot_minutes", "online_lead_minutes", "online_days_ahead",
+                                          "online_note"]),
     "backup": ("Backups", ["backup_extra_dir"]),
 }
 
@@ -241,3 +245,35 @@ def audit_log(request):
     actions = AuditLog.objects.values_list("action", flat=True).distinct().order_by("action")
     return render(request, "core/audit.html", {"nav": "settings", "page": Paginator(qs, 50).get_page(request.GET.get("page")),
                                                "actions": actions})
+
+
+def counter_pick(request):
+    """'This PC is Counter 2' – remembered by this PC's browser for a year. Open to any logged-in user."""
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    from . import counter
+
+    nxt = request.GET.get("next") or request.POST.get("next") or "/billing/"
+    if not url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
+        nxt = "/billing/"
+    chosen = counter.clean(request.POST.get("name") or request.GET.get("name") or "")
+    if chosen and (request.method == "POST" or request.GET.get("set") == "1"):
+        resp = redirect(nxt)
+        resp.set_cookie(counter.COOKIE, chosen, max_age=60 * 60 * 24 * 400, samesite="Lax")
+        if request.user.is_authenticated:
+            audit("counter_set", f"This PC set as {chosen}", user=request.user)
+        return resp
+    from sales.services import open_shifts
+
+    shifts = {s.counter: s for s in open_shifts()}
+    rows = [(n, shifts.get(n)) for n in counter.names()]
+    return render(request, "core/counter_pick.html", {"nav": "", "rows": rows, "current": counter.current(), "next": nxt})
+
+
+def counter_number(request, num):
+    """Short address used by the counter PC shortcut: /counter/2/ = 'This PC is Counter 2', then billing."""
+    from . import counter
+
+    resp = redirect("/billing/")
+    resp.set_cookie(counter.COOKIE, f"Counter {int(num)}", max_age=60 * 60 * 24 * 400, samesite="Lax")
+    return resp

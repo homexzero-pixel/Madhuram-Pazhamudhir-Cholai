@@ -1,0 +1,19 @@
+{% load static mpc %}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+{% if o.is_open %}<meta http-equiv="refresh" content="30">{% endif %}
+<title>Order {{ o.number }} – {{ cfg.name }}</title><link href="{% static 'css/shop.css' %}?v={{ asset_v }}" rel="stylesheet"></head><body>
+<header class="sh-head"><img src="{% static 'img/logo.webp' %}" alt="{{ cfg.name }}" class="sh-logo"><div><h1>{{ cfg.name }}</h1>{% if cfg.phone %}<p class="sh-phone">Call / WhatsApp: <b>{{ cfg.phone }}</b></p>{% endif %}</div></header>
+<main class="sh-main">
+ <div class="tr-card"><div class="sh-small">Your order · உங்கள் ஆர்டர்</div><div class="tr-num">{{ o.number }}</div>
+  <div><b>{{ o.get_mode_display }}</b> · {{ slot }}</div>{% if o.address %}<div class="sh-small">{{ o.address }}</div>{% endif %}
+  {% if o.status == "cancelled" %}<p class="tr-cancel">Cancelled: {{ o.status_note }}</p>{% else %}
+  <ol class="tr-steps">{% for s in steps %}<li class="{% if forloop.counter0 < reached %}done{% elif forloop.counter0 == reached %}now{% endif %}">{% if forloop.counter0 < reached %}✓ {% endif %}{{ step_names|get_item:s }}</li>{% endfor %}</ol>{% endif %}
+  {% if o.is_open %}<p class="sh-small">This page updates by itself every 30 seconds. Keep this link to check your order.</p>{% endif %}
+ </div>
+ <div class="tr-card"><table class="tr">{% for l in o.lines.all %}<tr><td>{{ l.name }}{% if l.name_ta %}<div class="sh-small ta">{{ l.name_ta }}</div>{% endif %}</td><td>{{ l.qty|q }} {{ l.unit }}</td><td>{{ l.amount|money }}</td></tr>{% endfor %}
+ {% if o.delivery_charge %}<tr><td>Delivery charge</td><td></td><td>{{ o.delivery_charge|money }}</td></tr>{% endif %}
+ <tr><td><b>Total (approx.)</b></td><td></td><td><b>{{ o.est_total|money }}</b></td></tr></table>
+ {% if o.sale %}<p>Billed: <b>{{ o.sale.bill_no }}</b> · {{ o.sale.total|money }}</p>{% else %}<p class="sh-small">Pay {{ o.get_pay_pref_display }} {% if o.mode == "pickup" %}at the counter{% else %}on delivery{% endif %}. Loose items are weighed when packed, so the bill may differ slightly.</p>{% endif %}
+ </div>
+ <p><a href="/shop/">← Order more</a></p>
+</main></body></html>

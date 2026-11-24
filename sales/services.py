@@ -27,7 +27,7 @@ from .models import (
     CashMovement, DraftBill, DraftLine, Payment, ReturnLine, Sale, SaleLine, SaleLineLot, SaleReturn, Shift,
 )
 
-COUNTER = "Counter 1"
+from core.counter import current as current_counter  # noqa: E402  (each PC's counter name, see core/counter.py)
 
 
 class BillingError(ValueError):
@@ -100,8 +100,13 @@ def search_items(q: str, limit=25, active_only=True):
 
 
 # --------------------------------------------------------------------------- shift
-def open_shift():
-    return Shift.objects.filter(counter=COUNTER, status=Shift.OPEN).first()
+def open_shift(counter=None):
+    """The open shift of this PC's counter (or of the counter named)."""
+    return Shift.objects.filter(counter=counter or current_counter(), status=Shift.OPEN).first()
+
+
+def open_shifts():
+    return Shift.objects.filter(status=Shift.OPEN).select_related("cashier").order_by("counter")
 
 
 def require_shift():
@@ -120,11 +125,12 @@ def start_shift(user, opening_float):
     amount = money(opening_float)
     if amount < 0:
         raise BillingError("Opening float cannot be negative.")
-    last = Shift.objects.filter(counter=COUNTER, status=Shift.CLOSED).order_by("-closed_at").first()
-    s = Shift.objects.create(counter=COUNTER, cashier=user, opening_float=amount)
+    counter = current_counter()
+    last = Shift.objects.filter(counter=counter, status=Shift.CLOSED).order_by("-closed_at").first()
+    s = Shift.objects.create(counter=counter, cashier=user, opening_float=amount)
     if last is not None and last.retained_cash is not None and last.retained_cash != amount:
         audit("float_mismatch", f"Opening float ₹{amount} differs from ₹{last.retained_cash} left by shift {last.pk}", user=user, obj=s)
-    audit("shift_open", f"Shift {s.pk} opened with ₹{amount}", user=user, obj=s)
+    audit("shift_open", f"Shift {s.pk} opened on {counter} with ₹{amount}", user=user, obj=s)
     return s
 
 
@@ -196,8 +202,8 @@ def reopen_shift(shift, user, reason):
         raise PermissionDenied("Only an owner or manager can reopen a shift.")
     if not reason.strip():
         raise BillingError("Enter the reason for reopening.")
-    if open_shift():
-        raise BillingError("Another shift is open on this counter. Close it first.")
+    if open_shift(shift.counter):
+        raise BillingError(f"Another shift is open on {shift.counter}. Close it first.")
     shift = Shift.objects.select_for_update().get(pk=shift.pk)
     audit("shift_reopen", f"Shift {shift.pk} reopened: {reason}", user=user, obj=shift,
           previous_counted=shift.counted, previous_variance=shift.variance)
@@ -571,6 +577,8 @@ def _checkout(draft_uuid, user, payments, customer_id, approver, pin):
     # Saved in the same transaction as the bill, payments and stock movements.
     audit("sale", f"Bill {bill_no} ₹{q.total} " + " + ".join(f"{r['method']} ₹{r['amount']}" for r in rows),
           user=user, obj=sale, lines=len(q.lines), change=change)
+    from shop.services import mark_billed  # an online order billed at the counter is now completed
+    mark_billed(draft.uuid, sale)
     return sale
 
 

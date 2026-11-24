@@ -63,3 +63,17 @@ def cell(value):
 def short(name):
     """'Banganapalli mango · Conventional · Loose kg' → 'Banganapalli mango' (for price boards)."""
     return str(name or "").split(" · ")[0]
+
+
+@register.filter
+def get_item(d, key):
+    try:
+        return d.get(key, "")
+    except AttributeError:
+        return ""
+
+
+@register.filter
+def split_pairs(s):
+    """'a:A,b:B' -> [('a','A'), ('b','B')] for small fixed menus in templates."""
+    return [tuple(p.split(":", 1)) for p in str(s).split(",") if ":" in p]

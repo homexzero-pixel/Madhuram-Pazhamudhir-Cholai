@@ -63,6 +63,26 @@ class StoreSettings(models.Model):
                                       help_text="The day's summary is sent here from Owner tools (10-digit mobile).")
     whatsapp_tamil = models.BooleanField("Show Tamil item names on WhatsApp bills", default=False)
 
+    # ---- counters and the online shop
+    counter_names = models.CharField("Counter names", max_length=200, default="Counter 1, Counter 2, Counter 3, Counter 4, Counter 5, Counter 6",
+                                     help_text="Comma-separated. Each billing PC picks its name once on the Counter page.")
+    public_url = models.CharField("Public web address", max_length=120, blank=True,
+                                  help_text="e.g. https://billing.yourshop.in – used for the customer QR poster and remote access.")
+    online_enabled = models.BooleanField("Online orders on", default=False)
+    online_pickup = models.BooleanField("Takeaway (customer collects)", default=True)
+    online_delivery = models.BooleanField("Home delivery", default=True)
+    online_min_order = models.DecimalField("Minimum order for delivery ₹", max_digits=8, decimal_places=2, default=300)
+    online_delivery_charge = models.DecimalField("Delivery charge ₹", max_digits=8, decimal_places=2, default=0)
+    online_free_delivery_above = models.DecimalField("Free delivery above ₹ (0 = never free)", max_digits=8, decimal_places=2, default=500)
+    online_delivery_area = models.CharField("Delivery area", max_length=200, blank=True, default="Within 3 km of the shop")
+    online_open = models.TimeField("Orders from", default="08:00")
+    online_close = models.TimeField("Orders until", default="21:00")
+    online_slot_minutes = models.PositiveSmallIntegerField("Slot length (minutes)", default=60)
+    online_lead_minutes = models.PositiveSmallIntegerField("Earliest slot after ordering (minutes)", default=60)
+    online_days_ahead = models.PositiveSmallIntegerField("Days ahead customers can choose", default=3)
+    online_note = models.CharField("Message on the online shop", max_length=200, blank=True,
+                                   default="Pay at the counter or on delivery – cash or UPI. Weighed items are billed by actual weight.")
+
     backup_keep = models.PositiveSmallIntegerField(default=30, help_text="Not used any more: backups are kept automatically (all from 2 days, daily for 60 days, monthly for 2 years).")
     backup_extra_dir = models.CharField(max_length=255, blank=True, help_text="Second backup place: your Google Drive for desktop folder, e.g. G:\\My Drive (found automatically by Setup_Backups.bat). Each backup is copied and checked into its 'Madhuram backups' folder.")
     is_demo = models.BooleanField(default=False)

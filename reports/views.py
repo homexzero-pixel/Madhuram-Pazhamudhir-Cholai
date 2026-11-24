@@ -31,17 +31,18 @@ def dashboard(request):
     from catalog.models import Item
     from inventory.models import StockLot
     from sales.models import Payment, Sale
-    from sales.services import cash_summary, open_shift
+    from sales.services import cash_summary, open_shifts
 
     today = timezone.localdate()
     cfg = StoreSettings.load()
-    shift = open_shift()
+    shifts = list(open_shifts())
+    drawers = [(s, cash_summary(s)["expected"]) for s in shifts]
     days = [today - timedelta(days=i) for i in range(13, -1, -1)]
     chart = {"labels": [d.strftime("%d %b") for d in days], "values": [float(summary(d, d)["net_after_returns"]) for d in days]}
     tenders = {m: Payment.objects.filter(sale__business_date=today, method=m).aggregate(s=Sum("amount"))["s"] or ZERO for m in ("cash", "upi", "card", "credit")}
     return render(request, "reports/dashboard.html", {
         "nav": "dashboard", "t": summary(today, today), "m": summary(today.replace(day=1), today), "tenders": tenders,
-        "shift": shift, "cash": cash_summary(shift) if shift else None, "chart": chart, "defs": DEFINITIONS,
+        "drawers": drawers, "drawer_total": sum((e for _, e in drawers), ZERO), "chart": chart, "defs": DEFINITIONS,
         "low": Item.objects.filter(is_active=True, on_hand__lte=F("reorder_level")).count(),
         "expiring": StockLot.objects.filter(qty__gt=0, status="sellable", expiry__range=(today, today + timedelta(days=cfg.near_expiry_days))).count(),
         "expired": StockLot.objects.filter(qty__gt=0, status="sellable", expiry__lt=today).count(),

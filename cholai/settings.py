@@ -27,7 +27,10 @@ else:
     SECRET_KEY = _secret_file.read_text().strip()
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
-ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
+# Which addresses may reach the server is checked by core.counter.HostCheckMiddleware: this PC, the shop network
+# (private IPs and PC names) and the owner's public address (Settings -> Online shop). Extra names can be added here.
+MPC_EXTRA_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
+ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -47,9 +50,11 @@ INSTALLED_APPS = [
     "expenses",
     "reports",
     "owner",
+    "shop",
 ]
 
 MIDDLEWARE = [
+    "core.counter.HostCheckMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -57,6 +62,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.counter.CounterMiddleware",
 ]
 
 ROOT_URLCONF = "cholai.urls"
@@ -120,7 +126,7 @@ if os.environ.get("MPC_HTTPS") == "1":
     SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS if h not in ("localhost", "127.0.0.1")]
+    CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in MPC_EXTRA_HOSTS if h not in ("localhost", "127.0.0.1")]
     SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
 CATALOGUE_CSV = BASE_DIR / "data" / "Madhuram_20000_SKUs.csv"

@@ -3,6 +3,8 @@ from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.static import serve
 
+from shop import urls as shop_urls
+
 urlpatterns = [
     path("django-admin/", admin.site.urls),
     path("", include("core.urls")),
@@ -15,6 +17,8 @@ urlpatterns = [
     path("expenses/", include("expenses.urls")),
     path("reports/", include("reports.urls")),
     path("owner/", include("owner.urls")),
+    path("shop/", include(shop_urls.public)),
+    path("orders/", include(shop_urls.staff)),
     # Static files are served by the app itself: it runs on one shop PC without a separate web server.
     re_path(r"^static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
 ]

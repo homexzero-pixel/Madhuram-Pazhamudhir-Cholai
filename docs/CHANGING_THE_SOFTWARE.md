@@ -14,7 +14,7 @@ one of the most common languages, so any Python developer can work on it.
 
 Whoever changes it should:
 1. Work on a copy: a new **branch** in GitHub, never directly on the shop PC.
-2. Run the automated checks: `MPC_MODE=test python manage.py test` (50 tests) and `python scripts/run_acceptance.py`.
+2. Run the automated checks: `MPC_MODE=test python manage.py test` (58 tests) and `python scripts/run_acceptance.py`.
 3. Try it with the practice data (`Try_Demo.bat`) before the shop uses it.
 4. Give you a new `Madhuram_Store_System.zip`.
 
