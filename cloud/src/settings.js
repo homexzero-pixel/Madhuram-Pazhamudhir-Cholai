@@ -24,7 +24,26 @@ const DEFAULTS = {
   scale_value_type: 'weight',
   scale_value_decimals: '3',
   scale_check_digit: '1',
+  credit_note_prefix: 'MCN',
+  near_expiry_days: '7',
+  whatsapp_open: 'app',            // app = WhatsApp program on this PC/phone, web = WhatsApp Web in the browser
+  whatsapp_bill: '1',              // offer "WhatsApp bill" after each sale (the paper bill always prints)
+  upi_id: '',
+  online_enabled: '0',
+  online_pickup: '1',
+  online_delivery: '1',
+  online_open: '08:00',
+  online_close: '21:00',
+  online_slot_minutes: '60',
+  online_lead_minutes: '60',
+  online_days_ahead: '2',
+  online_min_order: '200',
+  online_delivery_charge: '30',
+  online_free_delivery_above: '500',
+  online_area: '',
 };
+const SHOP_PUBLIC = ['name', 'name_ta', 'tagline', 'address', 'phone', 'upi_id', 'online_enabled', 'online_pickup', 'online_delivery', 'online_open',
+  'online_close', 'online_min_order', 'online_delivery_charge', 'online_free_delivery_above', 'online_area'];
 const PUBLIC = Object.keys(DEFAULTS);       // safe to send to every logged-in screen
 
 let cache = null;
@@ -55,4 +74,9 @@ async function publicSettings() {
 
 const counters = (s) => s.counters.split(',').map((c) => c.trim()).filter(Boolean);
 
-module.exports = { DEFAULTS, load, save, publicSettings, counters, reset: () => { cache = null; } };
+async function shopSettings() {
+  const s = await load();
+  return Object.fromEntries(SHOP_PUBLIC.map((k) => [k, s[k]]));
+}
+
+module.exports = { shopSettings, DEFAULTS, load, save, publicSettings, counters, reset: () => { cache = null; } };

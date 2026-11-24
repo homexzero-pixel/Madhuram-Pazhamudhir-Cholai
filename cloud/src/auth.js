@@ -8,12 +8,13 @@ const { nowIST, UserError } = require('./money');
 const scrypt = promisify(crypto.scrypt);
 
 const PERMISSIONS = ['bill', 'price_override', 'discount_approve', 'cancel_bill', 'stock_view', 'products', 'receive',
-  'cash', 'reopen_shift', 'reports', 'settings', 'users', 'backup', 'customers'];
+  'cash', 'reopen_shift', 'reports', 'settings', 'users', 'backup', 'customers', 'refund', 'credit_sale', 'purchase', 'supplier_pay',
+  'orders'];
 const ROLE_PERMS = {
   owner: new Set(PERMISSIONS),
   manager: new Set(PERMISSIONS.filter((p) => !['settings', 'users'].includes(p))),
-  cashier: new Set(['bill', 'cancel_bill', 'cash', 'stock_view', 'customers']),
-  purchaser: new Set(['stock_view', 'products', 'receive']),
+  cashier: new Set(['bill', 'cancel_bill', 'cash', 'stock_view', 'customers', 'orders']),
+  purchaser: new Set(['stock_view', 'products', 'receive', 'purchase']),
   auditor: new Set(['stock_view', 'reports']),
 };
 const ROLES = Object.keys(ROLE_PERMS);

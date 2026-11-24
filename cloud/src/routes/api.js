@@ -154,4 +154,6 @@ r.post('/import-shop', need('settings'), express.raw({ type: 'application/octet-
   ok(res, await admin.importFromShop(req.body, req.user));
 }));
 
+r.use(require('./more').router);
+
 module.exports = r;

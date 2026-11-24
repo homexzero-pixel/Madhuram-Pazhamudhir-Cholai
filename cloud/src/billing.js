@@ -5,7 +5,8 @@ const catalog = require('./catalog');
 const { approvedBy, audit, can } = require('./auth');
 const { paise, milli, rateBp, rs, qtyDb, qtyStr, lineAmount, splitTax, financialYear, nowIST, todayIST, UserError } = require('./money');
 
-const METHODS = ['cash', 'upi', 'card'];
+const METHODS = ['cash', 'upi', 'card', 'credit'];
+const DELIVERY_SKU = 'DELIVERY';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function cleanCounter(name) {
@@ -41,12 +42,17 @@ async function cashSummary(shiftId, q = db.query) {
   const cashSales = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='cash'`, [shiftId]);
   const upi = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='upi'`, [shiftId]);
   const card = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='card'`, [shiftId]);
-  const cashIn = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='in'`, [shiftId]);
-  const cashOut = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind IN ('out','deposit')`, [shiftId]);
+  const credit = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='credit'`, [shiftId]);
+  const cashIn = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind IN ('in','udhaar')`, [shiftId]);
+  const udhaar = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='udhaar'`, [shiftId]);
+  const refunds = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='refund'`, [shiftId]);
+  const supplier = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='supplier'`, [shiftId]);
+  const cashOut = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind IN ('out','deposit','refund','supplier')`, [shiftId]);
   const bills = (await q('SELECT COUNT(*) n, SUM(total) t FROM sales WHERE shift_id=?', [shiftId]))[0];
   const float = paise(shift.opening_float);
   const expected = float + cashSales + cashIn - cashOut;
   return { float: rs(float), cash_sales: rs(cashSales), upi: rs(upi), card: rs(card), cash_in: rs(cashIn), cash_out: rs(cashOut),
+    credit: rs(credit), udhaar_received: rs(udhaar), refunds: rs(refunds), supplier_paid: rs(supplier),
     expected: rs(expected), bills: Number(bills.n), sales_total: rs(paise(bills.t || '0')) };
 }
 
@@ -109,6 +115,7 @@ async function checkout(user, body) {
     if (l.rate !== undefined && l.rate !== null && l.rate !== '') {
       p.rate = paise(l.rate, 'price');
       if (p.rate < 0) throw new UserError('Price cannot be negative.');
+      if (l.delivery) { p.delivery = true; prepared.push(p); continue; }   // delivery charge of an online order: checked below
       p.approver = await approvedBy(user, 'price_override', l.approval_price || l.approval);
       if (!p.approver) throw new UserError('A manager must approve the price change.', 403);
     }
@@ -120,6 +127,13 @@ async function checkout(user, body) {
       p.approver = p.approver || a;
     }
     prepared.push(p);
+  }
+
+  const wantsCredit = (body.payments || []).some((x) => x && x.method === 'credit' && paise(x.amount));
+  let creditBy = null;
+  if (wantsCredit) {
+    creditBy = await approvedBy(user, 'credit_sale', body.approval_credit);
+    if (!creditBy) throw new UserError('A manager must approve selling on credit (udhaar).', 403);
   }
 
   let saleId;
@@ -143,13 +157,25 @@ async function checkout(user, body) {
           [String(cu.name || 'Customer').trim().slice(0, 100) || 'Customer', phone, now])).insertId;
       }
 
+      // an online order being billed: it must still be open and not billed yet
+      let order = null;
+      if (body.order_id) {
+        order = await q.one('SELECT * FROM online_orders WHERE id=? FOR UPDATE', [body.order_id]);
+        if (!order) throw new UserError('Online order not found.');
+        if (order.sale_id) throw new UserError(`Online order ${order.number} is already billed.`);
+        if (order.status === 'cancelled') throw new UserError(`Online order ${order.number} was cancelled.`);
+      }
+
       const calc = [];
       let gross = 0;
       let discount = 0;
       for (const p of prepared) {
         const item = await q.one('SELECT * FROM items WHERE id=?', [p.item_id]);
         if (!item) throw new UserError('A product on the bill no longer exists. Remove it and scan again.');
-        if (!item.active) throw new UserError(`${item.name} is not active for sale.`);
+        if (!item.active && !p.delivery) throw new UserError(`${item.name} is not active for sale.`);
+        if (p.delivery && (item.sku !== DELIVERY_SKU || !order || paise(order.delivery_charge) !== p.rate || p.qty !== 1000)) {
+          throw new UserError('The delivery charge must match the online order.');
+        }
         if (item.unit === 'pcs' && p.qty % 1000) throw new UserError(`${item.name} is sold by the piece: use a whole number.`);
         if (cfg.require_tax_setup === '1' && item.tax_class === 'unset') throw new UserError(`${item.name}: GST treatment not set.`);
         const list = paise(item.price);
@@ -159,7 +185,7 @@ async function checkout(user, body) {
         if (p.disc > g) throw new UserError(`Discount on ${item.name} is more than its amount.`);
         const net = g - p.disc;
         const bp = item.tax_class === 'taxable' ? rateBp(item.gst_rate) : 0;
-        calc.push({ item, p, list: list ?? rate, rate, gross: g, net, bp, tax: splitTax(net, bp) });
+        calc.push({ item, p, list: p.delivery ? rate : list ?? rate, rate, gross: g, net, bp, tax: splitTax(net, bp) });
         gross += g;
         discount += p.disc;
       }
@@ -176,6 +202,7 @@ async function checkout(user, body) {
         if (!METHODS.includes(x.method)) throw new UserError('Unknown payment method.');
         if (x.amount < 0) throw new UserError('Payment cannot be negative.');
         if (x.method === 'cash' && x.tendered !== null && x.tendered < x.amount) throw new UserError('Cash given is less than the cash amount.');
+        if (x.method === 'credit' && !customerId) throw new UserError('Choose the customer (F7) to sell on credit.');
       }
       const paid = pays.reduce((s, x) => s + x.amount, 0);
       if (paid !== total) throw new UserError(`Payment ₹${rs(paid)} does not match the bill total ₹${rs(total)}.`);
@@ -188,12 +215,12 @@ async function checkout(user, body) {
       if (billNo.length > 20) throw new UserError('Invoice prefix too long.');
 
       const sale = await q(`INSERT INTO sales (bill_no, client_uuid, business_date, created_at, shift_id, counter, cashier_id, customer_id,
-        gross, discount, total) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-        [billNo, uuid, bdate, now, shift.id, counter, user.id, customerId, rs(gross), rs(discount), rs(total)]);
+        gross, discount, total, order_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [billNo, uuid, bdate, now, shift.id, counter, user.id, customerId, rs(gross), rs(discount), rs(total), order ? order.id : null]);
       const id = sale.insertId;
 
       for (const c of calc) {
-        const taken = await catalog.issue(q, c.item, c.p.qty, { kind: 'sale', ref: billNo, user });
+        const taken = c.item.sku === DELIVERY_SKU ? [] : await catalog.issue(q, c.item, c.p.qty, { kind: 'sale', ref: billNo, user });
         const cost = taken.reduce((s, t) => s + Math.round(Number(t.unit_cost) * t.qty / 10), 0);   // paise
         const line = await q(`INSERT INTO sale_lines (sale_id, item_id, sku, name, name_ta, unit, qty, list_price, rate, mrp, gross, discount,
           discount_note, net, gst_rate, taxable, cgst, sgst, cost, approved_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -216,6 +243,14 @@ async function checkout(user, body) {
         const change = x.method === 'cash' && x.tendered !== null ? x.tendered - x.amount : 0;
         await q('INSERT INTO payments (sale_id, method, amount, tendered, change_amt, reference) VALUES (?,?,?,?,?,?)',
           [id, x.method, rs(x.amount), x.tendered === null ? null : rs(x.tendered), rs(change), x.reference]);
+        if (x.method === 'credit') {
+          await q('INSERT INTO customer_ledger (customer_id, at, kind, amount, ref, user_id, shift_id) VALUES (?,?,?,?,?,?,?)',
+            [customerId, now, 'sale', rs(x.amount), billNo, user.id, shift.id]);
+          await audit({ user_id: user.id, approver_id: creditBy, action: 'credit_sale', value: rs(x.amount), summary: `${billNo}: ₹${rs(x.amount)} on credit` }, q);
+        }
+      }
+      if (order) {
+        await q("UPDATE online_orders SET sale_id=?, status='done', updated_at=? WHERE id=?", [id, now, order.id]);
       }
       return id;
     });
@@ -244,8 +279,9 @@ async function receipt(saleId) {
   return {
     id: s.id, bill_no: s.bill_no, uuid: s.client_uuid, at: s.created_at, counter: s.counter, cashier: s.cashier,
     customer: s.customer_id ? { name: s.customer_name, phone: s.customer_phone } : null,
-    gross: s.gross, discount: s.discount, total: s.total, print_count: s.print_count,
-    lines: lines.map((l) => ({ name: l.name, name_ta: l.name_ta, unit: l.unit, qty: qtyStr(milli(l.qty)), rate: l.rate, mrp: l.mrp,
+    gross: s.gross, discount: s.discount, total: s.total, print_count: s.print_count, order_id: s.order_id,
+    returned: (await db.one('SELECT SUM(total) t FROM sale_returns WHERE sale_id=?', [saleId])).t || null,
+    lines: lines.map((l) => ({ id: l.id, returned_qty: qtyStr(milli(l.returned_qty)), name: l.name, name_ta: l.name_ta, unit: l.unit, qty: qtyStr(milli(l.qty)), rate: l.rate, mrp: l.mrp,
       gross: l.gross, discount: l.discount, net: l.net, gst_rate: l.gst_rate })),
     payments: pays,
     gst: Object.values(gst).map((g) => ({ rate: g.rate, taxable: rs(g.taxable), cgst: rs(g.cgst), sgst: rs(g.sgst) })),
@@ -276,9 +312,10 @@ async function findCustomers(text) {
   text = String(text || '').trim().slice(0, 40);
   if (!text) return [];
   const digits = text.replace(/\D/g, '');
-  return db.query(`SELECT id, name, phone, points FROM customers WHERE name LIKE ? ${digits.length >= 3 ? 'OR phone LIKE ?' : ''}
+  return db.query(`SELECT id, name, phone, points, credit_limit, (SELECT COALESCE(SUM(amount),0) FROM customer_ledger WHERE customer_id=customers.id) balance
+    FROM customers WHERE name LIKE ? ${digits.length >= 3 ? 'OR phone LIKE ?' : ''}
     ORDER BY name LIMIT 15`, digits.length >= 3 ? [`%${text}%`, `%${digits}%`] : [`%${text}%`]);
 }
 
 module.exports = { checkout, receipt, markPrinted, recentBills, openShift, startShift, closeShift, cashSummary, cashMove, findCustomers,
-  cleanCounter, METHODS };
+  cleanCounter, METHODS, DELIVERY_SKU };

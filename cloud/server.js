@@ -33,6 +33,7 @@ function createApp() {
     return next();
   });
   app.use('/api', express.json({ limit: '2mb' }), api);
+  app.use(require('./src/routes/more').cron);
 
   // Windows shortcut for a counter PC: opens the store as its own window and prints bills without the print dialog.
   app.get('/counter-shortcut.bat', (req, res) => {
@@ -64,6 +65,10 @@ function createApp() {
     res.sendFile(path.join(pub, 'sw.js'));
   });
   app.use(express.static(pub, { index: false, maxAge: '1h' }));
+  app.get(['/shop', '/shop/'], (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(path.join(pub, 'shop.html'));
+  });
   app.get(['/', '/index.html'], (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(pub, 'index.html'));
@@ -86,6 +91,7 @@ function createApp() {
 async function main() {
   await db.migrate();
   const app = createApp();
+  require('./src/backups').schedule();
   app.listen(config.port, () => console.log(`Madhuram cloud running on port ${config.port}`));
 }
 

@@ -154,6 +154,7 @@ function onScan(e) {
 }
 
 async function unknownBarcode(code) {
+  posEvent('unknown_barcode', 0, `Unknown barcode ${code}`);
   const d = modal(`<h3>New barcode: ${esc(code)}</h3><p>This product is not in the list yet.</p>
     <div class="actions"><button data-close>Cancel</button><button id="link">Search & link to a product</button><button class="primary" id="add" autofocus>Add new product</button></div>`);
   $('#add', d).addEventListener('click', async () => {
@@ -222,11 +223,17 @@ function weightDialog(it, lineIndex = null) {
 // ------------------------------------------------------------------ line changes
 function changeQty() {
   const l = POS.bill.lines[POS.sel];
-  if (!l) return;
+  if (!l || l.delivery) return;
   weightDialog(POS.byId.get(l.id) || { name: 'Item', price: lineCalc(l).rate, unit: 'pcs' }, POS.sel);
+}
+function posEvent(action, value, summary) {
+  api('/pos/event', { method: 'POST', body: { action, value: Money.rs(value || 0), summary, counter: myCounter() } }).catch(() => {});
 }
 function removeLine() {
   if (POS.sel < 0 || !POS.bill.lines[POS.sel]) return;
+  const gone = POS.bill.lines[POS.sel];
+  const c = lineCalc(gone);
+  posEvent('line_remove', c.net, `Removed ${c.it ? c.it.name : gone.name || 'item'} ${Money.qty(gone.qty)} (${inr(c.net)})`);
   POS.bill.lines.splice(POS.sel, 1);
   POS.sel = Math.min(POS.sel, POS.bill.lines.length - 1);
   saveBill(); renderBill();
@@ -277,11 +284,11 @@ function customerDialog() {
     clearTimeout(t);
     t = setTimeout(async () => {
       const { customers } = await api(`/customers?q=${encodeURIComponent(e.target.value)}`);
-      $('#cr', d).innerHTML = customers.map((c) => `<div data-id="${c.id}"><span><b>${esc(c.name)}</b> ${esc(c.phone || '')}</span></div>`).join('') ||
+      $('#cr', d).innerHTML = customers.map((c) => `<div data-id="${c.id}"><span><b>${esc(c.name)}</b> ${esc(c.phone || '')}</span>${Number(c.balance) > 0 ? `<span class="bad">owes ${inr(c.balance)}</span>` : ''}</div>`).join('') ||
         '<div class="muted">No match. Add as a new customer below.</div>';
       $$('#cr div[data-id]', d).forEach((row) => row.addEventListener('click', () => {
         const c = customers.find((x) => x.id === Number(row.dataset.id));
-        POS.bill.customer = { id: c.id, name: c.name, phone: c.phone };
+        POS.bill.customer = { id: c.id, name: c.name, phone: c.phone, balance: c.balance };
         saveBill(); renderBill(); d.close();
       }));
     }, 250);
@@ -321,6 +328,8 @@ function holdDialog() {
 function cancelBill() {
   if (!POS.bill.lines.length) return;
   if (!confirm('Cancel this bill? All items will be removed.')) return;
+  const t = totals();
+  posEvent('bill_cancel', t.total, `Bill cancelled with ${t.items} items (${inr(t.total)})${POS.bill.order_no ? ` – online order ${POS.bill.order_no} stays open` : ''}`);
   POS.bill = newBill(); POS.sel = -1; saveBill(); renderBill();
 }
 
@@ -332,6 +341,8 @@ function payDialog() {
     <form><div class="grid3"><div><label>UPI ₹</label><input name="upi" inputmode="decimal"></div>
       <div><label>Card ₹</label><input name="card" inputmode="decimal"></div>
       <div><label>UPI / card ref.</label><input name="ref"></div></div>
+      ${POS.bill.customer ? `<label>Credit / udhaar ₹ (${esc(POS.bill.customer.name)} pays later${POS.bill.customer.balance && Number(POS.bill.customer.balance) ? `, already owes ${inr(POS.bill.customer.balance)}` : ''})</label>
+        <input name="credit" inputmode="decimal">` : '<p class="small muted">For credit (udhaar), choose the customer first (F7).</p>'}
       <label>Cash given by customer ₹</label><input name="cash" inputmode="decimal" autofocus>
       <div class="row" style="margin-top:8px">${[50, 100, 200, 500, 2000].map((v) => `<button type="button" data-v="${v}">${v}</button>`).join('')}</div>
       <p>Cash to take: <b id="cashdue"></b> · Change: <span class="change" id="chg">₹0.00</span></p>
@@ -340,25 +351,32 @@ function payDialog() {
   const calc = () => {
     const upi = Money.paise(f.upi.value || '0') || 0;
     const card = Money.paise(f.card.value || '0') || 0;
-    const due = total - upi - card;
+    const credit = f.credit ? Money.paise(f.credit.value || '0') || 0 : 0;
+    const due = total - upi - card - credit;
     const given = f.cash.value ? Money.paise(f.cash.value) : due;
     $('#cashdue', d).textContent = inr(Math.max(0, due));
     $('#chg', d).textContent = inr(Math.max(0, (given ?? 0) - Math.max(0, due)));
-    return { upi, card, due, given };
+    return { upi, card, credit, due, given };
   };
-  ['upi', 'card', 'cash'].forEach((n) => f[n].addEventListener('input', calc));
+  ['upi', 'card', 'cash', 'credit'].forEach((n) => f[n] && f[n].addEventListener('input', calc));
   $$('[data-v]', d).forEach((b) => b.addEventListener('click', () => { f.cash.value = b.dataset.v; calc(); f.cash.focus(); }));
   calc();
-  f.addEventListener('submit', (e) => {
+  f.addEventListener('submit', async (e) => {
     e.preventDefault();
     const c = calc();
-    if (c.due < 0) { toast('UPI + card is more than the bill.', true); return; }
+    if (c.due < 0) { toast('UPI + card + credit is more than the bill.', true); return; }
     if (c.given === null || c.given < c.due) { toast('Cash given is less than the cash to take.', true); return; }
     const pays = [];
     if (c.due > 0) pays.push({ method: 'cash', amount: Money.rs(c.due), tendered: Money.rs(c.given) });
     if (c.upi) pays.push({ method: 'upi', amount: Money.rs(c.upi), reference: f.ref.value });
     if (c.card) pays.push({ method: 'card', amount: Money.rs(c.card), reference: f.ref.value });
+    if (c.credit) pays.push({ method: 'credit', amount: Money.rs(c.credit) });
     d.close('ok');
+    if (c.credit && !can('credit_sale') && !POS.bill.approval_credit) {
+      const tok = await managerApproval('credit_sale', `${inr(c.credit)} on credit for ${POS.bill.customer.name}`);
+      if (!tok) return;
+      POS.bill.approval_credit = tok; saveBill();
+    }
     complete(pays);
   });
 }
@@ -371,8 +389,8 @@ async function complete(payments) {
   $('#status').textContent = 'Saving bill…';
   try {
     const body = {
-      uuid: POS.bill.uuid, counter: myCounter(), customer: POS.bill.customer,
-      lines: POS.bill.lines.map((l) => ({ id: l.id, qty: Money.qty(l.qty), rate: l.rate == null ? undefined : Money.rs(l.rate),
+      uuid: POS.bill.uuid, counter: myCounter(), customer: POS.bill.customer, order_id: POS.bill.order_id, approval_credit: POS.bill.approval_credit,
+      lines: POS.bill.lines.map((l) => ({ id: l.id, qty: Money.qty(l.qty), rate: l.rate == null ? undefined : Money.rs(l.rate), delivery: l.delivery || undefined,
         disc: l.disc ? Money.rs(l.disc) : undefined, note: l.note, approval_price: l.approval_price, approval_disc: l.approval_disc })),
       payments,
     };
@@ -383,6 +401,9 @@ async function complete(payments) {
     const cash = bill.payments.find((p) => p.method === 'cash');
     $('#status').innerHTML = `<b>${esc(bill.bill_no)}</b> saved · ${inr(bill.total)}${cash && Number(cash.change_amt) ? ` · <span class="change">Change ${inr(cash.change_amt)}</span>` : ''}`;
     printBill(bill);
+    if (bill.customer && bill.customer.phone && App.settings.whatsapp_bill === '1') {
+      $('#status').insertAdjacentHTML('beforeend', ` <a class="btn" target="_blank" rel="noopener" href="${esc(waLink(bill.customer.phone, billText(bill)))}">WhatsApp bill</a>`);
+    }
     loadCatalogue().catch(() => {});
   } catch (err) {
     $('#status').textContent = '';
@@ -435,7 +456,7 @@ function renderBill() {
   const b = POS.bill;
   box.innerHTML = b.lines.length ? `<table>${b.lines.map((l, i) => {
     const c = lineCalc(l);
-    const name = c.it ? c.it.name : '(product removed – delete this line)';
+    const name = l.delivery ? l.name : c.it ? c.it.name : '(product removed – delete this line)';
     return `<tr data-i="${i}" class="click ${i === POS.sel ? 'sel' : ''}"><td><div class="nm">${esc(name)}</div>
       <div class="sub">${Money.qty(l.qty)} ${c.it && c.it.unit === 'kg' ? 'kg' : ''} × ${inr(c.rate)}${l.rate != null ? ' (price changed)' : ''}
       ${l.disc ? ` · discount ${inr(l.disc)}` : ''}</div></td><td class="r"><b>${inr(c.net)}</b></td></tr>`;
@@ -445,7 +466,9 @@ function renderBill() {
   const t = totals();
   $('#total').textContent = inr(t.total);
   $('#count').textContent = `${t.items} item${t.items === 1 ? '' : 's'}${t.saved ? ` · saves ${inr(t.saved)} on MRP` : ''}`;
-  $('#cust').innerHTML = b.customer ? `Customer: <b>${esc(b.customer.name)}</b> ${esc(b.customer.phone || '')}` : '<span class="muted">No customer (F7)</span>';
+  $('#cust').innerHTML = (b.order_no ? `<span class="pill">Online order ${esc(b.order_no)}</span> ` : '') +
+    (b.customer ? `Customer: <b>${esc(b.customer.name)}</b> ${esc(b.customer.phone || '')}${Number(b.customer.balance) > 0 ? ` <span class="bad small">owes ${inr(b.customer.balance)}</span>` : ''}`
+      : '<span class="muted">No customer (F7)</span>');
 }
 
 function renderShift() {

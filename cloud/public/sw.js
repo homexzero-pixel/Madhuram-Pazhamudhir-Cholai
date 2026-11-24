@@ -1,7 +1,7 @@
 // Madhuram cloud – service worker. Makes the app installable and opens the screens fast.
 // Data (prices, bills, stock) always comes from the server; only the program files are kept on the PC.
-const VERSION = 'mpc-2026.11.24-1';
-const SHELL = ['/', '/app.css', '/app.js', '/pos.js', '/manifest.webmanifest', '/img/logo.webp', '/img/icon-192.png'];
+const VERSION = 'mpc-2026.11.25-2';
+const SHELL = ['/', '/app.css', '/app.js', '/pos.js', '/more.js', '/manifest.webmanifest', '/img/logo.webp', '/img/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

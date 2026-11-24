@@ -70,7 +70,7 @@ async function dashboard(date) {
     WHERE x.business_date=? GROUP BY p.method`, [date]);
   const counters = await db.query(`SELECT counter, COUNT(*) bills, SUM(total) total FROM sales WHERE business_date=? GROUP BY counter ORDER BY counter`, [date]);
   const top = await db.query(`SELECT l.name, l.unit, SUM(l.qty) qty, SUM(l.net) amount FROM sale_lines l JOIN sales x ON x.id=l.sale_id
-    WHERE x.business_date=? GROUP BY l.item_id, l.name, l.unit ORDER BY amount DESC LIMIT 10`, [date]);
+    WHERE x.business_date=? AND l.sku <> 'DELIVERY' GROUP BY l.item_id, l.name, l.unit ORDER BY amount DESC LIMIT 10`, [date]);
   const week = await db.query(`SELECT business_date d, COUNT(*) bills, SUM(total) total FROM sales WHERE business_date > DATE_SUB(?, INTERVAL 7 DAY)
     AND business_date <= ? GROUP BY business_date ORDER BY business_date`, [date, date]);
   const shifts = await db.query(`SELECT s.id, s.counter, s.status, s.opened_at, s.variance, u.name cashier FROM shifts s JOIN users u ON u.id=s.cashier_id
@@ -94,15 +94,15 @@ async function auditLog({ limit = 200 }) {
 // ------------------------------------------------------------------ backup: the whole database as one .sql.gz file
 // It can be loaded back with Hostinger's phpMyAdmin (Import) into an empty database.
 const TABLES = ['settings', 'users', 'categories', 'items', 'barcodes', 'lots', 'stock_moves', 'customers', 'shifts', 'cash_moves',
-  'sequences', 'sales', 'sale_lines', 'sale_lot_allocs', 'payments', 'audit'];
+  'sequences', 'sales', 'sale_lines', 'sale_lot_allocs', 'payments', 'audit', 'suppliers', 'purchases', 'purchase_lines', 'supplier_payments',
+  'sale_returns', 'return_lines', 'customer_ledger', 'online_orders', 'online_order_lines'];
 
-async function backup(res, user) {
+// Write the whole database as gzip SQL to `out` (an HTTP response or a file). Resolves when everything is written.
+async function dumpTo(out) {
   const pool = db.getPool();
-  const name = `madhuram_cloud_${nowIST().replace(/\D/g, '').slice(0, 12)}.sql.gz`;
-  res.setHeader('Content-Type', 'application/gzip');
-  res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
   const gz = zlib.createGzip();
-  gz.pipe(res);
+  gz.pipe(out);
+  const finished = new Promise((ok, fail) => { out.on('finish', ok); out.on('close', ok); out.on('error', fail); gz.on('error', fail); });
   const write = (s) => new Promise((ok) => (gz.write(s) ? ok() : gz.once('drain', ok)));
   await write(`-- Madhuram cloud backup ${nowIST()} (India time)\nSET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n`);
   const conn = await pool.getConnection();
@@ -128,6 +128,14 @@ async function backup(res, user) {
   }
   await write('SET FOREIGN_KEY_CHECKS=1;\n');
   gz.end();
+  await finished;
+}
+
+async function backup(res, user) {
+  const name = `madhuram_cloud_${nowIST().replace(/\D/g, '').slice(0, 12)}.sql.gz`;
+  res.setHeader('Content-Type', 'application/gzip');
+  res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+  await dumpTo(res);
   await audit({ user_id: user.id, action: 'backup', summary: `Backup downloaded: ${name}` });
 }
 
@@ -208,4 +216,4 @@ async function importFromShop(buffer, user) {
   return counts;
 }
 
-module.exports = { needsSetup, firstSetup, listUsers, saveUser, dashboard, auditLog, backup, importFromShop, TABLES };
+module.exports = { needsSetup, firstSetup, listUsers, saveUser, dashboard, auditLog, backup, dumpTo, importFromShop, TABLES };

@@ -51,10 +51,23 @@ async function tx(fn) {
   }
 }
 
+// Columns added after a table first existed (MySQL 8 has no "ADD COLUMN IF NOT EXISTS", so check first).
+const COLUMNS = [
+  ['items', 'supplier_id', 'INT NULL'],
+  ['customers', 'address', "VARCHAR(250) NOT NULL DEFAULT ''"],
+  ['customers', 'credit_limit', 'DECIMAL(12,2) NOT NULL DEFAULT 0'],
+  ['sale_lines', 'returned_qty', 'DECIMAL(12,3) NOT NULL DEFAULT 0'],
+  ['sales', 'order_id', 'INT NULL'],
+];
+
 async function migrate() {
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8').replace(/--[^\n]*/g, '');
   for (const stmt of sql.split(';').map((s) => s.trim()).filter(Boolean)) {
     await query(stmt);
+  }
+  for (const [table, col, ddl] of COLUMNS) {
+    const have = await query('SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [table, col]);
+    if (!have.length) await query(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${ddl}`);
   }
 }
 

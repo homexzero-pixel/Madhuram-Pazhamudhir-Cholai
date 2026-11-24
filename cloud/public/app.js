@@ -1,7 +1,7 @@
 /* Madhuram cloud – screens other than billing (billing is in pos.js). Plain JavaScript, no build step. */
 'use strict';
 
-const App = { me: null, perms: new Set(), settings: {}, counters: [], version: '', installEvent: null, views: {} };
+const App = { me: null, perms: new Set(), settings: {}, counters: [], version: '', installEvent: null, views: {}, afterFrame: [] };
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -166,8 +166,10 @@ function pickCounter(after) {
 
 // ------------------------------------------------------------------ frame, menu and routing
 const MENU = [
-  ['bill', 'Billing', 'bill'], ['bills', 'Bills', 'bill'], ['cash', 'Cash closing', 'cash'], ['products', 'Products & stock', 'stock_view'],
-  ['dashboard', 'Owner dashboard', 'reports'], ['staff', 'Staff logins', 'users'], ['settings', 'Settings & backup', 'settings'],
+  ['bill', 'Billing', 'bill'], ['orders', 'Online orders', 'orders'], ['bills', 'Bills', 'bill'], ['returns', 'Returns', 'bill'],
+  ['cash', 'Cash closing', 'cash'], ['customers', 'Customers & credit', 'customers'], ['products', 'Products & stock', 'stock_view'],
+  ['purchases', 'Purchases & suppliers', 'purchase'], ['dashboard', 'Owner dashboard', 'reports'], ['owner', 'Owner tools', 'reports'],
+  ['reports', 'Reports', 'reports'], ['staff', 'Staff logins', 'users'], ['settings', 'Settings & backup', 'settings'],
   ['install', 'Install on this PC', null],
 ];
 
@@ -190,6 +192,7 @@ function frame() {
   if (App.installEvent) $$('.install-btn').forEach((b) => b.classList.add('show'));
   $$('.install-btn').forEach((b) => b.addEventListener('click', installApp));
   $('#menu-btn').addEventListener('click', () => $('#side').classList.toggle('open'));
+  App.afterFrame.forEach((fn) => fn());
   $('#logout').addEventListener('click', async (e) => {
     e.preventDefault();
     await api('/logout', { method: 'POST' }).catch(() => {});
@@ -395,8 +398,11 @@ App.views.cash = async (main) => {
       <div class="card stat"><div class="l">Cash expected in drawer</div><div class="v">${inr(summary.expected)}</div></div></div>
       <div class="grid2"><div class="card"><h2 style="margin-top:0">Shift of ${esc(shift.cashier)} · opened ${esc(shift.opened_at.slice(0, 16))}</h2>
         <table>${row('Opening cash', summary.float)}${row('+ Cash sales', summary.cash_sales)}${row('+ Cash in', summary.cash_in)}
-        ${row('− Cash out', summary.cash_out)}<tr><td><b>Cash expected</b></td><td class="r"><b>${inr(summary.expected)}</b></td></tr>
-        ${row('UPI (not in drawer)', summary.upi, 'muted')}${row('Card (not in drawer)', summary.card, 'muted')}</table>
+        ${Number(summary.udhaar_received) ? row('&nbsp;&nbsp;(of which credit paid back)', summary.udhaar_received, 'muted') : ''}
+        ${row('− Cash out', summary.cash_out)}${Number(summary.refunds) ? row('&nbsp;&nbsp;(of which refunds)', summary.refunds, 'muted') : ''}
+        ${Number(summary.supplier_paid) ? row('&nbsp;&nbsp;(of which paid to suppliers)', summary.supplier_paid, 'muted') : ''}<tr><td><b>Cash expected</b></td><td class="r"><b>${inr(summary.expected)}</b></td></tr>
+        ${row('UPI (not in drawer)', summary.upi, 'muted')}${row('Card (not in drawer)', summary.card, 'muted')}
+        ${Number(summary.credit) ? row('Credit / udhaar given', summary.credit, 'muted') : ''}</table>
         <h2>Cash in / out</h2><form id="move" class="row"><select name="kind" style="max-width:150px"><option value="out">Cash out</option>
           <option value="in">Cash in</option><option value="deposit">To owner / bank</option></select>
           <input name="amount" inputmode="decimal" placeholder="₹" style="max-width:110px" required>
@@ -642,6 +648,24 @@ App.views.settings = async (main) => {
       <h2>Counters</h2>${f('counters', 'Counter names (comma between)')}
       <label class="row" style="font-weight:400"><input type="checkbox" name="require_tax_setup" style="width:auto" ${s.require_tax_setup === '1' ? 'checked' : ''}>
         Stop billing products whose GST type is "Not set yet" (turn on after the accountant checks the GST data)</label>
+      <h2>WhatsApp and UPI</h2>
+      <div class="grid3"><div><label>Open WhatsApp in</label><select name="whatsapp_open"><option value="app">WhatsApp program (PC / phone)</option>
+        <option value="web" ${s.whatsapp_open === 'web' ? 'selected' : ''}>WhatsApp Web (browser)</option></select></div>
+        ${f('upi_id', 'Shop UPI ID (shown to online customers)', 'placeholder="shopname@okaxis"')}
+        <div><label>&nbsp;</label><label class="row" style="font-weight:400"><input type="checkbox" name="whatsapp_bill" style="width:auto" ${s.whatsapp_bill === '1' ? 'checked' : ''}>
+        Offer "WhatsApp bill" after each sale</label></div></div>
+      <p class="small muted">WhatsApp bills are free: they open in the shop's own WhatsApp with the message ready; press Send. The paper bill always prints.</p>
+      <h2>Returns and expiry</h2>
+      <div class="grid3">${f('credit_note_prefix', 'Return (credit note) number prefix', 'maxlength="6"')}${f('near_expiry_days', 'Warn when stock expires within (days)')}<div></div></div>
+      <h2>Online orders (customers order from their phone)</h2>
+      <label class="row" style="font-weight:400"><input type="checkbox" name="online_enabled" style="width:auto" ${s.online_enabled === '1' ? 'checked' : ''}>
+        <b>Take online orders</b> (customer page: <a href="/shop/" target="_blank">${esc(location.origin)}/shop/</a>)</label>
+      <div class="grid3"><div><label class="row" style="font-weight:400"><input type="checkbox" name="online_pickup" style="width:auto" ${s.online_pickup === '1' ? 'checked' : ''}> Takeaway (customer collects)</label></div>
+        <div><label class="row" style="font-weight:400"><input type="checkbox" name="online_delivery" style="width:auto" ${s.online_delivery === '1' ? 'checked' : ''}> Home delivery</label></div>
+        ${f('online_area', 'Delivery area', 'placeholder="Within 3 km of the shop"')}</div>
+      <div class="grid3">${f('online_open', 'Orders from (time)', 'type="time"')}${f('online_close', 'Orders until (time)', 'type="time"')}${f('online_slot_minutes', 'Slot length (minutes)')}</div>
+      <div class="grid3">${f('online_lead_minutes', 'First slot after (minutes)')}${f('online_days_ahead', 'Days ahead customers can choose')}${f('online_min_order', 'Minimum order for delivery ₹')}</div>
+      <div class="grid3">${f('online_delivery_charge', 'Delivery charge ₹')}${f('online_free_delivery_above', 'Free delivery above ₹ (0 = never)')}<div></div></div>
       <h2>Weighing scale labels</h2>
       <label class="row" style="font-weight:400"><input type="checkbox" name="scale_enabled" style="width:auto" ${s.scale_enabled === '1' ? 'checked' : ''}> The shop uses barcode labels printed by the weighing scale</label>
       <div class="grid3">${f('scale_prefixes', 'Label starts with')}${f('scale_item_start', 'Item code starts at (0 = first digit)')}${f('scale_item_length', 'Item code digits')}</div>
@@ -650,8 +674,9 @@ App.views.settings = async (main) => {
     <div class="grid2" style="margin-top:14px">
       <div class="card"><h2 style="margin-top:0">Backup</h2><p class="small">Download a copy of everything (products, stock, bills, cash, staff) to this PC.
         Do it every evening and keep the files in Google Drive or a pen drive. Hostinger also keeps its own daily backups.</p>
-        ${can('backup') ? '<a class="btn primary" href="/api/backup">⬇ Download backup now</a>' : ''}
-        <p class="small muted">To restore: Hostinger hPanel → Databases → phpMyAdmin → choose the database → Import → this file.</p></div>
+        ${can('backup') ? '<a class="btn primary" href="/api/backup">⬇ Download backup to this PC</a> <button id="bknow">Save a backup on the server now</button>' : ''}
+        <div id="bklist" class="small" style="margin-top:10px"></div>
+        <p class="small muted">To restore: Hostinger hPanel → Databases → phpMyAdmin → choose the database → Import → the backup file.</p></div>
       <div class="card"><h2 style="margin-top:0">Bring data from the shop PC</h2><p class="small">On the shop PC double-click <b>Export_For_Cloud.bat</b>.
         It makes <i>madhuram_cloud_export.json.gz</i> on the desktop with all products, prices, barcodes, stock, customers and staff logins
         (they keep their passwords). Choose that file here. Allowed only before the first cloud bill.</p>
@@ -659,13 +684,25 @@ App.views.settings = async (main) => {
     </div>`;
   $('#sf').addEventListener('submit', (e) => { e.preventDefault(); submitting($('button.primary', e.target), async () => {
     const v = formData(e.target);
-    v.require_tax_setup = v.require_tax_setup ? '1' : '0';
-    v.scale_enabled = v.scale_enabled ? '1' : '0';
+    for (const el of e.target.elements) if (el.type === 'checkbox') v[el.name] = el.checked ? '1' : '0';
     const r = await api('/settings', { method: 'POST', body: v });
     App.settings = r.settings;
     await loadMe();
     toast('Settings saved.');
   }); });
+  const loadBackups = async () => {
+    const b = await api('/backups');
+    const st = b.status;
+    $('#bklist').innerHTML = `<p class="${st.ok ? 'ok' : 'bad'}">${st.last ? `Last server backup: ${esc(st.last.created_at.slice(0, 16))} (${st.age_hours} h ago)` :
+      'No server backup yet.'} The server also saves one by itself every evening after 9 pm and keeps 14 days + 12 months.</p>
+      ${b.backups.slice(0, 8).map((x) => `<div><a href="/api/backups/${encodeURIComponent(x.name)}">${esc(x.name)}</a> · ${Math.ceil(x.bytes / 1024)} KB</div>`).join('')}
+      ${b.cron_url ? `<details style="margin-top:6px"><summary>Extra safety: Hostinger cron job</summary>hPanel → Advanced → Cron Jobs → Custom → every day 21:30 →
+        command: <code style="word-break:break-all">curl -s "${esc(b.cron_url)}"</code></details>` : ''}`;
+  };
+  if ($('#bklist')) {
+    loadBackups().catch((e) => { $('#bklist').textContent = e.message; });
+    $('#bknow').addEventListener('click', () => submitting($('#bknow'), async () => { await api('/backups', { method: 'POST', body: {} }); toast('Backup saved.'); loadBackups(); }));
+  }
   $('#impgo').addEventListener('click', () => submitting($('#impgo'), async () => {
     const file = $('#impf').files[0];
     if (!file) throw new Error('Choose the export file first.');

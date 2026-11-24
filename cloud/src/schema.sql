@@ -209,3 +209,140 @@ CREATE TABLE IF NOT EXISTS audit (
   value DECIMAL(12,2) NOT NULL DEFAULT 0,
   INDEX (at), INDEX (action)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ================================================================== Stage 2
+CREATE TABLE IF NOT EXISTS suppliers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  phone VARCHAR(15) NOT NULL DEFAULT '',
+  gstin VARCHAR(15) NOT NULL DEFAULT '',
+  address VARCHAR(250) NOT NULL DEFAULT '',
+  active TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS purchases (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  grn_no VARCHAR(20) NOT NULL UNIQUE,
+  supplier_id INT NOT NULL,
+  bill_ref VARCHAR(40) NOT NULL DEFAULT '',
+  bill_date DATE NULL,
+  created_at DATETIME NOT NULL,
+  user_id INT NOT NULL,
+  total DECIMAL(12,2) NOT NULL,
+  note VARCHAR(200) NOT NULL DEFAULT '',
+  INDEX (supplier_id), INDEX (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS purchase_lines (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  purchase_id INT NOT NULL,
+  item_id INT NOT NULL,
+  name VARCHAR(160) NOT NULL,
+  unit VARCHAR(3) NOT NULL,
+  qty DECIMAL(12,3) NOT NULL,
+  free_qty DECIMAL(12,3) NOT NULL DEFAULT 0,
+  cost DECIMAL(12,4) NOT NULL,                  -- bill rate per piece / kg, GST included
+  amount DECIMAL(12,2) NOT NULL,
+  expiry DATE NULL,
+  batch VARCHAR(40) NOT NULL DEFAULT '',
+  lot_id INT NULL,
+  INDEX (purchase_id), INDEX (item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS supplier_payments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  supplier_id INT NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  method VARCHAR(6) NOT NULL,
+  reference VARCHAR(60) NOT NULL DEFAULT '',
+  at DATETIME NOT NULL,
+  user_id INT NOT NULL,
+  shift_id INT NULL,
+  INDEX (supplier_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS sale_returns (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  return_no VARCHAR(20) NOT NULL UNIQUE,
+  sale_id INT NOT NULL,
+  business_date DATE NOT NULL,
+  created_at DATETIME NOT NULL,
+  user_id INT NOT NULL,
+  approver_id INT NULL,
+  shift_id INT NULL,
+  counter VARCHAR(20) NOT NULL DEFAULT '',
+  total DECIMAL(12,2) NOT NULL,
+  method VARCHAR(6) NOT NULL,
+  reason VARCHAR(200) NOT NULL,
+  INDEX (sale_id), INDEX (business_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS return_lines (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  return_id INT NOT NULL,
+  sale_line_id INT NOT NULL,
+  qty DECIMAL(12,3) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  taxable DECIMAL(12,2) NOT NULL,
+  cgst DECIMAL(12,2) NOT NULL,
+  sgst DECIMAL(12,2) NOT NULL,
+  cost DECIMAL(12,2) NOT NULL DEFAULT 0,
+  restock TINYINT NOT NULL DEFAULT 1,
+  INDEX (return_id), INDEX (sale_line_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS customer_ledger (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  customer_id INT NOT NULL,
+  at DATETIME NOT NULL,
+  kind VARCHAR(10) NOT NULL,                    -- sale (+ owes) / payment (− paid) / return (−) / adjust
+  amount DECIMAL(12,2) NOT NULL,
+  ref VARCHAR(60) NOT NULL DEFAULT '',
+  method VARCHAR(6) NOT NULL DEFAULT '',
+  user_id INT NULL,
+  shift_id INT NULL,
+  INDEX (customer_id, at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS online_orders (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  number VARCHAR(12) NOT NULL UNIQUE,
+  token CHAR(32) NOT NULL UNIQUE,
+  name VARCHAR(80) NOT NULL,
+  phone VARCHAR(12) NOT NULL,
+  mode VARCHAR(8) NOT NULL,                     -- pickup / delivery
+  address VARCHAR(300) NOT NULL DEFAULT '',
+  notes VARCHAR(300) NOT NULL DEFAULT '',
+  slot DATETIME NOT NULL,
+  pay_pref VARCHAR(6) NOT NULL DEFAULT 'cash',
+  status VARCHAR(10) NOT NULL DEFAULT 'new',    -- new / accepted / ready / out / done / cancelled
+  status_note VARCHAR(200) NOT NULL DEFAULT '',
+  est_items DECIMAL(12,2) NOT NULL,
+  delivery_charge DECIMAL(10,2) NOT NULL DEFAULT 0,
+  sale_id INT NULL,
+  ip VARCHAR(45) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  INDEX (status, slot), INDEX (phone)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS online_order_lines (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  order_id INT NOT NULL,
+  item_id INT NOT NULL,
+  name VARCHAR(160) NOT NULL,
+  name_ta VARCHAR(160) NOT NULL DEFAULT '',
+  unit VARCHAR(3) NOT NULL,
+  qty DECIMAL(12,3) NOT NULL,
+  price DECIMAL(10,2) NOT NULL,
+  INDEX (order_id), INDEX (item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS stored_backups (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(80) NOT NULL UNIQUE,
+  created_at DATETIME NOT NULL,
+  bytes INT NOT NULL,
+  kind VARCHAR(8) NOT NULL DEFAULT 'daily'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
