@@ -149,13 +149,28 @@ async function save(data, user) {
 // Add stock as a new lot (goods received, opening stock). Runs inside an open transaction.
 async function receiveIn(q, { item_id, qty, unit_cost = 0, expiry = null, batch = '', ref = '', user, kind = 'receive' }) {
   const now = nowIST();
-  const lot = await q(`INSERT INTO lots (item_id, qty, received, unit_cost, expiry, batch, ref, created_at)
-    VALUES (?,?,?,?,?,?,?,?)`, [item_id, qtyDb(qty), qtyDb(qty), (unit_cost / 100).toFixed(4), expiry || null, batch, ref, now]);
-  await q(`INSERT INTO stock_moves (at, item_id, lot_id, kind, qty, unit_cost, ref, user_id) VALUES (?,?,?,?,?,?,?,?)`,
-    [now, item_id, lot.insertId, kind, qtyDb(qty), (unit_cost / 100).toFixed(4), ref, user ? user.id : null]);
+  // Stock that was sold before it was entered (setting "allow billing without stock") is settled first.
+  let rest = qty;
+  const shorts = await q("SELECT id, qty FROM lots WHERE item_id=? AND status='short' AND qty < 0 ORDER BY id FOR UPDATE", [item_id]);
+  for (const sh of shorts) {
+    if (!rest) break;
+    const settle = Math.min(rest, -milli(sh.qty));
+    rest -= settle;
+    await q('UPDATE lots SET qty = qty + ? WHERE id=?', [qtyDb(settle), sh.id]);
+    await q(`INSERT INTO stock_moves (at, item_id, lot_id, kind, qty, unit_cost, ref, reason, user_id) VALUES (?,?,?,?,?,?,?,?,?)`,
+      [now, item_id, sh.id, kind, qtyDb(settle), (unit_cost / 100).toFixed(4), ref, 'Covers stock sold before it was entered', user ? user.id : null]);
+  }
+  let lotId = null;
+  if (rest > 0) {
+    const lot = await q(`INSERT INTO lots (item_id, qty, received, unit_cost, expiry, batch, ref, created_at)
+      VALUES (?,?,?,?,?,?,?,?)`, [item_id, qtyDb(rest), qtyDb(rest), (unit_cost / 100).toFixed(4), expiry || null, batch, ref, now]);
+    lotId = lot.insertId;
+    await q(`INSERT INTO stock_moves (at, item_id, lot_id, kind, qty, unit_cost, ref, user_id) VALUES (?,?,?,?,?,?,?,?)`,
+      [now, item_id, lotId, kind, qtyDb(rest), (unit_cost / 100).toFixed(4), ref, user ? user.id : null]);
+  }
   await q('UPDATE items SET on_hand = on_hand + ?, cost = IF(? > 0, ?, cost) WHERE id=?',
     [qtyDb(qty), unit_cost, (unit_cost / 100).toFixed(4), item_id]);
-  return lot.insertId;
+  return lotId;
 }
 
 async function receive(data, user) {
@@ -195,7 +210,8 @@ async function issue(q, item, qty, { kind, ref, reason = '', user }) {
   const lots = await q(`SELECT id, qty, unit_cost FROM lots WHERE item_id=? AND status='sellable' AND qty > 0
     ORDER BY expiry IS NULL, expiry, id FOR UPDATE`, [item.id]);
   const have = lots.reduce((s, l) => s + milli(l.qty), 0);
-  if (have < qty) {
+  const allowShort = kind === 'sale' && (await require('./settings').load()).allow_negative_stock === '1';
+  if (have < qty && !allowShort) {
     throw new UserError(`Not enough stock of ${item.name}: need ${qtyStr(qty)}, in stock ${qtyStr(have)} ${item.unit}. ` +
       'Receive the stock first (Products → Stock in).', 409);
   }
@@ -210,6 +226,17 @@ async function issue(q, item, qty, { kind, ref, reason = '', user }) {
     await q(`INSERT INTO stock_moves (at, item_id, lot_id, kind, qty, unit_cost, ref, reason, user_id) VALUES (?,?,?,?,?,?,?,?,?)`,
       [now, item.id, lot.id, kind, qtyDb(-take), lot.unit_cost, ref, reason.slice(0, 200), user ? user.id : null]);
     taken.push({ lot_id: lot.id, qty: take, unit_cost: lot.unit_cost });
+  }
+  if (left > 0) {          // sold before the stock was entered: kept on a "short" lot, settled by the next stock in
+    let sh = (await q("SELECT id FROM lots WHERE item_id=? AND status='short' ORDER BY id LIMIT 1 FOR UPDATE", [item.id]))[0];
+    if (!sh) {
+      sh = { id: (await q(`INSERT INTO lots (item_id, qty, received, unit_cost, status, ref, created_at) VALUES (?,0,0,?,'short','Sold before stock entry',?)`,
+        [item.id, item.cost || 0, now])).insertId };
+    }
+    await q('UPDATE lots SET qty = qty - ? WHERE id=?', [qtyDb(left), sh.id]);
+    await q(`INSERT INTO stock_moves (at, item_id, lot_id, kind, qty, unit_cost, ref, reason, user_id) VALUES (?,?,?,?,?,?,?,?,?)`,
+      [now, item.id, sh.id, kind, qtyDb(-left), item.cost || 0, ref, 'Sold before stock was entered', user ? user.id : null]);
+    taken.push({ lot_id: sh.id, qty: left, unit_cost: String(item.cost || 0) });
   }
   await q('UPDATE items SET on_hand = on_hand - ? WHERE id=?', [qtyDb(qty), item.id]);
   return taken;
@@ -246,11 +273,14 @@ function parseCsv(text) {
 }
 
 const HEADERS = {
-  sku: ['sku'], name: ['product name', 'name'], name_ta: ['tamil name', 'name_ta'], cat: ['category'],
-  unit: ['sale unit', 'unit'], barcode: ['pack barcode', 'barcode'], mrp: ['mrp inr', 'mrp'],
-  price: ['selling price inr', 'price', 'selling price'], hsn: ['hsn'], gst: ['gst rate', 'gst'],
+  sku: ['sku', 'product code', 'product_code', 'code'], name: ['product name', 'product_name', 'name'], name_ta: ['tamil name', 'name_ta'],
+  cat: ['category'], unit: ['sale unit', 'unit'], barcode: ['pack barcode', 'barcode', 'barcodes'], mrp: ['mrp inr', 'mrp'],
+  price: ['selling price inr', 'price', 'selling price', 'selling_price'], hsn: ['hsn', 'hsn code', 'hsn_code'], gst: ['gst rate', 'gst', 'gst %'],
+  cost: ['cost', 'purchase cost', 'cost price'], reorder: ['reorder level', 'reorder_level'], plu: ['plu'],
 };
 
+// Products from a CSV file. One row per product; several barcodes can go in one cell, separated by | , ; or spaces.
+// Rows with an SKU / product code that already exists are updated. Products with a selling price start selling at once.
 async function importCsv(text, user) {
   const rows = parseCsv(text);
   if (rows.length < 2) throw new UserError('The file has no product rows.');
@@ -261,32 +291,43 @@ async function importCsv(text, user) {
   const errors = [];
   let created = 0;
   let updated = 0;
-  const cell = (r, k) => (col[k] >= 0 ? String(r[col[k]] || '').trim() : '');
+  let barcodes = 0;
+  const cell = (r, k) => (col[k] >= 0 ? String(r[col[k]] ?? '').trim() : '');
   await db.tx(async (q) => {
     const cats = new Map();
     for (const r of rows.slice(1)) {
-      const c = cell(r, 'cat');
+      const c = cell(r, 'cat').slice(0, 60);
       if (c && !cats.has(c)) cats.set(c, await categoryId(q, c));
     }
+    const usedPlu = new Map((await q('SELECT plu, sku FROM items WHERE plu IS NOT NULL')).map((x) => [x.plu, x.sku]));
     const now = nowIST();
     const batch = [];
     const codes = [];
+    const seenSku = new Set();
     for (const [n, r] of rows.slice(1).entries()) {
       try {
         const name = cell(r, 'name').slice(0, 160);
         if (!name) continue;
         const price = paise(cell(r, 'price'));
         const mrp = paise(cell(r, 'mrp'));
+        const cost = paise(cell(r, 'cost')) || 0;
         const gstRaw = cell(r, 'gst').replace('%', '');
         const gst = gstRaw ? rateBp(gstRaw) : 0;
-        const unit = /kg/i.test(cell(r, 'unit')) ? 'kg' : 'pcs';
+        const unit = /^(kg|kgs|kilo)/i.test(cell(r, 'unit')) ? 'kg' : 'pcs';
         let sku = cell(r, 'sku').slice(0, 20);
         if (!sku) sku = await nextSku(q);
-        batch.push([sku, name, cell(r, 'name_ta').slice(0, 160), cats.get(cell(r, 'cat')) || null, unit,
-          price === null ? null : rs(price), mrp === null ? null : rs(mrp), rs(gst), gstRaw ? 'taxable' : 'unset',
-          cell(r, 'hsn').replace(/\D/g, '').slice(0, 8), price !== null ? 1 : 0, now]);
-        const code = cell(r, 'barcode');
-        if (code) codes.push([cleanCode(code), sku]);
+        if (seenSku.has(sku)) { errors.push(`Row ${n + 2}: product code ${sku} appears twice – the second row is skipped.`); continue; }
+        seenSku.add(sku);
+        let plu = cell(r, 'plu').replace(/\D/g, '').slice(0, 8) || null;
+        if (plu && usedPlu.has(plu) && usedPlu.get(plu) !== sku) { errors.push(`Row ${n + 2}: PLU ${plu} is already used – left empty.`); plu = null; }
+        if (plu) usedPlu.set(plu, sku);
+        const active = price !== null && price > 0 ? 1 : 0;
+        batch.push([sku, name, cell(r, 'name_ta').slice(0, 160), cats.get(cell(r, 'cat').slice(0, 60)) || null, unit,
+          price === null ? null : rs(price), mrp === null || mrp === 0 ? null : rs(mrp), rs(gst), gst > 0 ? 'taxable' : 'unset',
+          cell(r, 'hsn').replace(/\D/g, '').slice(0, 8), active, now, (cost / 100).toFixed(4), qtyDb(milli(cell(r, 'reorder') || '0') || 0), plu]);
+        for (const code of cell(r, 'barcode').split(/[|,;\s]+/).filter(Boolean)) {
+          try { codes.push([cleanCode(code), sku]); } catch (e) { errors.push(`Row ${n + 2}: ${e.message}`); }
+        }
       } catch (err) {
         if (!err.expose) throw err;
         errors.push(`Row ${n + 2}: ${err.message}`);
@@ -295,23 +336,27 @@ async function importCsv(text, user) {
     for (let i = 0; i < batch.length; i += 500) {
       const part = batch.slice(i, i + 500);
       const known = (await q('SELECT COUNT(*) n FROM items WHERE sku IN (?)', [part.map((x) => x[0])]))[0];
-      await q(`INSERT INTO items (sku, name, name_ta, category_id, unit, price, mrp, gst_rate, tax_class, hsn, active, updated_at)
+      await q(`INSERT INTO items (sku, name, name_ta, category_id, unit, price, mrp, gst_rate, tax_class, hsn, active, updated_at, cost, reorder_level, plu)
         VALUES ? ON DUPLICATE KEY UPDATE name=VALUES(name), name_ta=IF(VALUES(name_ta)='', name_ta, VALUES(name_ta)),
         category_id=COALESCE(VALUES(category_id), category_id), unit=VALUES(unit), price=COALESCE(VALUES(price), price),
         mrp=COALESCE(VALUES(mrp), mrp), gst_rate=IF(VALUES(tax_class)='taxable', VALUES(gst_rate), gst_rate),
         tax_class=IF(VALUES(tax_class)='taxable', 'taxable', tax_class), hsn=IF(VALUES(hsn)='', hsn, VALUES(hsn)),
-        active=IF(VALUES(price) IS NULL, active, 1), updated_at=VALUES(updated_at)`, [part]);
+        active=IF(VALUES(active)=1, 1, active), cost=IF(VALUES(cost) > 0, VALUES(cost), cost),
+        reorder_level=IF(VALUES(reorder_level) > 0, VALUES(reorder_level), reorder_level), plu=COALESCE(VALUES(plu), plu),
+        updated_at=VALUES(updated_at)`, [part]);
       updated += Number(known.n);
       created += part.length - Number(known.n);
     }
     for (let i = 0; i < codes.length; i += 500) {
       const part = codes.slice(i, i + 500);
-      await q(`INSERT IGNORE INTO barcodes (code, item_id, per) SELECT x.code, i.id, 1 FROM items i JOIN (${
+      const r = await q(`INSERT IGNORE INTO barcodes (code, item_id, per) SELECT x.code, i.id, 1 FROM items i JOIN (${
         part.map(() => 'SELECT ? code, ? sku').join(' UNION ALL ')}) x ON x.sku=i.sku`, part.flat());
+      barcodes += r.affectedRows;
     }
-    await audit({ user_id: user.id, action: 'import', summary: `Imported products: ${created} new, ${updated} updated` }, q);
+    if (codes.length > barcodes) errors.push(`${codes.length - barcodes} barcodes were already linked to a product and were left as they are.`);
+    await audit({ user_id: user.id, action: 'import', summary: `Imported products: ${created} new, ${updated} updated, ${barcodes} barcodes` }, q);
   });
-  return { created, updated, errors: errors.slice(0, 50) };
+  return { created, updated, barcodes, errors: errors.slice(0, 50) };
 }
 
 module.exports = { counterCatalogue, version, search, get, save, receive, receiveIn, writeOff, issue, moves, importCsv, parseCsv,

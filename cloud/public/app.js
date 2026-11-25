@@ -557,7 +557,7 @@ function stockDialog(item, mode, onDone) {
 function importDialog(onDone) {
   const d = modal(`<h3>Import products from a CSV file</h3>
     <p class="muted small">Columns (first row): <b>Product name</b>, and any of SKU, Tamil name, Category, Sale unit (pcs/kg), Pack barcode,
-    MRP INR, Selling price INR, HSN, GST rate. The starter list <i>Madhuram_20000_SKUs.csv</i> works as it is. Products with a selling
+    MRP, Selling price, GST %, Cost, Reorder level, PLU, Barcodes (several in one cell, separated by |). The product master file and the starter list <i>Madhuram_20000_SKUs.csv</i> works as it is. Products with a selling
     price start selling at once; the others wait until you give them a price. Rows with an SKU that already exists are updated.</p>
     <input type="file" accept=".csv,text/csv" id="csvf"><div id="res"></div>
     <div class="actions"><button data-close>Close</button><button class="primary" id="go">Import</button></div>`);
@@ -648,6 +648,8 @@ App.views.settings = async (main) => {
       <h2>Counters</h2>${f('counters', 'Counter names (comma between)')}
       <label class="row" style="font-weight:400"><input type="checkbox" name="require_tax_setup" style="width:auto" ${s.require_tax_setup === '1' ? 'checked' : ''}>
         Stop billing products whose GST type is "Not set yet" (turn on after the accountant checks the GST data)</label>
+      <label class="row" style="font-weight:400"><input type="checkbox" name="allow_negative_stock" style="width:auto" ${s.allow_negative_stock === '1' ? 'checked' : ''}>
+        <b>Allow billing when stock is not entered yet</b> (use while starting; stock entered later is set off against what was sold)</label>
       <h2>WhatsApp and UPI</h2>
       <div class="grid3"><div><label>Open WhatsApp in</label><select name="whatsapp_open"><option value="app">WhatsApp program (PC / phone)</option>
         <option value="web" ${s.whatsapp_open === 'web' ? 'selected' : ''}>WhatsApp Web (browser)</option></select></div>

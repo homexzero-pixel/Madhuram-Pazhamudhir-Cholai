@@ -236,3 +236,29 @@ test('backups saved on the server, listed, downloaded, and the cron address', as
   assert.ok(left >= 14 && left <= 17, `kept ${left}`);
   require('fs').rmSync(process.env.BACKUP_DIR, { recursive: true, force: true });
 });
+
+test('product master import with several barcodes, and billing before stock is entered', async () => {
+  const csv = 'Product code,Product name,Category,Unit,Barcodes,MRP,Selling price,GST %,Cost,Reorder level,PLU\n' +
+    '10002,Indulekha 100ml,Shampoo,pcs,8901030677106|8901030929496,432.00,430.00,12,321.43,0,\n' +
+    '901,Butter Beans,Vegetables,kg,,320.00,320.00,0,110.00,0,901\n' +
+    '10009,No price item,Food Items,pcs,8900000000017,,,0,,0,\n';
+  const res = await fetch(`${base}/api/products/import`, { method: 'POST', headers: { Origin: base, Cookie: owner.cookie, 'Content-Type': 'text/csv' }, body: csv });
+  const imp = await res.json();
+  assert.deepEqual([imp.created, imp.barcodes, imp.errors], [3, 3, []], JSON.stringify(imp));
+  const ind = (await owner.get('/api/products?q=8901030929496')).data.items[0];
+  assert.deepEqual([ind.name, ind.sku, ind.price, ind.cost, ind.gst_rate, ind.tax_class, ind.codes.length], ['Indulekha 100ml', '10002', '430.00', '321.4300', '12.00', 'taxable', 2]);
+  const beans = (await owner.get('/api/products?q=Butter')).data.items[0];
+  assert.deepEqual([beans.unit, beans.plu, beans.active], ['kg', '901', true]);
+  assert.equal((await owner.get('/api/products?q=No%20price')).data.items[0].active, false);
+
+  const sale = () => cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 1', lines: [{ id: ind.id, qty: 2 }], payments: [{ method: 'cash', amount: '860' }] });
+  assert.match((await sale()).data.error, /Not enough stock/);
+  await owner.post('/api/settings', { allow_negative_stock: '1' });
+  require('../src/settings').reset();
+  assert.equal((await sale()).data.ok, true);
+  assert.equal((await owner.get(`/api/products/${ind.id}`)).data.item.on_hand, '-2');
+  await owner.post('/api/stock/receive', { item_id: ind.id, qty: '10', cost: '320' });
+  assert.equal((await owner.get(`/api/products/${ind.id}`)).data.item.on_hand, '8');
+  const lots = await db.query('SELECT qty, status FROM lots WHERE item_id=? ORDER BY id', [ind.id]);
+  assert.deepEqual(lots.map((l) => [l.qty, l.status]), [['0.000', 'short'], ['8.000', 'sellable']]);
+});

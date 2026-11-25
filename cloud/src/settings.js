@@ -24,6 +24,7 @@ const DEFAULTS = {
   scale_value_type: 'weight',
   scale_value_decimals: '3',
   scale_check_digit: '1',
+  allow_negative_stock: '0',      // 1 = bill items even when their stock was not entered yet (settled at the next stock in)
   credit_note_prefix: 'MCN',
   near_expiry_days: '7',
   whatsapp_open: 'app',            // app = WhatsApp program on this PC/phone, web = WhatsApp Web in the browser
