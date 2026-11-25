@@ -2,6 +2,7 @@
 // End-to-end checks against a real MySQL/MariaDB test database.
 // Run: DB_HOST=127.0.0.1 DB_PORT=3307 DB_USER=mpc DB_PASSWORD=... DB_NAME=madhuram_test npm test
 process.env.NODE_ENV = 'test';
+process.env.MPC_NO_AUTOSTART = '1';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');

@@ -1,6 +1,7 @@
 'use strict';
 // Stage 2: purchases, returns, credit, online orders, reports, owner tools, backups – against a real MySQL/MariaDB test database.
 process.env.NODE_ENV = 'test';
+process.env.MPC_NO_AUTOSTART = '1';
 process.env.BACKUP_DIR = require('path').join(require('os').tmpdir(), `mpc_backup_test_${process.pid}`);
 const test = require('node:test');
 const assert = require('node:assert/strict');

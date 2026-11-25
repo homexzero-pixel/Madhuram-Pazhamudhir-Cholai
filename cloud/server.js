@@ -103,7 +103,10 @@ function dbHelp(err) {
   return { what, seen, code: err.code || '', detail: String(err.message || '').replace(c.password || '\u0000', '***').slice(0, 300) };
 }
 
+let started = false;
 async function main() {
+  if (started) return;
+  started = true;
   // Start listening at once, so Hostinger sees the app running even while the database is not ready.
   let app = null;
   let problem = null;
@@ -139,6 +142,8 @@ async function main() {
 }
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
-if (require.main === module) main();
+// Start by itself however the file is loaded (`node server.js`, Hostinger's Node.js runner, or the root server.js).
+// Only the automated tests load it without starting (they set MPC_NO_AUTOSTART=1).
+if (process.env.MPC_NO_AUTOSTART !== '1') main();
 
 module.exports = { createApp, main };
