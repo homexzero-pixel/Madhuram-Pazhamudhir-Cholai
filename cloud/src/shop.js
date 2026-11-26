@@ -21,28 +21,40 @@ async function held(ids) {
   return new Map(rows.map((r) => [r.item_id, milli(r.q)]));
 }
 
-async function catalogue({ q = '', cat = '', code = '', ids = '' }) {
-  const where = ["i.active=1", 'i.price IS NOT NULL', `i.sku <> '${DELIVERY_SKU}'`];
+// Products for the customers' shop. sort: popular (best sellers in stock first), offers (biggest saving on MRP), name.
+async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', limit = 150, exclude = '' }) {
+  const where = ['i.active=1', 'i.price IS NOT NULL', 'i.price > 0', `i.sku <> '${DELIVERY_SKU}'`];
   const args = [];
   code = String(code).trim().slice(0, 32);
   q = String(q).trim().slice(0, 60);
   const idList = String(ids).split(',').map(Number).filter((n) => n > 0).slice(0, 60);
-  if (idList.length) { where.push('i.id IN (?)'); args.push(idList); } else if (code) { where.push('(i.id IN (SELECT item_id FROM barcodes WHERE code=?) OR i.sku=? OR i.plu=?)'); args.push(code, code, code); }
-  else if (q) for (const w of q.split(/\s+/).slice(0, 5)) { where.push('(i.name LIKE ? OR i.name_ta LIKE ?)'); args.push(`%${w}%`, `%${w}%`); }
+  if (idList.length) { where.push('i.id IN (?)'); args.push(idList); } else if (code) {
+    where.push('(i.id IN (SELECT item_id FROM barcodes WHERE code=?) OR i.sku=? OR i.plu=?)'); args.push(code, code, code);
+  } else if (q) for (const w of q.split(/\s+/).slice(0, 5)) { where.push('(i.name LIKE ? OR i.name_ta LIKE ?)'); args.push(`%${w}%`, `%${w}%`); }
   if (cat) { where.push('i.category_id=?'); args.push(Number(cat) || 0); }
-  const rows = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, i.price, i.mrp, i.on_hand, c.name cat FROM items i
-    LEFT JOIN categories c ON c.id=i.category_id WHERE ${where.join(' AND ')}
-    ORDER BY ${q || code || cat ? 'i.name' : 'i.on_hand > 0 DESC, i.name'} LIMIT 150`, args);
+  if (Number(exclude)) { where.push('i.id <> ?'); args.push(Number(exclude)); }
+  if (sort === 'offers') where.push('i.mrp > i.price');
+  const order = {
+    popular: 'i.on_hand > 0 DESC, sold DESC, i.name',
+    offers: 'i.on_hand > 0 DESC, (i.mrp - i.price) / i.mrp DESC, i.name',
+  }[sort] || (q || code || cat ? 'i.on_hand > 0 DESC, sold DESC, i.name' : 'i.on_hand > 0 DESC, sold DESC, i.name');
+  const rows = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, i.price, i.mrp, i.on_hand, i.category_id, c.name cat,
+      (SELECT COUNT(*) FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE l.item_id=i.id AND x.business_date > DATE_SUB(CURDATE(), INTERVAL 30 DAY)) sold
+    FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE ${where.join(' AND ')}
+    ORDER BY ${order} LIMIT ?`, [...args, Math.min(Math.max(Number(limit) || 150, 1), 150)]);
   const h = await held(rows.map((r) => r.id));
   return rows.map((r) => {
     const avail = Math.max(0, milli(r.on_hand) - (h.get(r.id) || 0));
-    return { id: r.id, name: r.name, name_ta: r.name_ta, unit: r.unit, price: r.price, mrp: r.mrp, cat: r.cat || '', available: qtyStr(avail), in_stock: avail > 0 };
+    return { id: r.id, name: r.name, name_ta: r.name_ta, unit: r.unit, price: r.price, mrp: r.mrp, cat: r.cat || '', cat_id: r.category_id,
+      available: qtyStr(avail), in_stock: avail > 0, popular: Number(r.sold) > 0 };
   });
 }
 
+// Categories that have something to sell, the busiest first.
 async function categories() {
-  return db.query(`SELECT DISTINCT c.id, c.name FROM categories c JOIN items i ON i.category_id=c.id
-    WHERE i.active=1 AND i.price IS NOT NULL AND i.sku <> '${DELIVERY_SKU}' ORDER BY c.name`);
+  return db.query(`SELECT c.id, c.name, COUNT(*) items, SUM(i.on_hand > 0) in_stock FROM categories c JOIN items i ON i.category_id=c.id
+    WHERE i.active=1 AND i.price IS NOT NULL AND i.price > 0 AND i.sku <> '${DELIVERY_SKU}'
+    GROUP BY c.id, c.name ORDER BY in_stock DESC, items DESC, c.name`);
 }
 
 // ------------------------------------------------------------------ time slots (India time, as 'YYYY-MM-DDTHH:MM')
