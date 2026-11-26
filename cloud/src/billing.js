@@ -5,8 +5,11 @@ const catalog = require('./catalog');
 const { approvedBy, audit, can } = require('./auth');
 const { paise, milli, rateBp, rs, qtyDb, qtyStr, lineAmount, splitTax, financialYear, nowIST, todayIST, UserError } = require('./money');
 
-const METHODS = ['cash', 'upi', 'card', 'credit', 'points'];
+// cod = cash on delivery of an online order: collected by the delivery person, put in the drawer at "Process completed"
+const METHODS = ['cash', 'upi', 'card', 'credit', 'points', 'cod'];
 const loyalty = require('./loyalty');
+const stock = require('./stock');
+const events = require('./events');
 const DELIVERY_SKU = 'DELIVERY';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -55,7 +58,10 @@ async function cashSummary(shiftId, q = db.query) {
   const card = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='card'`, [shiftId]);
   const credit = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='credit'`, [shiftId]);
   const pointsPaid = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='points'`, [shiftId]);
-  const cashIn = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind IN ('in','udhaar')`, [shiftId]);
+  const cashIn = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind IN ('in','udhaar','cod')`, [shiftId]);
+  const codCash = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='cod'`, [shiftId]);
+  const codUpi = await one(`SELECT SUM(p.amount) s FROM online_orders o JOIN payments p ON p.sale_id=o.sale_id AND p.method='cod'
+    WHERE o.settle_shift_id=? AND o.settle_method='upi'`, [shiftId]);
   const udhaar = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='udhaar'`, [shiftId]);
   const refunds = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='refund'`, [shiftId]);
   const supplier = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='supplier'`, [shiftId]);
@@ -65,7 +71,7 @@ async function cashSummary(shiftId, q = db.query) {
   const float = paise(shift.opening_float);
   const expected = float + cashSales + cashIn - cashOut;
   return { float: rs(float), cash_sales: rs(cashSales), upi: rs(upi), card: rs(card), cash_in: rs(cashIn), cash_out: rs(cashOut),
-    credit: rs(credit), points: rs(pointsPaid), udhaar_received: rs(udhaar), refunds: rs(refunds), supplier_paid: rs(supplier), expenses: rs(expenses),
+    credit: rs(credit), points: rs(pointsPaid), udhaar_received: rs(udhaar), cod_cash: rs(codCash), cod_upi: rs(codUpi), refunds: rs(refunds), supplier_paid: rs(supplier), expenses: rs(expenses),
     expected: rs(expected), bills: Number(bills.n), sales_total: rs(paise(bills.t || '0')) };
 }
 
@@ -172,21 +178,26 @@ async function checkout(user, body) {
 
       // an online order being billed: it must still be open and not billed yet
       let order = null;
+      let orderLines = [];
       if (body.order_id) {
         order = await q.one('SELECT * FROM online_orders WHERE id=? FOR UPDATE', [body.order_id]);
         if (!order) throw new UserError('Online order not found.');
         if (order.sale_id) throw new UserError(`Online order ${order.number} is already billed.`);
         if (order.status === 'cancelled') throw new UserError(`Online order ${order.number} was cancelled.`);
+        if (!['new', 'accepted', 'ready', 'out'].includes(order.status)) throw new UserError(`Online order ${order.number} cannot be billed now.`);
+        orderLines = await q('SELECT item_id, qty FROM online_order_lines WHERE order_id=?', [order.id]);
         if (!customerId) {                                 // the online customer gets the points for their order
           customerId = order.customer_id || (await q.one('SELECT id FROM customers WHERE phone=?', [String(order.phone).slice(-10)]))?.id || null;
         }
       }
 
+      // every product on the bill (and of the online order) locked once, in id order: no two bills wait on each other in a circle
+      const itemRows = await stock.lockItems(q, [...prepared.map((p) => p.item_id), ...orderLines.map((l) => l.item_id)]);
       const calc = [];
       let gross = 0;
       let discount = 0;
       for (const p of prepared) {
-        const item = await q.one('SELECT * FROM items WHERE id=?', [p.item_id]);
+        const item = itemRows.get(p.item_id);
         if (!item) throw new UserError('A product on the bill no longer exists. Remove it and scan again.');
         if (!item.active && !p.delivery) throw new UserError(`${item.name} is not active for sale.`);
         if (p.delivery && (item.sku !== DELIVERY_SKU || !order || paise(order.delivery_charge) !== p.rate || p.qty !== 1000)) {
@@ -219,6 +230,7 @@ async function checkout(user, body) {
         if (x.amount < 0) throw new UserError('Payment cannot be negative.');
         if (x.method === 'cash' && x.tendered !== null && x.tendered < x.amount) throw new UserError('Cash given is less than the cash amount.');
         if (x.method === 'credit' && !customerId) throw new UserError('Choose the customer (F7) to sell on credit.');
+        if (x.method === 'cod' && !order) throw new UserError('Cash on delivery is only for online orders.');
       }
       const paid = pays.reduce((s, x) => s + x.amount, 0);
       if (paid !== total) throw new UserError(`Payment ₹${rs(paid)} does not match the bill total ₹${rs(total)}.`);
@@ -245,10 +257,12 @@ async function checkout(user, body) {
       const billNo = `${prefix}/${fy}/${String(seq).padStart(5, '0')}`;
       if (billNo.length > 20) throw new UserError('Invoice prefix too long.');
 
+      // An online order's bill is the GST invoice that goes in the bag; its goods stay reserved and leave the stock
+      // at "Process completed" (stock_pending=1 until then).
       const sale = await q(`INSERT INTO sales (bill_no, client_uuid, business_date, created_at, shift_id, counter, cashier_id, customer_id,
-        gross, discount, total, order_id, points_earned, points_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        gross, discount, total, order_id, points_earned, points_used, stock_pending) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [billNo, uuid, bdate, now, shift.id, counter, user.id, customerId, rs(gross), rs(discount), rs(total), order ? order.id : null,
-          pointsEarned, pointsUsed]);
+          pointsEarned, pointsUsed, order ? 1 : 0]);
       const id = sale.insertId;
       if (pointsUsed) await loyalty.post(q, { customerId, kind: 'redeem', points: -pointsUsed, ref: billNo, saleId: id, userId: user.id, at: now });
       if (pointsEarned) await loyalty.post(q, { customerId, kind: 'earn', points: pointsEarned, ref: billNo, saleId: id, userId: user.id, at: now });
@@ -262,7 +276,7 @@ async function checkout(user, body) {
       }
 
       for (const c of calc) {
-        const taken = c.item.sku === DELIVERY_SKU ? [] : await catalog.issue(q, c.item, c.p.qty, { kind: 'sale', ref: billNo, user });
+        const taken = c.item.sku === DELIVERY_SKU || order ? [] : await catalog.issue(q, c.item, c.p.qty, { kind: 'sale', ref: billNo, user });
         const cost = taken.reduce((s, t) => s + Math.round(Number(t.unit_cost) * t.qty / 10), 0);   // paise
         const line = await q(`INSERT INTO sale_lines (sale_id, item_id, sku, name, name_ta, unit, qty, list_price, rate, mrp, gross, discount,
           discount_note, net, gst_rate, taxable, cgst, sgst, cost, approved_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -292,7 +306,16 @@ async function checkout(user, body) {
         }
       }
       if (order) {
-        await q("UPDATE online_orders SET sale_id=?, status='done', updated_at=? WHERE id=?", [id, now, order.id]);
+        // the reservation now follows the bill: weighed items that came out heavier, items added or taken off at the counter
+        const want = new Map();
+        for (const c of calc) if (c.item.sku !== DELIVERY_SKU) want.set(c.item.id, (want.get(c.item.id) || 0) + c.p.qty);
+        const had = new Map();
+        for (const l of orderLines) had.set(l.item_id, (had.get(l.item_id) || 0) + milli(l.qty));
+        for (const itemId of new Set([...want.keys(), ...had.keys()])) await stock.hold(q, itemId, (want.get(itemId) || 0) - (had.get(itemId) || 0));
+        await q(`UPDATE online_orders SET sale_id=?, status='packing', packed_at=?, accepted_at=COALESCE(accepted_at, ?), updated_at=? WHERE id=?`,
+          [id, now, now, now, order.id]);
+        await events.emit(q, 'ORDER_INVOICED', { order_id: order.id, number: order.number, bill_no: billNo, total: rs(total),
+          cod: rs(pays.filter((x) => x.method === 'cod').reduce((t, x) => t + x.amount, 0)) });
       }
       return id;
     });

@@ -5,6 +5,8 @@ const express = require('express');
 const config = require('./src/config');
 const db = require('./src/db');
 const api = require('./src/routes/api');
+const site = require('./src/site');
+const events = require('./src/events');
 const { UserError } = require('./src/money');
 
 function createApp() {
@@ -19,19 +21,27 @@ function createApp() {
     res.setHeader('Content-Security-Policy',
       "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; " +
       "frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), payment=()');
     if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=15552000');
     next();
   });
 
-  // Changes are only accepted from this site's own pages: the browser's Origin must be this host.
-  app.use('/api', (req, res, next) => {
-    if (req.method === 'GET' || req.method === 'HEAD') return next();
-    const origin = req.headers.origin || req.headers.referer || '';
-    let host = '';
-    try { host = new URL(origin).host; } catch (_) { /* missing */ }
-    if (!host || host !== req.headers.host) return next(new UserError('Request blocked: open the store from its own address.', 403));
-    return next();
+  // Which site this request is for (billing / customers' shop), and only that site's pages and API.
+  app.use(site.scope);
+
+  // A signed wake-up call from the customers' site (two copies of the app): read the new events from the database now.
+  app.post('/internal/events', express.text({ type: '*/*', limit: '64kb' }), (req, res) => {
+    if (req.site === 'shop' || !events.verify(String(req.body || ''), req.headers['x-mpc-timestamp'], req.headers['x-mpc-signature'])) {
+      return res.status(403).json({ ok: false });
+    }
+    events.kick();
+    return res.json({ ok: true });
   });
+
+  // No other website may call this API from a browser; changes only from this site's own pages; requests per minute capped.
+  app.use('/api', site.cors, site.sameOrigin, site.rateLimit);
   app.use('/api', express.json({ limit: '2mb' }), api);
   app.use(require('./src/routes/more').cron);
 
@@ -76,9 +86,10 @@ function createApp() {
     res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(pub, 'shop.html'));
   });
+  // the customers' site opens straight into the shop; the billing site into the staff screens
   app.get(['/', '/index.html'], (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
-    res.sendFile(path.join(pub, 'index.html'));
+    res.sendFile(path.join(pub, req.site === 'shop' ? 'shop.html' : 'index.html'));
   });
 
   app.use('/api', (req, res) => res.status(404).json({ ok: false, error: 'Not found.' }));
@@ -136,8 +147,8 @@ async function main() {
       await db.migrate();
       app = createApp();
       problem = null;
-      require('./src/backups').schedule();
-      console.log('Database ready. Madhuram cloud is running.');
+      startJobs();
+      console.log(`Database ready. Madhuram cloud is running${process.env.SITE_ROLE ? ` (${process.env.SITE_ROLE} site)` : ''}.`);
       return;
     } catch (err) {
       problem = dbHelp(err);
@@ -147,6 +158,21 @@ async function main() {
     }
   }
 }
+// Background work. The billing site (or the single app) runs backups, keeps the held-stock numbers right, refreshes the
+// "popular" counts and pushes order events to the staff screens. A customers'-site-only copy just wakes the billing site.
+function startJobs() {
+  const shopOnly = ['shop'].includes(String(process.env.SITE_ROLE || process.env.APP_ROLE || '').toLowerCase());
+  events.start({ billing: !shopOnly });
+  if (shopOnly) return;
+  require('./src/backups').schedule();
+  const stock = require('./src/stock');
+  const quiet = (p) => p.catch((e) => console.error('job:', e.message));
+  quiet(stock.reconcile().then((fixed) => { if (fixed.length) console.log(`Held stock corrected for ${fixed.length} products.`); }));
+  quiet(stock.refreshStats());
+  setInterval(() => quiet(stock.refreshStats()), 10 * 60000).unref();
+  setInterval(() => quiet(events.cleanup()), 24 * 3600000).unref();
+}
+
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
 // Start by itself however the file is loaded (`node server.js`, Hostinger's Node.js runner, or the root server.js).

@@ -632,7 +632,10 @@ async function detailView(id) {
   const tok = ++S.tok;
   let it = S.items.get(id);
   if (!it) { const { items } = await get(`/items?ids=${id}`); remember(items); it = items[0]; }
-  if (!it) throw new Error('This product is not available online right now.');
+  if (!it) {
+    view().innerHTML = `${appbar('Details')}<div class="page">${emptyState('package', 'Sold out right now', 'This product is not available at the moment. Please check again later.', '<a class="btn-g" href="#" style="display:inline-flex;max-width:260px">Continue shopping</a>')}</div>`;
+    return;
+  }
   if (tok !== S.tok) return;
   const s = S.info.shop;
   const sv = saving(it);
@@ -730,8 +733,26 @@ function addressSheet(a = {}, onSaved = () => {}) {
 }
 
 // ------------------------------------------------------------------ basket and checkout
+// Prices and availability of the basket always come from the shop. Products that sold out meanwhile leave the basket.
+async function refreshCart() {
+  const ids = Object.keys(S.cart);
+  if (!ids.length) return [];
+  let gone = [];
+  try {
+    const { items } = await get(`/items?ids=${ids.join(',')}`);
+    for (const id of ids) S.items.delete(Number(id));
+    remember(items);
+    gone = ids.filter((id) => !S.items.has(Number(id)));
+    for (const id of gone) delete S.cart[id];
+    for (const it of items) if (S.cart[it.id] > Number(it.available)) S.cart[it.id] = Number(it.available);
+    saveCart();
+    if (gone.length) toast(`${gone.length} item${gone.length === 1 ? ' is' : 's are'} sold out and left your basket`);
+  } catch (_) { /* shown later */ }
+  return gone;
+}
 async function cartView() {
   S.page = 'cart';
+  if (!S.cartChecked || Date.now() - S.cartChecked > 15000) { S.cartChecked = Date.now(); await refreshCart(); if (S.page !== 'cart') return; }
   const s = S.info.shop;
   const lines = Object.entries(S.cart).map(([id, q]) => [S.items.get(Number(id)), q]).filter(([it]) => it);
   if (!lines.length) {
@@ -835,6 +856,13 @@ async function placeOrder() {
     const r = await fetch('/api/shop/order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const d = await r.json();
     if (r.status === 401) { S.me = null; S.after = '#cart'; location.hash = '#login'; return; }
+    if (r.status === 409) {                         // something sold out a moment ago: show the basket as it is now
+      toast(d.error);
+      S.cartChecked = 0;
+      await cartView();
+      if ($('#oerr')) $('#oerr').innerHTML = `<div class="err">${esc(d.error)}</div>`;
+      return;
+    }
     if (!d.ok) throw new Error(d.error);
     if (body.address && !body.address_id) {       // the first address typed here is kept for next time
       try { S.addresses = (await post('/account/addresses', { address: body.address, make_default: true })).addresses; } catch (_) { /* kept on the order anyway */ }
@@ -851,8 +879,8 @@ async function placeOrder() {
 }
 
 // ------------------------------------------------------------------ your orders and tracking
-const OPEN = ['new', 'accepted', 'ready', 'out'];
-const ORDER_ART = { new: 'package', accepted: 'shopping-bags', ready: 'shopping-bags', out: 'motor-scooter', done: 'party-popper', cancelled: 'package' };
+const OPEN = ['new', 'accepted', 'packing', 'ready', 'out'];
+const ORDER_ART = { new: 'package', accepted: 'shopping-bags', packing: 'shopping-bags', ready: 'shopping-bags', out: 'motor-scooter', done: 'party-popper', cancelled: 'package' };
 const statusPill = (st) => `<span class="pill ${st === 'cancelled' ? 'red' : st === 'done' ? 'grey' : ''}">${st === 'done' ? 'Delivered / collected' : st === 'cancelled' ? 'Cancelled' : 'In progress'}</span>`;
 const orderCard = (o) => `<div class="box ocard"><a class="oc-top" href="#o=${o.token}"><img src="${FE(ORDER_ART[o.status] || 'package')}" alt="">
     <span class="oc-t"><b>Order ${esc(o.number)}</b>${statusPill(o.status)}<span class="or-s">${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'} · ${esc(o.slot_label)}</span></span>
@@ -897,16 +925,14 @@ async function ordersView() {
 }
 
 let trackTimer;
+const when = (v) => (v ? new Date(`${String(v).replace(' ', 'T')}+05:30`).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '');
 async function trackView(token) {
   S.page = 'track';
   const { order: o } = await get(`/track/${token}`);
   const s = S.info.shop;
-  const steps = ['new', 'accepted', o.mode === 'pickup' ? 'ready' : 'out', 'done'];
-  const names = { new: 'Order received', accepted: 'Packing your order', ready: 'Ready to collect', out: 'On the way to you', done: 'Completed' };
-  const at = steps.indexOf(o.status);
   const amount = paise(o.bill_total || o.est_total);
   const upi = s.upi_id ? `upi://pay?${new URLSearchParams({ pa: s.upi_id, pn: s.name, am: (amount / 100).toFixed(2), cu: 'INR', tn: `Order ${o.number}` })}` : '';
-  const payBox = o.pay_pref === 'upi' && o.status !== 'cancelled' ? `<div class="box paybox"><h3>${ico('qr')} Pay ${rs(amount)} by UPI</h3>
+  const payBox = o.mine && o.pay_pref === 'upi' && !['cancelled', 'done'].includes(o.status) ? `<div class="box paybox"><h3>${ico('qr')} Pay ${rs(amount)} by UPI</h3>
       ${S.info.upi_qr ? `<img class="qr" src="${esc(S.info.upi_qr)}" alt="Shop UPI QR code">` : ''}
       ${s.upi_id ? `<div class="upi-id">UPI ID: <b>${esc(s.upi_id)}</b> <button class="link" id="copyUpi" type="button">${ico('copy')}Copy</button></div>` : ''}
       ${upi ? `<a class="btn-g wide" href="${esc(upi)}">Pay in a UPI app</a>` : ''}
@@ -915,12 +941,21 @@ async function trackView(token) {
     : `<form id="refF" class="field"><label>After paying, type the UPI transaction number (UTR) from your app</label>
         <div style="display:flex;gap:8px"><input name="ref" inputmode="text" placeholder="e.g. 431256789012" required><button class="btn-g sm">Send</button></div></form>`}
       <p class="small mut">Weighed items are billed at the exact weight; the shop settles any small difference.</p></div>` : '';
+  const steps = (o.steps || []).map((st) => `<li class="${st.done ? 'done' : ''} ${st.current ? 'now' : ''}"><b>${esc(st.label)}</b>${st.at && st.done ? `<span>${esc(when(st.at))}</span>` : st.current ? '<span>In progress</span>' : ''}</li>`).join('');
+  const agent = o.agent && o.status === 'out' ? `<div class="box agent"><span class="ag-i">${ico('scooter')}</span><div class="ag-t"><small>Your delivery person</small>
+      <b>${esc(o.agent.name)}</b>${o.agent.at ? `<span class="small mut">Left the shop ${esc(when(o.agent.at))}</span>` : ''}
+      ${o.agent.tracking ? `<span class="small">${o.agent.tracking_url ? `<a class="okc" href="${esc(o.agent.tracking_url)}" target="_blank" rel="noopener">Track the delivery</a>` : `Tracking: ${esc(o.agent.tracking)}`}</span>` : ''}</div>
+      ${o.agent.phone ? `<a class="btn-o sm" href="tel:${esc(o.agent.phone)}">${ico('phone')}Call</a>` : ''}</div>` : '';
+  const cod = o.cod_due && Number(o.cod_due) ? `<div class="notice">Cash on delivery: please keep <b>${rs(paise(o.cod_due))}</b> ready (cash or UPI).</div>` : '';
+  const invoice = o.invoice ? `<a class="btn-g wide" href="/api/shop/account/orders/${encodeURIComponent(o.number)}/invoice" target="_blank" rel="noopener">${ico('down')}Download GST invoice</a>`
+    : o.status === 'done' && !o.mine ? '<p class="small mut" style="text-align:center"><a class="okc" href="#login">Log in</a> to download the invoice.</p>' : '';
   view().innerHTML = `${appbar(`Order ${o.number}`)}<div class="page narrow">
     <div class="status-card ${o.status === 'cancelled' ? 'cancel' : ''}"><img src="${FE(ORDER_ART[o.status] || 'package')}" alt="">
       <div><div class="small">${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'} · ${esc(o.slot_label)}</div><div class="st">${esc(o.status_label)}</div>
       ${o.status === 'cancelled' && o.note ? `<div class="small">Reason: ${esc(o.note)}</div>` : ''}</div></div>
-    ${payBox}
-    ${o.status !== 'cancelled' ? `<div class="box"><ol class="steps">${steps.map((st, i) => `<li class="${i <= at ? 'done' : ''}">${names[st]}</li>`).join('')}</ol></div>` : ''}
+    ${payBox}${agent}${cod}
+    ${o.status !== 'cancelled' && steps ? `<div class="box"><ol class="steps">${steps}</ol></div>` : ''}
+    ${invoice}
     ${o.lines.some((l) => l.note) ? '<div class="notice">Some items were not available. They are not charged, and anything already paid for them is refunded.</div>' : ''}
     <div class="box"><h3>Items</h3>${o.lines.map((l) => `<div class="cl" ${l.note && !Number(l.qty) ? 'style="opacity:.55"' : ''}><span class="ce">${pic({ ...l })}</span>
       <div class="cm"><b>${esc(nice(l.name))}</b><span>${esc(l.qty)} ${l.unit === 'kg' ? 'kg' : 'pc'} × ${rs(paise(l.price))}</span>
@@ -928,7 +963,8 @@ async function trackView(token) {
       <b>${rs(Math.round(paise(l.price) * Number(l.qty)))}</b></div>`).join('')}
       ${Number(o.delivery_charge) ? `<div class="bill-row"><span>Delivery charge</span><span>${rs(paise(o.delivery_charge))}</span></div>` : ''}
       <div class="bill-row total"><span>${o.bill_no ? `Bill ${esc(o.bill_no)}` : 'Approx. total'}</span><span>${rs(amount)}</span></div>
-      ${o.address ? `<p class="small mut">${ico('pin')} ${esc(o.address)}</p>` : ''}</div>
+      ${o.address ? `<p class="small mut">${ico('pin')} ${esc(o.address)}</p>` : ''}
+      ${!o.mine ? '<p class="small mut">Log in with the mobile number of this order to see the address and payment details.</p>' : ''}</div>
     <div class="box small">Questions? ${o.shop.phone ? `Call <a href="tel:${esc(o.shop.phone)}" class="okc"><b>${esc(o.shop.phone)}</b></a>` : 'Call the shop'} or see <a class="okc" href="#help">Help & support</a>.</div>
     <button class="btn-g wide" data-reorder="${esc(token)}">${ico('undo')}Order these items again</button></div>`;
   drawBars();
@@ -940,7 +976,45 @@ async function trackView(token) {
     });
   }
   clearTimeout(trackTimer);
-  if (OPEN.includes(o.status)) trackTimer = setTimeout(() => { if (location.hash === `#o=${token}` && !(document.activeElement && document.activeElement.name === 'ref')) trackView(token).catch(() => {}); }, 25000);
+  if (OPEN.includes(o.status)) trackTimer = setTimeout(() => { if (location.hash === `#o=${token}` && !(document.activeElement && document.activeElement.name === 'ref')) trackView(token).catch(() => {}); }, 20000);
+}
+
+// ------------------------------------------------------------------ "Ask the shop": answers from what is in stock now and your own orders
+function askSheet(prefill = '') {
+  const ai = !!(S.info && S.info.assistant && S.info.assistant.ai);
+  const c = sheet(`<div class="ask-h"><h2>Ask the shop</h2><span class="ai-badge ${ai ? '' : 'off'}" title="Answers come from the shop's stock list and your orders">${ai ? 'AI helper' : 'Shop search'}</span></div>
+    <p class="small mut">Ask about products, prices, offers or your orders. Only items in stock right now are suggested.</p>
+    <div id="askLog" class="ask-log"></div>
+    <form id="askF" class="ask-f"><input name="q" maxlength="300" placeholder="e.g. Do you have ripe bananas?" autocomplete="off" value="${esc(prefill)}" required>
+      <button class="btn-g sm" aria-label="Ask">${ico('right')}</button></form>
+    <div class="ask-chips">${['Fresh fruits today', 'Offers on rice', 'Where is my order?'].map((x) => `<button type="button" class="chip" data-askq="${esc(x)}">${esc(x)}</button>`).join('')}</div>`);
+  const log = $('#askLog', c);
+  const f = $('#askF', c);
+  const ask = async (q) => {
+    log.insertAdjacentHTML('beforeend', `<div class="ask-q">${esc(q)}</div><div class="ask-a wait">…</div>`);
+    log.scrollTop = log.scrollHeight;
+    const box = log.lastElementChild;
+    try {
+      const r = await post('/assistant', { q });
+      remember(r.products);
+      const badge = r.source === 'ai' ? '<span class="ai-badge sm">AI</span>' : '<span class="ai-badge sm off">Shop search</span>';
+      const sup = r.support || {};
+      box.className = 'ask-a';
+      box.innerHTML = `${badge}<p>${esc(r.answer)}</p>
+        ${r.products.length ? `<div class="rail ask-rail">${r.products.map(card).join('')}</div><p class="ask-src">From the shop's stock list: ${r.products.map((p) => esc(nice(p.name))).slice(0, 4).join(', ')}</p>` : ''}
+        ${r.orders.length ? r.orders.map((o) => `<a class="btn-o sm" href="#o=${esc(o.token)}">Order ${esc(o.number)} · ${esc(o.status)}</a>`).join(' ') : ''}
+        ${r.handoff ? `<div class="ask-human"><b>Talk to the shop</b>${sup.phone ? `<a class="btn-o sm" href="tel:${esc(sup.phone)}">${ico('phone')}Call</a>` : ''}
+          ${sup.whatsapp ? `<a class="btn-g sm" target="_blank" rel="noopener" href="https://wa.me/91${esc(String(sup.whatsapp).replace(/\D/g, '').slice(-10))}?text=${encodeURIComponent(`Hello, ${q}`)}">${ico('chat')}WhatsApp</a>` : ''}</div>` : ''}`;
+    } catch (e) {
+      box.className = 'ask-a';
+      box.innerHTML = `<p class="bad">${esc(e.message)}</p>`;
+    }
+    log.scrollTop = log.scrollHeight;
+  };
+  f.addEventListener('submit', (e) => { e.preventDefault(); const q = f.q.value.trim(); if (q) { f.q.value = ''; ask(q); } });
+  $$('[data-askq]', c).forEach((b) => b.addEventListener('click', () => ask(b.dataset.askq)));
+  if (prefill) ask(prefill);
+  setTimeout(() => f.q.focus(), 50);
 }
 
 // ------------------------------------------------------------------ account: log in, sign up (SMS code), forgot password
@@ -1232,16 +1306,9 @@ async function route() {
   if (!S.mode) S.mode = s.online_delivery === '1' ? 'delivery' : 'pickup';
   setMode(S.mode);
   // prices in the basket always come from the shop, never from what was saved on the phone
-  const ids = Object.keys(S.cart);
-  if (ids.length) {
-    try {
-      const { items } = await get(`/items?ids=${ids.join(',')}`);
-      remember(items);
-      for (const id of ids) if (!S.items.has(Number(id))) delete S.cart[id];
-      saveCart();
-    } catch (_) { /* shown later */ }
-  }
+  await refreshCart();
   $('#pcLoc').addEventListener('click', modeSheet);
+  $('#askB').addEventListener('click', () => askSheet());
   let t;
   $('#pcq').addEventListener('input', (e) => {
     clearTimeout(t);

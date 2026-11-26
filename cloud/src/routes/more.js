@@ -10,6 +10,10 @@ const customers = require('../customers');
 const reports = require('../reports');
 const owner = require('../owner');
 const shop = require('../shop');
+const fulfilment = require('../fulfilment');
+const site = require('../site');
+const events = require('../events');
+const stock = require('../stock');
 const backups = require('../backups');
 const { UserError, nowIST } = require('../money');
 
@@ -22,6 +26,7 @@ const need = (perm) => (req, res, next) => {
   return next();
 };
 const baseUrl = (req) => `${req.protocol}://${req.headers.host}`;
+const shopUrl = (req) => site.shopUrl(req);
 const clientIp = (req) => req.ip || '';
 
 // ------------------------------------------------------------------ counter events that matter for loss watch
@@ -88,26 +93,48 @@ r.get('/owner/losswatch', need('reports'), wrap(async (req, res) => ok(res, awai
 r.get('/owner/day', need('daily'), wrap(async (req, res) => ok(res, { text: await owner.dayText(req.query), owner_whatsapp: (await settings.load()).owner_whatsapp })));
 
 // ------------------------------------------------------------------ online orders: staff side
-r.get('/orders', need('orders'), wrap(async (req, res) => ok(res, { orders: await shop.staffList(req.query.tab) })));
-r.get('/orders/badge', need(), wrap(async (req, res) => ok(res, auth.can(req.user, 'orders') ? await shop.badge() : { new: 0, last: 0 })));
+r.get('/orders', need('orders'), wrap(async (req, res) => ok(res, { orders: await shop.staffList(req.query.tab), cod: await fulfilment.codPending(),
+  shop_url: shopUrl(req), online_enabled: (await settings.load()).online_enabled })));
+r.get('/orders/badge', need(), wrap(async (req, res) => ok(res, auth.can(req.user, 'orders') ? await shop.badge() : { new: 0, open: 0, last: 0 })));
+// live updates for the billing screens (new order, invoiced, dispatched, completed, cancelled)
+r.get('/events', need('orders'), (req, res) => events.subscribe(req, res, req.user));
 r.get('/orders/:id', need('orders'), wrap(async (req, res) => {
-  ok(res, { order: await shop.order('o.id=?', [req.params.id]), whatsapp: await shop.statusMessage(req.params.id, baseUrl(req)) });
+  ok(res, { order: await shop.order('o.id=?', [req.params.id]), whatsapp: await fulfilment.statusMessage(req.params.id, shopUrl(req)) });
 }));
-r.post('/orders/:id/status', need('orders'), wrap(async (req, res) => {
-  await shop.setStatus(req.params.id, req.body.status, req.user, req.body.note || '');
-  ok(res, { whatsapp: await shop.statusMessage(req.params.id, baseUrl(req)) });
-}));
+const step = (fn) => wrap(async (req, res) => {
+  const extra = await fn(req);
+  ok(res, { ...(extra || {}), whatsapp: await fulfilment.statusMessage(req.params.id, shopUrl(req)) });
+});
+r.post('/orders/:id/status', need('orders'), step((req) => fulfilment.setStatus(req.params.id, req.body.status, req.user, req.body.note || '')));
+r.post('/orders/:id/accept', need('orders'), step((req) => fulfilment.accept(req.params.id, req.user)));
+r.post('/orders/:id/ready', need('orders'), step((req) => fulfilment.markReady(req.params.id, req.user)));
+r.post('/orders/:id/dispatch', need('orders'), step((req) => fulfilment.dispatch(req.params.id, req.body || {}, req.user)));
+r.get('/orders/:id/complete', need('orders'), wrap(async (req, res) => ok(res, { preview: await fulfilment.completePreview(req.params.id) })));
+r.post('/orders/:id/complete', need('orders'), step(async (req) => ({ result: await fulfilment.complete(req.params.id, req.body || {}, req.user) })));
+r.post('/orders/:id/cancel', need('orders'), step(async (req) => fulfilment.cancel(req.params.id, req.body || {}, req.user)));
 r.post('/orders/:id/line', need('orders'), wrap(async (req, res) => {
-  await shop.changeLine(req.params.id, req.body.line_id, req.body.qty, req.user);
-  ok(res, { order: await shop.order('o.id=?', [req.params.id]), whatsapp: await shop.statusMessage(req.params.id, baseUrl(req)) });
+  await fulfilment.changeLine(req.params.id, req.body.line_id, req.body.qty, req.user);
+  ok(res, { order: await shop.order('o.id=?', [req.params.id]), whatsapp: await fulfilment.statusMessage(req.params.id, shopUrl(req)) });
 }));
+// stock held for online orders: things to check, and correcting the held numbers from the open orders
+r.get('/checks', need('orders'), wrap(async (req, res) => {
+  ok(res, await require('../ai/insights').insights(req.user, { ai: req.query.ai === '1' && auth.can(req.user, 'reports') }));
+}));
+r.post('/stock/reconcile', need('products'), wrap(async (req, res) => {
+  const fixed = await stock.reconcile();
+  await auth.audit({ user_id: req.user.id, action: 'stock_reserved', summary: `Held stock checked: ${fixed.length} corrected` });
+  ok(res, { fixed });
+}));
+r.get('/ai/logs', need('reports'), wrap(async (req, res) => ok(res, await require('../ai/insights').logs(req.query))));
+r.get('/shop-categories', need('stock_view'), wrap(async (req, res) => ok(res, { cats: await db.query(`SELECT c.id, c.name, COUNT(i.id) items
+  FROM categories c LEFT JOIN items i ON i.category_id=c.id AND i.active=1 GROUP BY c.id, c.name ORDER BY c.name`) })));
 r.get('/orders-stats', need('orders'), wrap(async (req, res) => {
   const [from, to] = reports.range(req.query.period || req.query.from ? req.query : { period: 'month' });
   ok(res, await shop.stats(from, to));
 }));
-r.post('/orders/:id/bill', need('bill'), wrap(async (req, res) => ok(res, { bill: await shop.forCounter(req.params.id) })));
+r.post('/orders/:id/bill', need('bill'), wrap(async (req, res) => ok(res, { bill: await fulfilment.forCounter(req.params.id, req.user) })));
 r.get('/orders-poster.svg', need('orders'), wrap(async (req, res) => {
-  const svg = await require('qrcode').toString(`${baseUrl(req)}/shop/`, { type: 'svg', margin: 1, color: { dark: '#14213d' } });
+  const svg = await require('qrcode').toString(shopUrl(req), { type: 'svg', margin: 1, color: { dark: '#14213d' } });
   res.setHeader('Content-Type', 'image/svg+xml');
   res.send(svg);
 }));
@@ -126,6 +153,7 @@ r.get('/shop/info', wrap(async (req, res) => {
   ok(res, { shop: await settings.shopSettings(), cats: await shop.categories(), banners: settings.shopBanners(cfg), offers: await shop.offerSummary(),
     sections: secs, groups: require('../sections').GROUPS.map(([key, name]) => ({ key, name })).filter((g) => secs.some((x) => x.group === g.key)),
     festival: settings.festival(cfg, nowIST().slice(0, 10)), upi_qr: settings.photoUrl(cfg.upi_qr), photos: PHOTOS,
+    assistant: { ai: (await require('../ai/gateway').status('shop')).on },
     stores: String(cfg.price_stores || '').split(',').map(Number).filter((n) => n > 0 && n < 100000).slice(0, 8),
     slots: shop.slots(cfg).map((d) => ({
     date: d.date, label: new Date(`${d.date}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }),
@@ -163,7 +191,18 @@ r.get('/shop/account/suggest', wrap(async (req, res) => {
   const c = await cust.current(req);
   ok(res, { items: await shop.suggest(c ? c.id : null) });
 }));
-r.post('/shop/track/:token/payref', wrap(async (req, res) => { await shop.setPayRef(req.params.token, (req.body || {}).ref); ok(res); }));
+r.post('/shop/track/:token/payref', wrap(async (req, res) => { await shop.setPayRef(req.params.token, (req.body || {}).ref, await cust.current(req)); ok(res); }));
+// the GST invoice of a completed order: only for the customer who placed it
+r.get('/shop/account/orders/:number/invoice', wrap(async (req, res) => {
+  const page = await require('../invoice').forCustomer(await cust.current(req), req.params.number);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(page);
+}));
+// "Ask the shop": answers from products available now and the customer's own orders (AI when switched on)
+r.post('/shop/assistant', wrap(async (req, res) => {
+  if ((await settings.load()).online_enabled !== '1') throw new UserError('The online shop is closed at the moment.');
+  ok(res, await require('../ai/assistant').answer((req.body || {}).q, await cust.current(req), clientIp(req)));
+}));
 r.get('/shop-sections', need('products'), wrap(async (req, res) => ok(res, { sections: require('../sections').SECTIONS.map(([key, name, group]) => ({ key, name, group })) })));
 r.post('/offers/bulk', need('products'), wrap(async (req, res) => ok(res, await catalog.bulkOffer(req.body || {}, req.user))));
 r.post('/offers/clear', need('products'), wrap(async (req, res) => ok(res, await catalog.clearOffers(req.body || {}, req.user))));
@@ -203,7 +242,7 @@ r.get('/shop/account/again', wrap(async (req, res) => {
   const c = await cust.current(req);
   ok(res, { items: c ? await shop.buyAgain(c.id) : [] });
 }));
-r.get('/shop/track/:token', wrap(async (req, res) => ok(res, { order: await shop.publicOrder(req.params.token) })));
+r.get('/shop/track/:token', wrap(async (req, res) => ok(res, { order: await shop.publicOrder(req.params.token, await cust.current(req)) })));
 
 // ------------------------------------------------------------------ offers, shop barcodes, expenses
 const expenses = require('../expenses');

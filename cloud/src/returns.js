@@ -27,6 +27,7 @@ async function createReturn(user, body) {
   return db.tx(async (q) => {
     const sale = await q.one('SELECT * FROM sales WHERE id=? FOR UPDATE', [body.sale_id]);
     if (!sale) throw new UserError('Bill not found.', 404);
+    if (sale.stock_pending) throw new UserError('This bill is for an online order that is not completed yet: cancel the order in Online orders instead.');
     if (method === 'credit' && !sale.customer_id) throw new UserError('This bill has no customer: give the money back in cash or UPI.');
     let shiftId = null;
     if (method === 'cash') {

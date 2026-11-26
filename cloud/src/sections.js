@@ -110,10 +110,13 @@ async function map() {
 async function idsOf(key) { return (await map()).ids.get(key) || []; }
 async function sectionOf(id) { return (await map()).of.get(id) || 'packaged'; }
 
-// Sections with something to sell, for the shop's menus.
+// Sections with something AVAILABLE to sell (available = stock − held for orders > 0), for the shop's menus.
 async function list() {
   const m = await map();
-  return SECTIONS.map(([key, name, group]) => ({ key, name, group, count: (m.ids.get(key) || []).length, img: m.img.get(key) || null })).filter((s) => s.count);
+  const avail = await require('./cache').cached('avail-ids', async () => new Set((await db.query(
+    'SELECT id FROM items WHERE active=1 AND price > 0 AND on_hand - reserved > 0')).map((r) => r.id)));
+  return SECTIONS.map(([key, name, group]) => ({ key, name, group, count: (m.ids.get(key) || []).filter((id) => avail.has(id)).length,
+    img: m.img.get(key) || null })).filter((s) => s.count);
 }
 
 module.exports = { GROUPS, SECTIONS, KEYS, classify, idsOf, sectionOf, list, map, reset: () => { cache = { v: '', of: new Map(), ids: new Map(), img: new Map() }; } };

@@ -311,3 +311,11 @@ kbd { border-radius: 3px; }
 @media (max-width: 900px) { .sb-row { flex-direction: column; } .sb-img { width: 100%; height: 120px; } }
 
 [hidden] { display: none !important; }
+
+/* online order steps (staff) */
+.ostep { list-style: none; display: flex; gap: 0; margin: 4px 0 12px; padding: 0; counter-reset: st; }
+.ostep li { flex: 1; position: relative; text-align: center; font-size: .8rem; color: var(--muted, #6b7689); padding-top: 26px; counter-increment: st; }
+.ostep li::before { content: counter(st); position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 22px; height: 22px; border-radius: 50%;
+  background: #e8ebf0; color: #6b7689; font-weight: 700; font-size: .75rem; line-height: 22px; z-index: 1; }
+.ostep li + li::after { content: ""; position: absolute; top: 10px; right: 50%; width: 100%; height: 2px; background: #e8ebf0; }
+.ostep li.done { color: inherit; font-weight: 600; } .ostep li.done::before { content: "✓"; background: #1e9b26; color: #fff; } .ostep li.done::after { background: #1e9b26; }

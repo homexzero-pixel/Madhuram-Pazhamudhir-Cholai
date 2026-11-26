@@ -316,7 +316,7 @@ CREATE TABLE IF NOT EXISTS online_orders (
   notes VARCHAR(300) NOT NULL DEFAULT '',
   slot DATETIME NOT NULL,
   pay_pref VARCHAR(6) NOT NULL DEFAULT 'cash',
-  status VARCHAR(10) NOT NULL DEFAULT 'new',    -- new / accepted / ready / out / done / cancelled
+  status VARCHAR(10) NOT NULL DEFAULT 'new',    -- new / accepted / packing (invoiced) / ready / out (dispatched) / done / cancelled
   status_note VARCHAR(200) NOT NULL DEFAULT '',
   est_items DECIMAL(12,2) NOT NULL,
   delivery_charge DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -407,4 +407,47 @@ CREATE TABLE IF NOT EXISTS expenses (
   user_id INT NOT NULL,
   shift_id INT NULL,
   INDEX (business_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ================================================================== two websites, one database
+-- Events for the billing screens (new online order, order invoiced, dispatched, completed, cancelled). Written in the same
+-- transaction as the change (transactional outbox), then pushed to the staff screens and, when set up, to a signed webhook.
+CREATE TABLE IF NOT EXISTS outbox (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  type VARCHAR(40) NOT NULL,
+  data TEXT NOT NULL,
+  created_at DATETIME NOT NULL,
+  pushed TINYINT NOT NULL DEFAULT 0,             -- sent to the open billing screens
+  hooked TINYINT NOT NULL DEFAULT 0,             -- delivered to the signed webhook (when one is set up)
+  attempts INT NOT NULL DEFAULT 0,
+  next_try DATETIME NULL,
+  INDEX (pushed, id), INDEX (hooked, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Bills in the last 30 days per product, worked out every few minutes (sorting the shop by "popular" without
+-- counting every bill on every page view).
+CREATE TABLE IF NOT EXISTS item_stats (
+  item_id INT PRIMARY KEY,
+  sold_30d INT NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Every question to the AI helpers and what came back (personal details masked), blocked attempts and costs.
+CREATE TABLE IF NOT EXISTS ai_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  at DATETIME NOT NULL,
+  site VARCHAR(8) NOT NULL,                     -- shop / billing
+  kind VARCHAR(12) NOT NULL,                    -- chat / anomalies
+  customer_id INT NULL,
+  user_id INT NULL,
+  question VARCHAR(600) NOT NULL DEFAULT '',
+  answer VARCHAR(1200) NOT NULL DEFAULT '',
+  outcome VARCHAR(10) NOT NULL,                 -- ok / blocked / fallback / refused / error / off / limit
+  reason VARCHAR(160) NOT NULL DEFAULT '',
+  model VARCHAR(40) NOT NULL DEFAULT '',
+  tokens_in INT NOT NULL DEFAULT 0,
+  tokens_out INT NOT NULL DEFAULT 0,
+  ms INT NOT NULL DEFAULT 0,
+  ip VARCHAR(45) NOT NULL DEFAULT '',
+  INDEX (at), INDEX (outcome, at), INDEX (customer_id, at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

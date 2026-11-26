@@ -127,7 +127,7 @@ test('returns: partial, approval, refund to credit or cash, stock back, paise ad
 });
 
 let order;
-test('online order: closed, place, stock held, staff accept, bill at the counter with delivery charge', async () => {
+test('online order: closed, place, stock held, accept, invoice at packing, dispatch, process completed, customer invoice', async () => {
   const slotsClosed = (await customer.get('/api/shop/items')).data;
   assert.equal(slotsClosed.closed, true);
   await owner.post('/api/settings', { online_enabled: '1', online_open: '00:00', online_close: '23:59', online_lead_minutes: '30',
@@ -172,10 +172,44 @@ test('online order: closed, place, stock held, staff accept, bill at the counter
   const sale = await cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 1', order_id: b.order_id, customer: b.customer, lines,
     payments: [{ method: 'upi', amount: '275' }] });
   assert.equal(sale.data.ok, true, JSON.stringify(sale.data));
-  const done = (await customer.get(`/api/shop/track/${r.data.token}`)).data.order;
-  assert.deepEqual([done.status, done.bill_no], ['done', sale.data.bill.bill_no]);
-  assert.equal((await customer.get('/api/shop/items?q=ponni')).data.items[0].available, '19');      // sold now, not held twice
+  // invoiced and packed: the GST bill exists, the goods are still reserved and still counted in the shop's stock
+  const packed = (await customer.get(`/api/shop/track/${r.data.token}`)).data.order;
+  assert.deepEqual([packed.status, packed.bill_no, packed.steps.map((x) => x.done)], ['packing', sale.data.bill.bill_no, [true, true, false, false]]);
+  assert.equal(packed.invoice, false);
+  assert.equal((await customer.get('/api/shop/items?q=ponni')).data.items[0].available, '19');
+  assert.equal((await owner.get(`/api/products/${rice.id}`)).data.item.on_hand, '21');
   assert.match((await cashier.post(`/api/orders/${order.id}/bill`)).data.error, /already billed/);
+  assert.match((await owner.post('/api/returns', { sale_id: sale.data.bill.id, method: 'cash', counter: 'Counter 1', reason: 'test',
+    lines: [{ line_id: sale.data.bill.lines[0].id, qty: '1' }] })).data.error, /not completed yet/);
+  // a home delivery is completed only after it went out with a delivery person
+  assert.match((await cashier.post(`/api/orders/${order.id}/complete`, { counter: 'Counter 1' })).data.error, /delivery person/);
+  assert.match((await cashier.post(`/api/orders/${order.id}/dispatch`, { agent_name: 'Murugan', agent_phone: '123' })).data.error, /10-digit/);
+  assert.match((await cashier.post(`/api/orders/${order.id}/dispatch`, { agent_name: 'Murugan', agent_phone: '9876501234', tracking: 'http://x.example' })).data.error, /https/);
+  const disp = await cashier.post(`/api/orders/${order.id}/dispatch`, { agent_name: 'Murugan', agent_phone: '98765 01234', tracking: 'Bike TN59 AB 1234' });
+  assert.equal(disp.data.ok, true, JSON.stringify(disp.data));
+  assert.match(disp.data.whatsapp.text, /Murugan \(9876501234\)/);
+  const out = (await customer.get(`/api/shop/track/${r.data.token}`)).data.order;
+  assert.deepEqual([out.status, out.agent.name, out.agent.phone, out.steps[2].label, out.steps[2].done], ['out', 'Murugan', '9876501234', 'Delivery agent assigned', true]);
+  // someone else with the tracking link sees the progress, not the name, address or payment details
+  const stranger = new Browser();
+  const seen = (await stranger.get(`/api/shop/track/${r.data.token}`)).data.order;
+  assert.deepEqual([seen.mine, seen.name, seen.address, seen.status], [false, 'Meena', undefined, 'out']);
+  // Process completed: the confirmation shows the bill and the items; then stock leaves, the reservation goes, the invoice opens
+  const pv = (await cashier.get(`/api/orders/${order.id}/complete`)).data.preview;
+  assert.deepEqual([pv.bill_no, pv.total, pv.cod, pv.lines.length], [sale.data.bill.bill_no, '275.00', '0.00', 2]);
+  const fin = await cashier.post(`/api/orders/${order.id}/complete`, { counter: 'Counter 1' });
+  assert.equal(fin.data.ok, true, JSON.stringify(fin.data));
+  assert.match(fin.data.whatsapp.text, /complete/);
+  const done = (await customer.get(`/api/shop/track/${r.data.token}`)).data.order;
+  assert.deepEqual([done.status, done.invoice, done.steps.every((x) => x.done)], ['done', true, true]);
+  assert.equal((await owner.get(`/api/products/${rice.id}`)).data.item.on_hand, '19');
+  assert.equal((await customer.get('/api/shop/items?q=ponni')).data.items[0].available, '19');      // sold now, not held twice
+  assert.equal(Number((await db.one('SELECT reserved FROM items WHERE id=?', [rice.id])).reserved), 0);
+  assert.match((await cashier.post(`/api/orders/${order.id}/complete`, { counter: 'Counter 1' })).data.error, /already completed/);
+  const inv = await customer.get(`/api/shop/account/orders/${r.data.number}/invoice`);
+  assert.equal(inv.status, 200);
+  assert.match(inv.data, new RegExp(`TAX INVOICE[\\s\\S]*${sale.data.bill.bill_no.replace(/\//g, '\\/')}`));
+  assert.equal((await stranger.get(`/api/shop/account/orders/${r.data.number}/invoice`)).status, 401);
 });
 
 test('reports, GST, CSV, owner tools and day summary', async () => {
@@ -300,7 +334,7 @@ test('counters, opening balance check, dashboard and bills by period, order chan
   assert.equal(ch.data.order.est_items, '150.00');
   await cashier.post(`/api/orders/${id}/status`, { status: 'accepted' });
   const track = (await customer.get(`/api/shop/track/${o.data.token}`)).data.order;
-  assert.match(track.status_label, /Processing/);
+  assert.match(track.status_label, /Accepted/);
   assert.equal(track.lines.find((l) => l.name === 'Apple').note, 'Not available – removed');
   const b = (await cashier.post(`/api/orders/${id}/bill`)).data.bill;
   assert.equal(b.lines.length, 1);

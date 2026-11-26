@@ -378,7 +378,13 @@ function payDialog() {
   const { total } = totals();
   const ptsMax = pointsCanPay(total);
   const C = POS.bill.customer;
-  const d = modal(`<h3>Payment · <span style="color:var(--brand)">${inr(total)}</span></h3>
+  const B = POS.bill;
+  // an online order: the invoice goes in the bag; the money usually comes on delivery (collected at "Process completed")
+  const online = B.order_id ? `<div class="notice" style="margin:0 0 10px">Online order <b>${esc(B.order_no)}</b>${B.order_mode === 'delivery' ? ' · home delivery' : ' · takeaway'}.
+      ${B.order_ref ? `Customer paid by UPI, ref <b>${esc(B.order_ref)}</b> (check it in your UPI app).` : 'The customer pays when they get the order.'}
+      <div class="row" style="margin-top:8px"><button type="button" class="primary" id="codB">Cash on delivery – collect later</button>
+      ${B.order_ref ? '<button type="button" id="upiPaid">Paid by UPI (ref above)</button>' : ''}</div></div>` : '';
+  const d = modal(`<h3>Payment · <span style="color:var(--brand)">${inr(total)}</span></h3>${online}
     <form><label>Cash given by customer ₹</label>
       <div class="row"><input name="cash" inputmode="decimal" autofocus style="flex:1;font-size:1.3rem">
         <button type="button" id="exact" class="primary">Exact ${inr(total)}</button></div>
@@ -421,6 +427,8 @@ function payDialog() {
     return { upi, card, credit, pts, cashUsed, given, remaining, nonCash };
   };
   if ($('#allpts', d)) $('#allpts', d).addEventListener('click', () => { f.points.value = Money.rs(ptsMax); calc(); f.cash.focus(); });
+  if ($('#codB', d)) $('#codB', d).addEventListener('click', () => { d.close('ok'); complete([{ method: 'cod', amount: Money.rs(total) }]); });
+  if ($('#upiPaid', d)) $('#upiPaid', d).addEventListener('click', () => { d.close('ok'); complete([{ method: 'upi', amount: Money.rs(total), reference: B.order_ref }]); });
   ['upi', 'card', 'cash', 'credit', 'points'].forEach((n) => f[n] && f[n].addEventListener('input', calc));
   $$('[data-v]', d).forEach((b) => b.addEventListener('click', () => { f.cash.value = b.dataset.v; calc(); f.cash.focus(); }));
   $('#exact', d).addEventListener('click', () => { f.cash.value = Money.rs(Math.max(0, total - val('upi') - val('card') - val('credit') - val('points'))); calc(); });
@@ -490,6 +498,8 @@ async function complete(payments) {
       payments,
     };
     const { bill } = await api('/checkout', { method: 'POST', body });
+    const wasOrder = POS.bill.order_no;
+    const wasMode = POS.bill.order_mode;
     POS.last = bill;
     POS.bill = newBill(); POS.sel = -1; saveBill();
     renderBill();
@@ -497,6 +507,7 @@ async function complete(payments) {
     $('#status').innerHTML = `<b>${esc(bill.bill_no)}</b> saved · ${inr(bill.total)}${cash && Number(cash.change_amt) ? ` · <span class="change">Change ${inr(cash.change_amt)}</span>` : ''}`;
     $('#blast').disabled = false;
     billPreview(bill);
+    if (wasOrder) toast(`${wasOrder} is billed and packed. Next: Online orders → ${wasMode === 'pickup' ? 'Ready for pickup' : 'Out for delivery'}.`);
     refreshStock().then(renderTiles).catch(() => {});
   } catch (err) {
     $('#status').textContent = '';

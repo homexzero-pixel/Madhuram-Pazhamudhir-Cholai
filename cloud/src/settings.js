@@ -58,6 +58,11 @@ const DEFAULTS = {
   festival_banner: '',             // photo for the festival banner (else a stock photo)
   referral_points: '50',           // loyalty points for a customer whose friend joins and buys (0 = no reward)
   price_stores: '9,19,29,49,99,119',              // banner photos at the top of the online shop: [{img, kicker, title, sub, link}]
+  // AI helpers (only work when the hosting has ANTHROPIC_API_KEY; without it the shop's own search answers)
+  ai_shop_enabled: '1',            // "Ask the shop" on the customers' site uses the AI
+  ai_billing_enabled: '1',         // the billing site's "Checks & AI" page writes an AI summary
+  ai_daily_tokens: '300000',       // the whole shop's daily AI budget (tokens)
+  ai_customer_daily: '25',         // questions one customer may ask per day
 };
 const SHOP_PUBLIC = ['name', 'name_ta', 'tagline', 'address', 'phone', 'upi_id', 'online_enabled', 'online_pickup', 'online_delivery', 'online_open',
   'online_close', 'online_min_order', 'online_delivery_charge', 'online_free_delivery_above', 'online_area',

@@ -654,3 +654,34 @@ label.addr.on .ai { background: #fff; color: var(--g-d); }
 @media (min-width: 1000px) { .bnr-pics img { width: 120px; height: 120px; } }
 
 .rail { scroll-padding: 0 var(--m); }
+
+/* ---------------------------------------------------------------- order steps with times, delivery person, invoice */
+.steps li b { display: block; font-weight: inherit; }
+.steps li span { display: block; font-size: .8rem; color: var(--mut); font-weight: 400; margin-top: 1px; }
+.steps li.now { color: var(--ink); } .steps li.now::before { border-color: var(--g); box-shadow: 0 0 0 4px var(--g-s); }
+.agent { display: flex; align-items: center; gap: 12px; }
+.agent .ag-i { width: 46px; height: 46px; border-radius: 50%; background: var(--g-s); color: var(--g-d); display: grid; place-items: center; flex: none; }
+.agent .ag-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.agent .ag-t small { color: var(--mut); } .agent .ag-t b { font-size: 1.05rem; }
+.page.narrow > .btn-g.wide { margin: 0 0 14px; }
+
+/* ---------------------------------------------------------------- "Ask the shop" */
+.ask-fab { position: fixed; right: var(--m); bottom: calc(150px + env(safe-area-inset-bottom)); z-index: 24; display: flex; align-items: center; gap: 6px;
+  background: var(--ink); color: #fff; border-radius: 999px; padding: 10px 16px 10px 12px; font-weight: 600; box-shadow: 0 8px 22px rgba(0, 0, 0, .22); }
+.ask-fab .ico { width: 20px; height: 20px; }
+body[data-page=detail] .ask-fab, body[data-page=cart] .ask-fab, body[data-page=auth] .ask-fab, body[data-page=track] .ask-fab { display: none; }
+.ask-h { display: flex; align-items: center; gap: 10px; } .ask-h h2 { margin: 0; }
+.ai-badge { display: inline-flex; align-items: center; gap: 4px; font-size: .72rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase;
+  color: var(--blue-d); background: #eef0ff; border: 1px solid #d9ddff; border-radius: 999px; padding: 2px 8px; }
+.ai-badge.sm { font-size: .66rem; padding: 1px 7px; margin-bottom: 4px; } .ai-badge.off { color: var(--mut); background: var(--soft); border-color: var(--line); }
+.ask-log { max-height: 52vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.ask-q { align-self: flex-end; background: var(--g); color: #fff; border-radius: 16px 16px 4px 16px; padding: 8px 12px; max-width: 85%; }
+.ask-a { align-self: stretch; background: var(--soft); border-radius: 16px 16px 16px 4px; padding: 10px 12px; }
+.ask-a p { margin: 0 0 6px; } .ask-a.wait { color: var(--mut); width: 60px; text-align: center; }
+.ask-rail { margin: 6px 0; padding: 0; } .ask-rail .pc { min-width: 140px; }
+.ask-src { font-size: .75rem; color: var(--mut); margin: 4px 0 0 !important; }
+.ask-human { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.ask-f { display: flex; gap: 8px; } .ask-f input { flex: 1; min-width: 0; border: 1px solid #ddd; border-radius: 12px; padding: 11px 12px; }
+.ask-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.ask-chips .chip { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: .85rem; background: #fff; }
+@media (min-width: 1000px) { .ask-fab { bottom: 28px; right: 28px; } }

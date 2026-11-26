@@ -35,6 +35,7 @@ async function save(itemId, buf, source = 'upload') {
   const name = `p${it.id}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
   fs.writeFileSync(path.join(DIR, name), buf);
   await db.query('UPDATE items SET image=?, image_source=?, updated_at=? WHERE id=?', [name, source, nowIST(), it.id]);
+  await db.bump();
   if (it.image && NAME.test(it.image)) { try { fs.unlinkSync(path.join(DIR, it.image)); } catch (_) { /* gone */ } }
   return name;
 }
@@ -55,6 +56,7 @@ async function remove(itemId) {
   const it = await db.one('SELECT image FROM items WHERE id=?', [itemId]);
   if (it && it.image && NAME.test(it.image)) { try { fs.unlinkSync(path.join(DIR, it.image)); } catch (_) { /* gone */ } }
   await db.query('UPDATE items SET image=NULL, image_source=NULL, updated_at=? WHERE id=?', [nowIST(), itemId]);
+  await db.bump();
 }
 
 // A photo file named after a barcode, product code (SKU) or PLU, e.g. 8901030677106.jpg or 10002.png

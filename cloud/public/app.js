@@ -295,6 +295,7 @@ async function loadMe() {
   App.settings = me.settings;
   App.counters = me.counters;
   App.version = me.version;
+  App.shopUrl = me.shop_url;
 }
 
 // ------------------------------------------------------------------ login and first-time setup
@@ -901,7 +902,7 @@ App.views.settings = async (main) => {
       <div class="grid3">${f('credit_note_prefix', 'Return (credit note) number prefix', 'maxlength="6"')}${f('near_expiry_days', 'Warn when stock expires within (days)')}<div></div></div>
       <h2>Online orders (customers order from their phone)</h2>
       <label class="row" style="font-weight:400"><input type="checkbox" name="online_enabled" style="width:auto" ${s.online_enabled === '1' ? 'checked' : ''}>
-        <b>Take online orders</b> (customer page: <a href="/shop/" target="_blank">${esc(location.origin)}/shop/</a>)</label>
+        <b>Take online orders</b> (customer site: <a href="${esc(App.shopUrl || '/shop/')}" target="_blank" rel="noopener">${esc(App.shopUrl || `${location.origin}/shop/`)}</a>)</label>
       <div class="grid3"><div><label class="row" style="font-weight:400"><input type="checkbox" name="online_pickup" style="width:auto" ${s.online_pickup === '1' ? 'checked' : ''}> Takeaway (customer collects)</label></div>
         <div><label class="row" style="font-weight:400"><input type="checkbox" name="online_delivery" style="width:auto" ${s.online_delivery === '1' ? 'checked' : ''}> Home delivery</label></div>
         ${f('online_area', 'Delivery area', 'placeholder="Within 3 km of the shop"')}</div>
@@ -930,6 +931,12 @@ App.views.settings = async (main) => {
         <label class="btn" style="margin:0">${ico('camera')} Choose festival photo<input type="file" accept="image/*" id="festFile" hidden></label>
         <button type="button" class="danger" id="festDel" ${s.festival_banner ? '' : 'hidden'}>Remove</button></div>
       <input type="hidden" name="festival_banner" id="festName" value="${esc(s.festival_banner || '')}">
+      <h3 style="margin:18px 0 4px">AI helpers</h3>
+      <p class="small muted" style="margin:0 0 8px">Work only when the hosting has an AI key (ANTHROPIC_API_KEY). Without it, "Ask the shop" answers from the shop's own search.
+        The AI only suggests products that are in stock, never works out prices, GST or totals, and never promises discounts or refunds. See Online orders → Checks & AI.</p>
+      <div class="grid3"><label class="row" style="font-weight:400"><input type="checkbox" name="ai_shop_enabled" style="width:auto" ${s.ai_shop_enabled === '1' ? 'checked' : ''}> AI answers in "Ask the shop" (customers' site)</label>
+        <label class="row" style="font-weight:400"><input type="checkbox" name="ai_billing_enabled" style="width:auto" ${s.ai_billing_enabled === '1' ? 'checked' : ''}> AI summary on Checks & AI (billing site)</label><div></div></div>
+      <div class="grid3">${f('ai_daily_tokens', 'Daily AI budget for the shop (tokens)', 'inputmode="numeric"')}${f('ai_customer_daily', 'Questions per customer per day', 'inputmode="numeric"')}<div></div></div>
       <h2>Weighing scale labels</h2>
       <label class="row" style="font-weight:400"><input type="checkbox" name="scale_enabled" style="width:auto" ${s.scale_enabled === '1' ? 'checked' : ''}> The shop uses barcode labels printed by the weighing scale</label>
       <div class="grid3">${f('scale_prefixes', 'Label starts with')}${f('scale_item_start', 'Item code starts at (0 = first digit)')}${f('scale_item_length', 'Item code digits')}</div>
@@ -965,7 +972,7 @@ App.views.settings = async (main) => {
   let banners = [];
   try { banners = JSON.parse(s.shop_banners || '[]'); } catch (_) { banners = []; }
   if (!Array.isArray(banners)) banners = [];
-  const cats = (await api('/shop/info').catch(() => ({ cats: [] }))).cats || [];
+  const cats = (await api('/shop-categories').catch(() => ({ cats: [] }))).cats || [];
   const drawBanners = () => {
     while (banners.length < 3) banners.push({ img: '', kicker: '', title: '', sub: '', link: '' });
     $('#sbJson').value = JSON.stringify(banners.filter((b) => b.img));

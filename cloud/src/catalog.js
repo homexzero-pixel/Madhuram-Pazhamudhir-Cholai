@@ -43,6 +43,7 @@ async function setOffer(data, user) {
   if (from && to && from > to) throw new UserError('The offer ends before it starts.');
   await db.query('UPDATE items SET offer_price=?, offer_from=?, offer_to=?, updated_at=? WHERE id=?',
     [price === null ? null : rs(price), price === null ? null : from, price === null ? null : to, nowIST(), it.id]);
+  await db.bump();                       // the shop's cached lists show the new price at once
   await audit({ user_id: user.id, action: 'offer', summary: price === null ? `${it.name}: offer removed` : `${it.name}: offer ₹${rs(price)} (normal ₹${it.price})${from ? ` from ${from}` : ''}${to ? ` to ${to}` : ''}` });
 }
 // One discount for a whole category, or for everything (a festival offer). The billing counters and the online shop use it
@@ -59,6 +60,7 @@ async function bulkOffer(data, user) {
   if (Number(data.category_id)) { where.push('category_id=?'); args.push(Number(data.category_id)); }
   const r = await db.query(`UPDATE items SET offer_price=ROUND(price * (100 - ?) / 100, 2), offer_from=?, offer_to=?, updated_at=?
     WHERE ${where.join(' AND ')} AND ROUND(price * (100 - ?) / 100, 2) > 0`, [pct, from, to, nowIST(), ...args, pct]);
+  await db.bump();
   const cat = Number(data.category_id) ? (await db.one('SELECT name FROM categories WHERE id=?', [Number(data.category_id)]) || {}).name : '';
   await audit({ user_id: user.id, action: 'offer', summary: `${pct}% off on ${cat || 'all products'}${from ? ` from ${from}` : ''} to ${to} (${r.affectedRows} products)` });
   return { count: r.affectedRows };
@@ -68,6 +70,7 @@ async function clearOffers(data, user) {
   const args = [];
   if (Number(data.category_id)) { where.push('category_id=?'); args.push(Number(data.category_id)); }
   const r = await db.query(`UPDATE items SET offer_price=NULL, offer_from=NULL, offer_to=NULL, updated_at=? WHERE ${where.join(' AND ')}`, [nowIST(), ...args]);
+  await db.bump();
   await audit({ user_id: user.id, action: 'offer', summary: `Offers removed on ${r.affectedRows} products` });
   return { count: r.affectedRows };
 }

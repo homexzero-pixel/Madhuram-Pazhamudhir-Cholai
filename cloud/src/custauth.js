@@ -144,7 +144,9 @@ function readCookie(req) {
   }
   return null;
 }
+// A customer's login only counts on the customers' site (never on the billing site).
 async function current(req) {
+  if (req.site === 'billing') return null;
   const token = readCookie(req);
   if (!token) return null;
   return db.one(`SELECT c.id, c.name, c.phone, c.address, c.verified, c.points, c.email, c.ref_code FROM customer_sessions s JOIN customers c ON c.id=s.customer_id

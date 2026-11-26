@@ -23,7 +23,7 @@ function need(perm) {
 
 // who is logged in (every /api call)
 r.use(wrap(async (req, res, next) => {
-  req.user = await auth.sessionUser(req);
+  req.user = req.site === 'shop' ? null : await auth.sessionUser(req);     // staff logins never count on the customers' site
   res.setHeader('Cache-Control', 'no-store');
   next();
 }));
@@ -56,7 +56,7 @@ r.post('/logout', wrap(async (req, res) => {
 r.get('/me', need(), wrap(async (req, res) => {
   const s = await settings.load();
   ok(res, { user: req.user, perms: auth.permsOf(req.user), settings: await settings.publicSettings(), counters: settings.counters(s),
-    version: pkg.version });
+    version: pkg.version, shop_url: require('../site').shopUrl(req) });
 }));
 
 r.post('/approve', need('bill'), wrap(async (req, res) => {

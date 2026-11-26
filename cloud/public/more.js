@@ -25,14 +25,16 @@ const tabs = (list, cur, base) => `<div class="cats" style="margin-bottom:12px">
   `<a class="btn ${k === cur ? 'primary' : ''}" href="#/${base}?tab=${k}">${esc(l)}</a>`).join('')}</div>`;
 const hashParam = (k) => (location.hash.match(new RegExp(`[?&]${k}=([^&]*)`)) || [])[1];
 
-// ------------------------------------------------------------------ new online order alert on every staff screen
+// ------------------------------------------------------------------ online orders: live alert on every staff screen
+// New orders arrive by a live connection (Server-Sent Events) with a chime and a red count; a poll every 20 s backs it up.
 let lastOrder = null;
 let orderTimer = null;
+let orderStream = null;
 function chime() {
   try {
     const a = new AudioContext();
-    [880, 1320].forEach((f, i) => { const o = a.createOscillator(); const g = a.createGain(); o.frequency.value = f; g.gain.value = 0.08;
-      o.connect(g); g.connect(a.destination); o.start(a.currentTime + i * 0.25); o.stop(a.currentTime + i * 0.25 + 0.2); });
+    [880, 1320, 1760].forEach((f, i) => { const o = a.createOscillator(); const g = a.createGain(); o.frequency.value = f; g.gain.value = 0.09;
+      o.connect(g); g.connect(a.destination); o.start(a.currentTime + i * 0.22); o.stop(a.currentTime + i * 0.22 + 0.18); });
   } catch (_) { /* no sound */ }
 }
 async function pollOrders() {
@@ -45,27 +47,63 @@ async function pollOrders() {
     lastOrder = b.last;
   } catch (_) { /* offline: try again later */ }
 }
+const EVENT_TEXT = { NEW_ONLINE_ORDER: (e) => `New online order ${e.number} · ${e.items} items · ${inr(e.total)}`, ORDER_INVOICED: (e) => `${e.number} billed (${e.bill_no})`,
+  ORDER_DISPATCHED: (e) => `${e.number} out for delivery with ${e.agent}`, ORDER_COMPLETED: (e) => `${e.number} completed`, ORDER_CANCELLED: (e) => `${e.number} cancelled` };
+function liveOrders() {
+  if (orderStream || !window.EventSource || !can('orders')) return;
+  orderStream = new EventSource('/api/events');
+  orderStream.addEventListener('order', (m) => {
+    let e = {};
+    try { e = JSON.parse(m.data); } catch (_) { return; }
+    if (e.type === 'NEW_ONLINE_ORDER') chime();
+    if (EVENT_TEXT[e.type]) toast(EVENT_TEXT[e.type](e));
+    pollOrders();
+    if (location.hash.startsWith('#/orders') && !$('dialog[open]')) route();
+  });
+  orderStream.onerror = () => { /* the browser reconnects by itself; the poll keeps the count right meanwhile */ };
+}
 App.afterFrame.push(() => {
   pollOrders();
+  liveOrders();
   if (!orderTimer) orderTimer = setInterval(pollOrders, 20000);
 });
 
 // ================================================================== Online orders (staff)
+const ORDER_TABS = [['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', 'Performance'], ['checks', 'Checks & AI']];
+const statusPill = (o) => `<span class="pill ${{ new: 'bad', cancelled: 'off', done: 'ok' }[o.status] || ''}">${esc(o.status_label)}</span>`;
+// the one next step for an order, as a button on the list
+function nextStep(o) {
+  if (o.status === 'new') return ['accept', 'Accept'];
+  if (!o.sale_id && ['accepted', 'ready', 'out'].includes(o.status)) return can('bill') ? ['bill', 'Bill & pack'] : null;
+  if (o.status === 'packing') return o.mode === 'delivery' ? ['dispatch', 'Out for delivery'] : ['ready', 'Ready for pickup'];
+  if (['ready', 'out'].includes(o.status)) return ['complete', 'Process completed'];
+  return null;
+}
 App.views.orders = async (main) => {
   const tab = hashParam('tab') || 'open';
   if (tab === 'perf') return ordersPerformance(main);
-  const { orders } = await api(`/orders?tab=${tab}`);
+  if (tab === 'checks') return checksView(main);
+  const { orders, cod, shop_url: shopUrl, online_enabled: onlineOn } = await api(`/orders?tab=${tab}`);
+  App.shopUrl = shopUrl;
+  App.settings.online_enabled = onlineOn;
+  const counts = { new: orders.filter((o) => o.status === 'new').length, busy: orders.filter((o) => ['accepted', 'packing', 'ready', 'out'].includes(o.status)).length };
   main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Online orders</h1>
-      <div class="row"><a class="btn" href="/shop/" target="_blank">Open customer page</a><button id="poster">QR poster for customers</button></div></div>
+      <div class="row"><a class="btn" href="${esc(shopUrl)}" target="_blank" rel="noopener">Open customer site</a><button id="poster">QR poster for customers</button></div></div>
     ${App.settings.online_enabled !== '1' ? `<div class="notice">Online orders are switched off. Turn on in ${can('settings') ? '<a href="#/settings">Settings</a>' : 'Settings'} → Online orders.</div>` : ''}
-    ${tabs([['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', 'Performance']], tab, 'orders')}
-    ${orders.length ? `<table><tr><th>Order</th><th>Slot</th><th>Customer</th><th class="hide-sm">Type</th><th>Status</th><th class="r">Approx.</th></tr>
-      ${orders.map((o) => `<tr class="click" data-id="${o.id}"><td><b>${esc(o.number)}</b><div class="small muted">${o.items} items</div></td>
+    ${tab === 'open' ? `<div class="cards"><div class="card stat"><div class="l">New</div><div class="v ${counts.new ? 'bad' : ''}">${counts.new}</div><div class="l">waiting to be accepted</div></div>
+      <div class="card stat"><div class="l">In progress</div><div class="v">${counts.busy}</div><div class="l">being packed or delivered</div></div>
+      <div class="card stat"><div class="l">Cash on delivery out</div><div class="v ${Number(cod.amount) ? 'warn' : ''}">${inr(cod.amount)}</div><div class="l">${cod.orders} orders not completed</div></div></div>` : ''}
+    ${tabs(ORDER_TABS, tab, 'orders')}
+    ${orders.length ? `<table><tr><th>Order</th><th>Slot</th><th>Customer</th><th class="hide-sm">Type</th><th>Status</th><th class="r">Amount</th><th></th></tr>
+      ${orders.map((o) => { const n = nextStep(o); return `<tr class="click" data-id="${o.id}"><td><b>${esc(o.number)}</b><div class="small muted">${o.items} items${o.bill_no ? ` · ${esc(o.bill_no)}` : ''}</div></td>
       <td>${esc(o.slot_label)}</td><td>${esc(o.name)}<div class="small muted">${esc(o.phone)}</div></td>
-      <td class="hide-sm">${o.mode === 'delivery' ? 'Delivery' : 'Takeaway'}</td>
-      <td><span class="pill ${o.status === 'new' ? 'bad' : o.status === 'cancelled' ? 'off' : ''}">${esc(o.status_label)}</span></td>
-      <td class="r">${inr(Money.paise(o.est_items) + Money.paise(o.delivery_charge))}</td></tr>`).join('')}</table>` : '<p class="muted">No orders here.</p>'}`;
-  $$('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => orderDialog(Number(tr.dataset.id))));
+      <td class="hide-sm">${o.mode === 'delivery' ? 'Delivery' : 'Takeaway'}${o.agent_name ? `<div class="small muted">${esc(o.agent_name)}</div>` : ''}</td>
+      <td>${statusPill(o)}${Number(o.cod) && o.status !== 'done' ? '<div class="small warn">Cash on delivery</div>' : ''}</td>
+      <td class="r">${inr(o.bill_total || Money.rs(Money.paise(o.est_items) + Money.paise(o.delivery_charge)))}</td>
+      <td class="r">${n ? `<button class="small ${n[0] === 'complete' || n[0] === 'accept' ? 'primary' : ''}" data-go="${n[0]}" data-oid="${o.id}">${esc(n[1])}</button>` : ''}</td></tr>`; }).join('')}</table>`
+    : '<p class="muted">No orders here.</p>'}`;
+  $$('tr[data-id]').forEach((tr) => tr.addEventListener('click', (e) => { if (!e.target.closest('[data-go]')) orderDialog(Number(tr.dataset.id)); }));
+  $$('[data-go]').forEach((b) => b.addEventListener('click', () => submitting(b, () => orderStep(b.dataset.go, Number(b.dataset.oid)))));
   $('#poster').addEventListener('click', posterPrint);
   const t = setInterval(() => { if (!$('dialog[open]') && document.visibilityState === 'visible') route(); }, 30000);
   App.leave = () => clearInterval(t);
@@ -74,7 +112,7 @@ App.views.orders = async (main) => {
 async function ordersPerformance(main) {
   const period = hashParam('period') || 'month';
   const p = await api(`/orders-stats?period=${period}`);
-  main.innerHTML = `<h1>Online orders</h1>${tabs([['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', 'Performance']], 'perf', 'orders')}
+  main.innerHTML = `<h1>Online orders</h1>${tabs(ORDER_TABS, 'perf', 'orders')}
     ${periodChips(period, 'orders?tab=perf')}
     <div class="cards">
       <div class="card stat"><div class="l">Orders</div><div class="v">${p.orders}</div><div class="l">${p.delivery} delivery · ${p.pickup} takeaway</div></div>
@@ -87,34 +125,176 @@ async function ordersPerformance(main) {
   return undefined;
 }
 
+// ------------------------------------------------------------------ Checks & AI: held stock, waiting orders, cash out, AI log
+async function checksView(main) {
+  const withAi = hashParam('ai') === '1';
+  const [c, logs] = await Promise.all([api(`/checks${withAi ? '?ai=1' : ''}`), can('reports') ? api('/ai/logs?limit=60') : Promise.resolve(null)]);
+  const lvl = { high: 'bad', medium: 'warn', low: '' };
+  const st = c.status;
+  main.innerHTML = `<h1>Online orders</h1>${tabs(ORDER_TABS, 'checks', 'orders')}
+    <div class="grid2"><div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Things to check</h2>
+        ${can('products') ? '<button id="reconcile">Correct held stock</button>' : ''}</div>
+      <p class="small muted">Worked out from the stock and the open orders. Products with more held than in stock are hidden from the customers' site until stock comes in.</p>
+      ${c.items.length ? `<table>${c.items.map((i) => `<tr><td><span class="pill ${lvl[i.level]}">${esc(i.kind.replace(/_/g, ' '))}</span></td><td>${esc(i.text)}</td>
+        <td class="r">${i.order_id ? `<button class="small" data-oid="${i.order_id}">Open</button>` : ''}</td></tr>`).join('')}</table>` : '<p class="ok">Nothing to check. Held stock matches the open orders.</p>'}
+      ${c.ai ? `<div class="card" style="margin-top:12px;background:#f5f6ff"><div class="row"><span class="pill" style="background:#e5e8ff;color:#2c3db8">AI summary</span>
+          <span class="small muted">${esc(c.ai.model)} · from the list above only</span></div><p>${esc(c.ai.summary)}</p>
+          <ul>${c.ai.actions.map((a) => `<li><b>${esc(a.ref)}</b>: ${esc(a.action)}</li>`).join('')}</ul></div>`
+    : st.on && c.items.length && can('reports') ? '<button id="aiSum" style="margin-top:10px">Ask the AI what to do first</button>' : ''}</div>
+      <div class="card"><h2 style="margin-top:0">AI helpers</h2>
+        <p>Customers' site: <b class="${logs && logs.shop.on ? 'ok' : 'muted'}">${logs ? (logs.shop.on ? 'on' : `off (${!logs.shop.keyed ? 'no API key on the server' : logs.shop.hard_off ? 'switched off on the server' : 'switched off in Settings'})`) : '–'}</b><br>
+        Billing site: <b class="${st.on ? 'ok' : 'muted'}">${st.on ? 'on' : 'off'}</b>${logs ? ` · model ${esc(logs.shop.model)}` : ''}</p>
+        ${logs ? `<p class="small muted">Tokens used today: ${logs.used.toLocaleString('en-IN')} of ${Number(App.settings.ai_daily_tokens || 0).toLocaleString('en-IN')} ·
+          ${logs.today.map((t) => `${esc(t.outcome)} ${t.n}`).join(' · ') || 'no questions today'} · blocked today: ${c.blocked_today}</p>` : ''}
+        <p class="small muted">Without an AI key the customers' "Ask the shop" answers from the shop's own search. The AI never works out prices, GST, totals or stock,
+          only suggests products that are in stock, and never promises discounts or refunds.</p></div></div>
+    ${logs ? `<h2>AI log</h2><p class="small muted">Phone numbers, e-mail, UPI and card numbers are masked before anything is sent or saved.</p>
+      <table><tr><th>When</th><th>Site</th><th>Who</th><th>Question</th><th>Answer</th><th>Outcome</th><th class="r hide-sm">Tokens</th></tr>
+      ${logs.rows.map((r) => `<tr><td class="small">${esc(r.at.slice(5, 16))}</td><td>${esc(r.site)}</td><td class="small">${esc(r.customer || r.staff || '–')}</td>
+        <td class="small">${esc(r.question)}</td><td class="small">${esc(r.answer)}</td>
+        <td><span class="pill ${{ ok: 'ok', blocked: 'bad', error: 'warn', refused: 'warn' }[r.outcome] || 'off'}">${esc(r.outcome)}</span>${r.reason ? `<div class="small muted">${esc(r.reason)}</div>` : ''}</td>
+        <td class="r hide-sm small">${r.tokens_in + r.tokens_out || ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No questions yet.</td></tr>'}</table>` : ''}`;
+  if ($('#reconcile')) $('#reconcile').addEventListener('click', () => submitting($('#reconcile'), async () => {
+    const r = await api('/stock/reconcile', { method: 'POST', body: {} });
+    toast(r.fixed.length ? `Corrected ${r.fixed.length} products.` : 'Held stock already matches the open orders.');
+    route();
+  }));
+  if ($('#aiSum')) $('#aiSum').addEventListener('click', () => { location.hash = '#/orders?tab=checks&ai=1'; });
+  $$('[data-oid]', main).forEach((b) => b.addEventListener('click', () => orderDialog(Number(b.dataset.oid))));
+}
+
+// ------------------------------------------------------------------ one order
+const STEP_NAMES = (o) => ['Order placed', 'Billed & packed', o.mode === 'delivery' ? 'Delivery person assigned' : 'Ready for pickup', 'Process completed'];
+function stepBar(o) {
+  const done = [true, !!o.sale_id, o.mode === 'delivery' ? !!o.dispatched_at && ['out', 'done'].includes(o.status) : ['ready', 'done'].includes(o.status), o.status === 'done'];
+  if (o.status === 'cancelled') return '<div class="notice">This order is cancelled.</div>';
+  return `<ol class="ostep">${STEP_NAMES(o).map((n, i) => `<li class="${done[i] ? 'done' : ''}">${esc(n)}</li>`).join('')}</ol>`;
+}
+async function orderStep(kind, id) {
+  if (kind === 'accept') { const r = await api(`/orders/${id}/accept`, { method: 'POST', body: {} }); sendUpdate(r.whatsapp); route(); return; }
+  if (kind === 'ready') { const r = await api(`/orders/${id}/ready`, { method: 'POST', body: {} }); sendUpdate(r.whatsapp); route(); return; }
+  if (kind === 'bill') { await billAtCounter(id); return; }
+  if (kind === 'dispatch') { dispatchDialog(id); return; }
+  if (kind === 'complete') { await completeDialog(id); return; }
+  if (kind === 'cancel') cancelDialog(id);
+}
+function sendUpdate(wa, text = 'Saved. Send the customer the WhatsApp update.') {
+  toast(text);
+  if (wa) window.open(waLink(wa.phone, wa.text), '_blank', 'noopener');
+}
+async function billAtCounter(id) {
+  if (!myCounter()) throw new Error('Choose this PC\'s counter first (Billing).');
+  const cur = JSON.parse(localStorage.getItem(`mpc_bill_${myCounter()}`) || 'null');
+  if (cur && cur.lines && cur.lines.length) throw new Error('Finish, hold (F8) or cancel the bill on the billing screen first.');
+  const { bill } = await api(`/orders/${id}/bill`, { method: 'POST', body: {} });
+  const lines = bill.lines.map((l) => ({ id: l.id, qty: Money.milli(l.qty), rate: null, disc: 0, note: '' }));
+  if (bill.delivery) lines.push({ id: bill.delivery.id, qty: 1000, rate: Money.paise(bill.delivery.rate), disc: 0, note: '', delivery: true, name: bill.delivery.name });
+  localStorage.setItem(`mpc_bill_${myCounter()}`, JSON.stringify({ uuid: crypto.randomUUID(), lines, customer: bill.customer, order_id: bill.order_id,
+    order_no: bill.number, order_pay: bill.pay_pref, order_ref: bill.pay_ref, order_mode: bill.mode }));
+  $$('dialog[open]').forEach((d) => d.close());
+  toast(`${bill.number} is on the bill. Weigh loose items (F4), then take payment: "Cash on delivery" if the customer pays later.`);
+  location.hash = '#/bill';
+}
+function dispatchDialog(id, o = {}) {
+  const d = modal(`<h3>Out for delivery</h3><p class="muted">The customer sees the name, can call this number, and gets the WhatsApp update.</p>
+    <form><label>Delivery person's name</label><input name="agent_name" value="${esc(o.agent_name || localStorage.getItem('mpc_agent_name') || '')}" required autofocus>
+      <label>Delivery person's mobile</label><input name="agent_phone" inputmode="tel" value="${esc(o.agent_phone || localStorage.getItem('mpc_agent_phone') || '')}" required>
+      <label>Tracking (optional: vehicle number, or a https:// tracking link)</label><input name="tracking" value="${esc(o.tracking || '')}" maxlength="200">
+      <div class="actions"><button type="button" data-close>Cancel</button><button class="primary">Send out</button></div></form>`);
+  $('form', d).addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitting($('button.primary', d), async () => {
+      const body = formData(e.target);
+      const r = await api(`/orders/${id}/dispatch`, { method: 'POST', body });
+      localStorage.setItem('mpc_agent_name', body.agent_name); localStorage.setItem('mpc_agent_phone', body.agent_phone);
+      d.close();
+      sendUpdate(r.whatsapp, 'Out for delivery. Send the customer the WhatsApp update.');
+      route();
+    });
+  });
+}
+async function completeDialog(id) {
+  const { preview: p } = await api(`/orders/${id}/complete`);
+  const cod = Money.paise(p.cod);
+  const d = modal(`<h3>Process completed · ${esc(p.number)}</h3>
+    <p class="muted">Bill <b>${esc(p.bill_no)}</b> · ${inr(p.total)}${p.agent ? ` · delivered by ${esc(p.agent.name)}` : ''}. When you confirm, these items leave the stock,
+      the held stock is released and the customer can download the invoice.</p>
+    <table>${p.lines.map((l) => `<tr><td>${esc(l.name)}</td><td class="r">${esc(l.qty)} ${esc(l.unit)}</td><td class="r small muted">stock now ${esc(l.on_hand)}</td><td class="r">${inr(l.amount)}</td></tr>`).join('')}</table>
+    <form>${cod ? `<h3 style="margin:14px 0 6px">Cash on delivery: ${inr(p.cod)}</h3>
+      <label class="row" style="font-weight:400;flex-wrap:nowrap"><input type="radio" name="method" value="cash" checked style="width:auto"> Cash, handed in at <b>${esc(myCounter() || 'this counter')}</b> (goes into its cash drawer)</label>
+      <label class="row" style="font-weight:400;flex-wrap:nowrap"><input type="radio" name="method" value="upi" style="width:auto"> Paid by UPI to the delivery person or the shop</label>
+      <div id="upiRef" hidden><label>UPI transaction number (UTR)</label><input name="ref" value="${esc(p.pay_ref)}"></div>`
+    : `<p class="ok">Already paid: ${p.payments.map((x) => `${esc(x.method.toUpperCase())} ${inr(x.amount)}${x.reference ? ` (${esc(x.reference)})` : ''}`).join(', ')}.</p>`}
+      <div class="actions"><button type="button" data-close>Back</button><button class="primary">Process completed</button></div></form>`);
+  d.classList.add('wide');
+  const f = $('form', d);
+  if (cod) $$('[name=method]', d).forEach((r) => r.addEventListener('change', () => { $('#upiRef', d).hidden = f.method.value !== 'upi'; }));
+  f.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitting($('button.primary', d), async () => {
+      const r = await api(`/orders/${id}/complete`, { method: 'POST', body: { counter: myCounter(), method: cod ? f.method.value : '', ref: f.ref ? f.ref.value : '' } });
+      d.close();
+      sendUpdate(r.whatsapp, `${r.result.number} completed${Money.paise(r.result.cod) ? `: ${inr(r.result.cod)} by ${r.result.settle}` : ''}.`);
+      route();
+    });
+  });
+}
+function cancelDialog(id, o = {}) {
+  const billed = !!o.sale_id;
+  const d = modal(`<h3>Cancel ${esc(o.number || 'order')}</h3>
+    ${billed ? `<p class="notice">This order is already billed (${esc(o.bill_no)}). A credit note reverses the bill; nothing was taken out of stock yet.
+      ${can('refund') ? '' : 'A manager approves with their PIN.'}</p>` : '<p class="muted">The held items become available again in the shop.</p>'}
+    <form><label>Why is it cancelled? (the customer sees this)</label><input name="note" required autofocus>
+      <div class="actions"><button type="button" data-close>Back</button><button class="danger">Cancel the order</button></div></form>`);
+  $('form', d).addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitting($('button.danger', d), async () => {
+      let approval;
+      if (billed && !can('refund')) {
+        approval = await managerApproval('refund', `Cancel ${o.number} and reverse bill ${o.bill_no} (${inr(o.bill_total)})`);
+        if (!approval) return;
+      }
+      const r = await api(`/orders/${id}/cancel`, { method: 'POST', body: { note: e.target.note.value, approval, counter: myCounter() } });
+      d.close();
+      const cr = r.credit;
+      sendUpdate(r.whatsapp, cr ? `Cancelled. Credit note ${cr.no}${Number(cr.refund_cash) ? `: give ${inr(cr.refund_cash)} cash back` : ''}${Number(cr.refund_upi) ? `: refund ${inr(cr.refund_upi)} by UPI` : ''}.` : 'Cancelled.');
+      route();
+    });
+  });
+}
+
 async function orderDialog(id) {
   const { order: o, whatsapp } = await api(`/orders/${id}`);
-  const open = ['new', 'accepted', 'ready', 'out'].includes(o.status);
-  const d = modal(`<h3>${esc(o.number)} · ${esc(o.status_label)}</h3>
+  const open = ['new', 'accepted', 'packing', 'ready', 'out'].includes(o.status);
+  const editable = open && !o.sale_id;
+  const n = nextStep(o);
+  const d = modal(`<h3>${esc(o.number)} · ${esc(o.status_label)}</h3>${stepBar(o)}
     <p><b>${esc(o.name)}</b> · ${esc(o.phone)} ${o.phone_verified ? '<span class="pill">Phone verified</span>' : '<span class="pill off">phone not verified</span>'} · ${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}<br>${esc(o.slot_label)}
     ${o.address ? `<br>${ico('pin')} ${esc(o.address)}` : ''}${o.notes ? `<br>Note: ${esc(o.notes)}` : ''}<br>Pays by ${o.pay_pref.toUpperCase()}${o.pay_ref ? ` · <b>UPI ref ${esc(o.pay_ref)}</b> (check it in your UPI app)` : ''}
-    ${o.bill_no ? `<br>Bill <b>${esc(o.bill_no)}</b> ${inr(o.bill_total)}` : ''}${o.status_note ? `<br><i>${esc(o.status_note)}</i>` : ''}</p>
+    ${o.bill_no ? `<br>Bill <b>${esc(o.bill_no)}</b> ${inr(o.bill_total)}${Money.paise(o.cod_due || '0') && o.status !== 'done' ? ` · <b class="warn">cash on delivery ${inr(o.cod_due)}</b>` : ''}` : ''}
+    ${o.agent_name ? `<br>${ico('scooter')} ${esc(o.agent_name)} · ${esc(o.agent_phone)}${o.tracking ? ` · ${esc(o.tracking)}` : ''}` : ''}
+    ${o.status_note ? `<br><i>${esc(o.status_note)}</i>` : ''}</p>
     <table>${o.lines.map((l) => `<tr class="${Number(l.qty) ? '' : 'struck'}"><td>${esc(l.name)}<div class="small ta muted">${esc(l.name_ta)}</div>
       ${l.note ? `<div class="small warn">${esc(l.note)}${l.ordered_qty !== null ? ` (ordered ${esc(Number(l.ordered_qty))})` : ''}</div>` : ''}</td>
       <td class="r">${esc(l.qty)} ${esc(l.unit)}</td><td class="r">${inr(Money.line(Money.paise(l.price), Money.milli(l.qty)))}</td>
-      <td class="r">${open && !o.sale_id ? `<button class="small" data-less="${l.id}" title="Less is available">Less</button>
+      <td class="r">${editable ? `<button class="small" data-less="${l.id}" title="Less is available">Less</button>
         ${Number(l.qty) ? `<button class="small danger" data-na="${l.id}" title="Remove: not available">Not available</button>` : ''}` : ''}</td></tr>`).join('')}
       ${Number(o.delivery_charge) ? `<tr><td>Delivery charge</td><td></td><td class="r">${inr(o.delivery_charge)}</td></tr>` : ''}
-      <tr><td><b>Approx. total</b></td><td></td><td class="r"><b>${inr(o.est_total)}</b></td></tr></table>
+      <tr><td><b>${o.bill_no ? 'Order total (approx.)' : 'Approx. total'}</b></td><td></td><td class="r"><b>${inr(o.est_total)}</b></td></tr></table>
     <div class="actions" style="justify-content:flex-start">
-      ${o.status === 'new' ? '<button class="primary" data-s="accepted">Accept</button>' : ''}
-      ${open && o.mode === 'pickup' && o.status !== 'ready' ? '<button data-s="ready">Ready for pickup</button>' : ''}
-      ${open && o.mode === 'delivery' && o.status !== 'out' ? '<button data-s="out">Out for delivery</button>' : ''}
-      ${open && can('bill') ? '<button class="primary" id="obill">Bill this order at this counter</button>' : ''}
+      ${n ? `<button class="primary" data-step="${n[0]}">${esc(n[1])}</button>` : ''}
+      ${o.status === 'packing' && o.mode === 'pickup' ? '<button data-step="complete">Process completed</button>' : ''}
+      ${o.status === 'out' ? '<button data-step="dispatch">Change delivery person</button>' : ''}
+      ${o.status === 'accepted' && !o.sale_id && can('bill') && (!n || n[0] !== 'bill') ? '<button data-step="bill">Bill & pack</button>' : ''}
       <a class="btn" target="_blank" rel="noopener" href="${esc(waLink(whatsapp.phone, whatsapp.text))}">WhatsApp the customer</a>
       <button id="opack">Print packing list</button>
-      ${open ? '<button class="danger" data-s="cancelled">Cancel order</button>' : ''}
+      ${open ? '<button class="danger" data-step="cancel">Cancel order</button>' : ''}
       <button data-close>Close</button></div>`);
+  d.classList.add('wide');
   const lineChange = async (lineId, qty) => {
     const r = await api(`/orders/${id}/line`, { method: 'POST', body: { line_id: lineId, qty } });
     d.close();
-    toast('Order changed. Send the customer the WhatsApp update.');
-    window.open(waLink(r.whatsapp.phone, r.whatsapp.text), '_blank', 'noopener');
+    sendUpdate(r.whatsapp, 'Order changed. Send the customer the WhatsApp update.');
     orderDialog(id);
   };
   $$('[data-na]', d).forEach((b) => b.addEventListener('click', () => submitting(b, () => lineChange(Number(b.dataset.na), '0'))));
@@ -123,34 +303,21 @@ async function orderDialog(id) {
     if (q === null) return;
     await lineChange(Number(b.dataset.less), q.trim() || '0');
   })));
-  $$('[data-s]', d).forEach((b) => b.addEventListener('click', () => submitting(b, async () => {
-    let note = '';
-    if (b.dataset.s === 'cancelled') { note = prompt('Why is the order cancelled? (the customer sees this)') || ''; if (!note.trim()) return; }
-    const r = await api(`/orders/${id}/status`, { method: 'POST', body: { status: b.dataset.s, note } });
+  $$('[data-step]', d).forEach((b) => b.addEventListener('click', () => submitting(b, async () => {
+    const k = b.dataset.step;
+    if (k === 'dispatch') { d.close(); dispatchDialog(id, o); return; }
+    if (k === 'cancel') { d.close(); cancelDialog(id, o); return; }
+    if (k === 'complete') { d.close(); await completeDialog(id); return; }
     d.close();
-    toast('Saved. Now send the customer the WhatsApp update.');
-    window.open(waLink(r.whatsapp.phone, r.whatsapp.text), '_blank', 'noopener');
-    route();
+    await orderStep(k, id);
   })));
   $('#opack', d).addEventListener('click', () => {
     $('#print-area').innerHTML = `<div class="receipt"><h2>${esc(o.number)} packing list</h2><div>${esc(o.name)} ${esc(o.phone)}</div>
-      <div>${esc(o.slot_label)} · ${o.mode === 'delivery' ? 'DELIVERY' : 'TAKEAWAY'}</div>${o.address ? `<div>${esc(o.address)}</div>` : ''}<hr>
+      <div>${esc(o.slot_label)} · ${o.mode === 'delivery' ? 'DELIVERY' : 'TAKEAWAY'}</div>${o.address ? `<div>${esc(o.address)}</div>` : ''}${o.bill_no ? `<div>Bill ${esc(o.bill_no)}</div>` : ''}<hr>
       <table>${o.lines.filter((l) => Number(l.qty)).map((l) => `<tr><td>[ ] ${esc(l.name)}<br><span class="ta">${esc(l.name_ta)}</span></td><td class="r">${esc(l.qty)} ${esc(l.unit)}</td></tr>`).join('')}</table>
       <hr>${o.notes ? `<div>Note: ${esc(o.notes)}</div>` : ''}</div>`;
     setTimeout(() => window.print(), 50);
   });
-  if ($('#obill', d)) $('#obill', d).addEventListener('click', () => submitting($('#obill', d), async () => {
-    if (!myCounter()) throw new Error('Choose this PC\'s counter first (Billing).');
-    const cur = JSON.parse(localStorage.getItem(`mpc_bill_${myCounter()}`) || 'null');
-    if (cur && cur.lines && cur.lines.length) throw new Error('Finish, hold (F8) or cancel the bill on the billing screen first.');
-    const { bill } = await api(`/orders/${id}/bill`, { method: 'POST', body: {} });
-    const lines = bill.lines.map((l) => ({ id: l.id, qty: Money.milli(l.qty), rate: null, disc: 0, note: '' }));
-    if (bill.delivery) lines.push({ id: bill.delivery.id, qty: 1000, rate: Money.paise(bill.delivery.rate), disc: 0, note: '', delivery: true, name: bill.delivery.name });
-    localStorage.setItem(`mpc_bill_${myCounter()}`, JSON.stringify({ uuid: crypto.randomUUID(), lines, customer: bill.customer, order_id: bill.order_id, order_no: bill.number }));
-    d.close();
-    toast(`${bill.number} is on the bill. Correct weighed items with F4, then take payment.`);
-    location.hash = '#/bill';
-  }));
 }
 
 function posterPrint() {
@@ -160,7 +327,7 @@ function posterPrint() {
     <div class="ta" style="font-size:22px">உங்கள் மொபைலில் ஆர்டர் செய்யுங்கள்!</div>
     <img src="/api/orders-poster.svg" style="width:110mm;margin:8mm 0">
     <div style="font-size:20px">Scan → choose → <b>Takeaway</b> or <b>Home delivery</b> → pick a time</div>
-    <div style="font-size:18px;margin-top:4mm">${esc(location.origin)}/shop/</div>
+    <div style="font-size:18px;margin-top:4mm">${esc(App.shopUrl || `${location.origin}/shop/`)}</div>
     <div style="font-size:18px;margin-top:6mm">${esc(s.name)} ${s.phone ? `· ${esc(s.phone)}` : ''}</div></div>`;
   const img = $('#print-area img[src$="svg"]');
   img.onload = () => window.print();
@@ -579,7 +746,7 @@ async function pickProduct(input, onPick) {
 }
 
 async function offersTab(body) {
-  const [{ offers }, info] = await Promise.all([api('/offers'), api('/shop/info').catch(() => ({ cats: [] }))]);
+  const [{ offers }, info] = await Promise.all([api('/offers'), api('/shop-categories').catch(() => ({ cats: [] }))]);
   body.innerHTML = `<div class="card" style="margin-bottom:12px"><h2 style="margin-top:0">Offer on a whole category (festival offer)</h2>
       <p class="small muted" style="margin-top:0">Every product in the category gets this discount on its selling price for these dates, at the counters and online.
         The selling price comes back by itself after the last day.</p>

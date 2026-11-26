@@ -40,6 +40,8 @@ async function tx(fn) {
       q.one = async (sql, params) => (await q(sql, params))[0] || null;
       const result = await fn(q);
       await conn.commit();
+      verCache.at = 0;
+      bump().catch(() => {});
       return result;
     } catch (err) {
       try { await conn.rollback(); } catch (_) { /* connection lost */ }
@@ -79,6 +81,22 @@ const COLUMNS = [
   ['customers', 'ref_rewarded', 'TINYINT NOT NULL DEFAULT 0'],
   ['online_orders', 'pay_ref', "VARCHAR(40) NOT NULL DEFAULT ''"],
   ['items', 'image_source', 'VARCHAR(20) NULL'],
+  // online orders: stock held for open orders, invoice at packing, delivery agent, "Process completed"
+  ['items', 'reserved', 'DECIMAL(12,3) NOT NULL DEFAULT 0'],
+  ['sales', 'stock_pending', 'TINYINT NOT NULL DEFAULT 0'],
+  ['online_orders', 'packed_at', 'DATETIME NULL'],
+  ['online_orders', 'ready_at', 'DATETIME NULL'],
+  ['online_orders', 'dispatched_at', 'DATETIME NULL'],
+  ['online_orders', 'agent_name', "VARCHAR(60) NOT NULL DEFAULT ''"],
+  ['online_orders', 'agent_phone', "VARCHAR(15) NOT NULL DEFAULT ''"],
+  ['online_orders', 'tracking', "VARCHAR(200) NOT NULL DEFAULT ''"],
+  ['online_orders', 'completed_at', 'DATETIME NULL'],
+  ['online_orders', 'completed_by', 'INT NULL'],
+  ['online_orders', 'settle_method', "VARCHAR(6) NOT NULL DEFAULT ''"],
+  ['online_orders', 'settle_ref', "VARCHAR(40) NOT NULL DEFAULT ''"],
+  ['online_orders', 'settle_shift_id', 'INT NULL'],
+  ['online_orders', 'cancelled_at', 'DATETIME NULL'],
+  ['online_orders', 'void_return_id', 'INT NULL'],
 ];
 
 async function migrate() {
@@ -88,12 +106,34 @@ async function migrate() {
   }
   for (const [table, col, ddl] of COLUMNS) {
     const have = await query('SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [table, col]);
-    if (!have.length) await query(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${ddl}`);
+    // two copies of the app (billing site and shop site) may start together: the other one may have just added it
+    if (!have.length) await query(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${ddl}`).catch((e) => { if (e.code !== 'ER_DUP_FIELDNAME') throw e; });
   }
 }
+
+// ---------------------------------------------------------------- "something changed" counter for the shop's caches
+// Bumped after every committed transaction and after the few direct product changes (offers, photos). Both sites read
+// it (one primary-key row), so a sale at a counter clears the customer site's cached product lists at once.
+let localVersion = 0;
+const changed = [];
+async function bump() {
+  localVersion += 1;
+  try {
+    await query("INSERT INTO sequences (k, last) VALUES ('_changes', 1) ON DUPLICATE KEY UPDATE last=last+1");
+  } catch (_) { /* the local counter still moved */ }
+  for (const fn of changed) fn();
+}
+let verCache = { at: 0, v: '' };
+async function changeVersion() {
+  if (Date.now() - verCache.at < 300) return verCache.v;      // many page parts at once share one read
+  const r = await one("SELECT last FROM sequences WHERE k='_changes'");
+  verCache = { at: Date.now(), v: `${r ? r.last : 0}.${localVersion}` };
+  return verCache.v;
+}
+const onChange = (fn) => changed.push(fn);
 
 async function end() {
   if (pool) { await pool.end(); pool = null; }
 }
 
-module.exports = { getPool, query, one, tx, migrate, end };
+module.exports = { getPool, query, one, tx, migrate, end, bump, changeVersion, onChange };
