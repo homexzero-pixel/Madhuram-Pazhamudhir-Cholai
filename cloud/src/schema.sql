@@ -346,3 +346,25 @@ CREATE TABLE IF NOT EXISTS stored_backups (
   bytes INT NOT NULL,
   kind VARCHAR(8) NOT NULL DEFAULT 'daily'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- customers' online accounts
+CREATE TABLE IF NOT EXISTS customer_sessions (
+  id CHAR(64) PRIMARY KEY,
+  customer_id INT NOT NULL,
+  created_at DATETIME NOT NULL,
+  expires_at DATETIME NOT NULL,
+  INDEX (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS otps (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  phone VARCHAR(12) NOT NULL,
+  purpose VARCHAR(10) NOT NULL,
+  code_hash CHAR(64) NOT NULL,
+  created_at DATETIME NOT NULL,
+  expires_at DATETIME NOT NULL,
+  tries INT NOT NULL DEFAULT 0,
+  used TINYINT NOT NULL DEFAULT 0,
+  ip VARCHAR(45) NOT NULL DEFAULT '',
+  INDEX (phone, created_at), INDEX (ip, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

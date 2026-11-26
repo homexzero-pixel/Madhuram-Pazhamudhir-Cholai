@@ -62,6 +62,10 @@ const COLUMNS = [
   ['online_order_lines', 'note', "VARCHAR(120) NOT NULL DEFAULT ''"],
   ['online_orders', 'accepted_at', 'DATETIME NULL'],
   ['items', 'image', 'VARCHAR(80) NULL'],
+  ['customers', 'pass_hash', "VARCHAR(200) NOT NULL DEFAULT ''"],
+  ['customers', 'verified', 'TINYINT NOT NULL DEFAULT 0'],
+  ['customers', 'online_since', 'DATETIME NULL'],
+  ['online_orders', 'customer_id', 'INT NULL'],
   ['items', 'image_source', 'VARCHAR(20) NULL'],
 ];
 

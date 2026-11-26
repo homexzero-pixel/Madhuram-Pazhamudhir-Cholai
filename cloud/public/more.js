@@ -91,7 +91,7 @@ async function orderDialog(id) {
   const { order: o, whatsapp } = await api(`/orders/${id}`);
   const open = ['new', 'accepted', 'ready', 'out'].includes(o.status);
   const d = modal(`<h3>${esc(o.number)} · ${esc(o.status_label)}</h3>
-    <p><b>${esc(o.name)}</b> · ${esc(o.phone)} · ${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}<br>${esc(o.slot_label)}
+    <p><b>${esc(o.name)}</b> · ${esc(o.phone)} ${o.phone_verified ? '<span class="pill">✓ phone verified</span>' : '<span class="pill off">phone not verified – call to confirm</span>'} · ${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}<br>${esc(o.slot_label)}
     ${o.address ? `<br>📍 ${esc(o.address)}` : ''}${o.notes ? `<br>Note: ${esc(o.notes)}` : ''}<br>Pays by ${o.pay_pref.toUpperCase()}
     ${o.bill_no ? `<br>Bill <b>${esc(o.bill_no)}</b> ${inr(o.bill_total)}` : ''}${o.status_note ? `<br><i>${esc(o.status_note)}</i>` : ''}</p>
     <table>${o.lines.map((l) => `<tr class="${Number(l.qty) ? '' : 'struck'}"><td>${esc(l.name)}<div class="small ta muted">${esc(l.name_ta)}</div>
@@ -241,6 +241,8 @@ async function customerCard(id, onDone) {
       <div class="grid2"><div><label>Address</label><input name="address" value="${esc(c.address || '')}"></div>
       <div><label>Credit limit ₹ (0 = no limit set)</label><input name="credit_limit" value="${esc(c.credit_limit)}" inputmode="decimal"></div></div>
       <div class="actions"><button type="button" data-close>Close</button><button class="primary">Save</button></div></form>
+    ${id ? `<p class="small">Online shop account: ${c.online ? `<b>yes</b>${c.verified ? ' · ✓ phone verified' : ''}` : 'none'}
+      ${c.phone ? ' · <button type="button" id="cpw" class="small">Set online password</button>' : ''}</p>` : ''}
     ${id ? `<h3 style="margin-top:10px">Owes: <span class="${owes ? 'bad' : 'ok'}">${inr(c.balance)}</span></h3>
       ${owes && can('cash') ? `<form id="cpay" class="row"><input name="amount" inputmode="decimal" placeholder="Amount ₹" style="width:120px" required>
         <select name="method" style="width:110px"><option value="cash">Cash</option><option value="upi">UPI</option><option value="card">Card</option></select>
@@ -255,6 +257,12 @@ async function customerCard(id, onDone) {
     await api('/customers', { method: 'POST', body: { ...formData(e.target), id } });
     toast('Saved.'); d.close(); if (onDone) onDone();
   }); });
+  if ($('#cpw', d)) $('#cpw', d).addEventListener('click', () => submitting($('#cpw', d), async () => {
+    const pw = prompt(`New online-shop password for ${c.name} (${c.phone}). At least 6 letters or digits – tell it to the customer:`);
+    if (!pw) return;
+    await api(`/customers/${id}/online-password`, { method: 'POST', body: { password: pw } });
+    toast('Password set. The customer logs in with the mobile number and this password.');
+  }));
   if ($('#cpay', d)) $('#cpay', d).addEventListener('submit', (e) => { e.preventDefault(); submitting($('button', e.target), async () => {
     const r = await api('/customers/pay', { method: 'POST', body: { ...formData(e.target), customer_id: id, counter: myCounter() } });
     toast(`Saved. Still owes ${inr(r.balance)}.`); d.close(); if (onDone) onDone();

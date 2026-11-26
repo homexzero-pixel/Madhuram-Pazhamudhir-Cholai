@@ -21,7 +21,8 @@ async function list({ q = '', owing = false } = {}) {
 }
 
 async function get(id) {
-  const c = await db.one(`SELECT c.*, ${BAL} balance FROM customers c WHERE c.id=?`, [id]);
+  const c = await db.one(`SELECT c.*, ${BAL} balance, c.pass_hash <> '' online FROM customers c WHERE c.id=?`, [id]);
+  delete c.pass_hash;
   if (!c) throw new UserError('Customer not found.', 404);
   c.bills = await db.query('SELECT id, bill_no, created_at, total FROM sales WHERE customer_id=? ORDER BY id DESC LIMIT 50', [id]);
   c.ledger = await db.query(`SELECT l.at, l.kind, l.amount, l.ref, l.method, u.name who FROM customer_ledger l LEFT JOIN users u ON u.id=l.user_id

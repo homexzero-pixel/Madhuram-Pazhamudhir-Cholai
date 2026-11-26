@@ -76,12 +76,17 @@ function slots(cfg, nowMs = Date.now()) {
   }
   return out;
 }
-function slotLabel(v, cfg) {
+// "9:00 am–10:00 am" for a slot
+function slotTime(v, cfg) {
   const step = Math.max(15, Number(cfg.online_slot_minutes) || 60);
   const d = new Date(`${v.replace(' ', 'T').slice(0, 16)}:00Z`);
   const e = new Date(d.getTime() + step * 60000);
   const t = (x) => x.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
-  return `${d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}, ${t(d)}–${t(e)}`;
+  return `${t(d)}–${t(e)}`;
+}
+function slotLabel(v, cfg) {
+  const d = new Date(`${v.replace(' ', 'T').slice(0, 16)}:00Z`);
+  return `${d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}, ${slotTime(v, cfg)}`;
 }
 
 function phone10(v) {
@@ -91,13 +96,14 @@ function phone10(v) {
   return p;
 }
 
-async function placeOrder(data, ip) {
+async function placeOrder(data, ip, customer) {
   const cfg = await settings.load();
   if (cfg.online_enabled !== '1') throw new UserError('Online orders are closed at the moment. Please call the shop.');
   if (data.website) throw new UserError('Please try again.');
-  const name = String(data.name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!customer) throw new UserError('Please log in (or sign up) to place the order.', 401);
+  const name = String(data.name || customer.name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   if (name.length < 2) throw new UserError('Please enter your name.');
-  const phone = phone10(data.phone);
+  const phone = customer.phone;
   const mode = data.mode;
   if (!((mode === 'pickup' && cfg.online_pickup === '1') || (mode === 'delivery' && cfg.online_delivery === '1'))) {
     throw new UserError('Choose takeaway or home delivery.');
@@ -152,8 +158,9 @@ async function placeOrder(data, ip) {
     const number = `ON-${String((await q.one('SELECT LAST_INSERT_ID() n')).n).padStart(5, '0')}`;
     const token = crypto.randomBytes(16).toString('hex');
     const now = nowIST();
-    const o = await q(`INSERT INTO online_orders (number, token, name, phone, mode, address, notes, slot, pay_pref, est_items, delivery_charge, ip,
-      created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [number, token, name, phone, mode, mode === 'delivery' ? address : '',
+    if (mode === 'delivery' && address) await q('UPDATE customers SET address=? WHERE id=?', [address, customer.id]);
+    const o = await q(`INSERT INTO online_orders (customer_id, number, token, name, phone, mode, address, notes, slot, pay_pref, est_items, delivery_charge, ip,
+      created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [customer.id, number, token, name, phone, mode, mode === 'delivery' ? address : '',
       String(data.notes || '').replace(/\s+/g, ' ').trim().slice(0, 300), `${slot.replace('T', ' ')}:00`, data.pay === 'upi' ? 'upi' : 'cash',
       rs(total), rs(charge), String(ip || '').slice(0, 45), now, now]);
     for (const [it, qty] of lines) {
@@ -166,7 +173,8 @@ async function placeOrder(data, ip) {
 }
 
 async function order(where, args) {
-  const o = await db.one(`SELECT o.*, x.bill_no, x.total bill_total FROM online_orders o LEFT JOIN sales x ON x.id=o.sale_id WHERE ${where}`, args);
+  const o = await db.one(`SELECT o.*, x.bill_no, x.total bill_total, c.verified phone_verified FROM online_orders o LEFT JOIN sales x ON x.id=o.sale_id
+    LEFT JOIN customers c ON c.id=o.customer_id WHERE ${where}`, args);
   if (!o) throw new UserError('Order not found.', 404);
   const cfg = await settings.load();
   o.lines = (await db.query('SELECT * FROM online_order_lines WHERE order_id=? ORDER BY id', [o.id])).map((l) => ({ ...l, qty: qtyStr(milli(l.qty)) }));
@@ -290,11 +298,20 @@ async function stats(from, to) {
     top: top.map((x) => ({ ...x, qty: qtyStr(milli(x.qty)) })), cancel_reasons: reasons };
 }
 
+// A customer's own orders (newest first) for "My orders".
+async function customerOrders(customerId) {
+  const cfg = await settings.load();
+  const rows = await db.query(`SELECT o.number, o.token, o.mode, o.slot, o.status, o.est_items, o.delivery_charge, x.total bill_total, o.created_at
+    FROM online_orders o LEFT JOIN sales x ON x.id=o.sale_id WHERE o.customer_id=? ORDER BY o.id DESC LIMIT 30`, [customerId]);
+  return rows.map((r) => ({ ...r, slot_label: slotLabel(r.slot, cfg), status_label: CUSTOMER_STATUS[r.status],
+    est_total: rs(paise(r.est_items) + paise(r.delivery_charge)) }));
+}
+
 async function badge() {
   const r = await db.one("SELECT COUNT(*) n, MAX(id) last FROM online_orders WHERE status='new'");
   const last = await db.one('SELECT MAX(id) m FROM online_orders');
   return { new: Number(r.n), last: last.m || 0 };
 }
 
-module.exports = { changeLine, stats, CUSTOMER_STATUS, catalogue, categories, slots, slotLabel, placeOrder, publicOrder, order, staffList, setStatus, forCounter, statusMessage, badge,
+module.exports = { slotTime, customerOrders, changeLine, stats, CUSTOMER_STATUS, catalogue, categories, slots, slotLabel, placeOrder, publicOrder, order, staffList, setStatus, forCounter, statusMessage, badge,
   phone10, STATUS, OPEN };

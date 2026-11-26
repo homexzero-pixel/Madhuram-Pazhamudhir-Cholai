@@ -109,13 +109,50 @@ r.get('/shop/info', wrap(async (req, res) => {
   const cfg = await settings.load();
   ok(res, { shop: await settings.shopSettings(), cats: await shop.categories(), slots: shop.slots(cfg).map((d) => ({
     date: d.date, label: new Date(`${d.date}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }),
-    slots: d.slots.map((v) => ({ v, l: shop.slotLabel(v, cfg).split(', ')[1] })) })) });
+    slots: d.slots.map((v) => ({ v, l: shop.slotTime(v, cfg) })) })) });
 }));
 r.get('/shop/items', wrap(async (req, res) => {
   if ((await settings.load()).online_enabled !== '1') return ok(res, { items: [], closed: true });
   return ok(res, { items: await shop.catalogue(req.query) });
 }));
-r.post('/shop/order', wrap(async (req, res) => ok(res, await shop.placeOrder(req.body || {}, clientIp(req)))));
+r.post('/shop/order', wrap(async (req, res) => ok(res, await shop.placeOrder(req.body || {}, clientIp(req), await cust.current(req)))));
+
+// ------------------------------------------------------------------ customers' accounts (mobile + password, SMS code when set up)
+const cust = require('../custauth');
+const meOut = (c) => (c ? { id: c.id, name: c.name, phone: c.phone, address: c.address || '', verified: !!c.verified } : null);
+r.get('/shop/account', wrap(async (req, res) => ok(res, { me: meOut(await cust.current(req)), sms: cust.smsEnabled() })));
+r.post('/shop/account/otp', wrap(async (req, res) => ok(res, await cust.sendOtp(req.body.phone, req.body.purpose, clientIp(req)))));
+r.post('/shop/account/signup', wrap(async (req, res) => {
+  const id = await cust.register(req.body || {});
+  cust.setCookie(res, req, await cust.newSession(id));
+  ok(res, { me: meOut(await db.one('SELECT * FROM customers WHERE id=?', [id])) });
+}));
+r.post('/shop/account/login', wrap(async (req, res) => {
+  const id = await cust.login(req.body.phone, req.body.password);
+  cust.setCookie(res, req, await cust.newSession(id));
+  ok(res, { me: meOut(await db.one('SELECT * FROM customers WHERE id=?', [id])) });
+}));
+r.post('/shop/account/reset', wrap(async (req, res) => {
+  const id = await cust.resetPassword(req.body || {});
+  cust.setCookie(res, req, await cust.newSession(id));
+  ok(res, { me: meOut(await db.one('SELECT * FROM customers WHERE id=?', [id])) });
+}));
+r.post('/shop/account/logout', wrap(async (req, res) => { await cust.logout(req); cust.setCookie(res, req, '', 0); ok(res); }));
+r.post('/shop/account/update', wrap(async (req, res) => {
+  const c = await cust.current(req);
+  if (!c) throw new UserError('Please log in again.', 401);
+  await cust.update(c, req.body || {});
+  ok(res, { me: meOut(await cust.current(req)) });
+}));
+r.get('/shop/account/orders', wrap(async (req, res) => {
+  const c = await cust.current(req);
+  if (!c) throw new UserError('Please log in.', 401);
+  ok(res, { orders: await shop.customerOrders(c.id) });
+}));
+// staff: set a new online password for a customer who calls the shop
+r.post('/customers/:id/online-password', need('customers'), wrap(async (req, res) => {
+  await cust.staffSetPassword(req.params.id, req.body.password, req.user); ok(res);
+}));
 r.get('/shop/track/:token', wrap(async (req, res) => ok(res, { order: await shop.publicOrder(req.params.token) })));
 
 // ------------------------------------------------------------------ product photos

@@ -80,3 +80,14 @@ npm start
 Money is kept in paise and quantities in thousandths (exact integers) in JavaScript, and as DECIMAL in MySQL. Every bill is saved in
 one transaction that locks the stock lots (first expiry first) and the bill-number row, so several counters never share a number or
 sell the same stock twice; a bill sent twice (network drop) is saved once.
+
+## Customers' accounts and SMS codes (optional)
+
+Customers sign up in the online shop with their mobile number and a password; they must be logged in to place an order.
+To check that the mobile number really belongs to them (a 6-digit code by SMS at sign-up, and "Forgot password"):
+
+1. Make an account at **fast2sms.com**, add some balance, and copy your **API key** (Dev API).
+2. Hostinger → your Web App → **Environment variables**: add `SMS_PROVIDER` = `fast2sms` and `SMS_API_KEY` = your key → **Redeploy**.
+
+Without these, accounts still work (mobile + password); staff see "phone not verified" on such orders and can call to confirm,
+and a customer who forgets the password calls the shop: **Customers & credit → the customer → Set online password**.

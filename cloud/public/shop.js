@@ -6,8 +6,14 @@ const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
 const S = {
   info: null, items: new Map(), cart: JSON.parse(localStorage.getItem('mpc_cart') || '{}'),
-  mode: localStorage.getItem('mpc_mode') || '', q: '', dayIdx: 0, slot: '',
+  mode: localStorage.getItem('mpc_mode') || '', q: '', dayIdx: 0, slot: '', me: null, sms: false, after: '',
 };
+async function post(path, body) {
+  const r = await fetch(`/api/shop${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const d = await r.json().catch(() => ({ ok: false, error: 'Please try again.' }));
+  if (!d.ok) { const e = new Error(d.error || 'Please try again.'); e.status = r.status; throw e; }
+  return d;
+}
 
 // ------------------------------------------------------------------ money and quantities
 const paise = (v) => Math.round(Number(v || 0) * 100);
@@ -78,11 +84,14 @@ function setQty(it, q) {
 function drawBars() {
   const c = cartSums();
   const hash = location.hash;
-  $('#cartbar').hidden = !c.n || hash.startsWith('#cart') || hash.startsWith('#o=') || hash.startsWith('#orders');
+  $('#cartbar').hidden = !c.n || /^#(cart|o=|orders|account|login|signup|forgot)/.test(hash);
   $('#cbItems').textContent = `${c.n} item${c.n === 1 ? '' : 's'}`;
   $('#cbTotal').textContent = rs(c.total);
   $('#navCount').hidden = !c.n; $('#navCount').textContent = c.n;
-  const page = hash.startsWith('#cart') ? 'cart' : hash.startsWith('#orders') || hash.startsWith('#o=') ? 'orders' : hash.startsWith('#cat') ? 'cats' : 'home';
+  $('#topCartText').textContent = c.n ? `${c.n} item${c.n === 1 ? '' : 's'} · ${rs(c.total)}` : 'Cart';
+  $('#topCart').classList.toggle('full', !!c.n);
+  $('#acctLink').textContent = S.me ? `👤 ${S.me.name.split(' ')[0]}` : '👤 Login / Sign up';
+  const page = hash.startsWith('#cart') ? 'cart' : /^#(account|login|signup|forgot|orders|o=)/.test(hash) ? 'account' : hash.startsWith('#cat') ? 'cats' : 'home';
   $$('.bottom a').forEach((a) => a.classList.toggle('on', a.dataset.nav === page));
 }
 
@@ -220,7 +229,7 @@ function cartView() {
   const saved = JSON.parse(localStorage.getItem('mpc_me') || '{}');
   const days = S.info.slots;
   if (S.dayIdx >= days.length) S.dayIdx = 0;
-  view().innerHTML = `${closedNote()}<div class="page"><h1>My cart</h1>
+  view().innerHTML = `${closedNote()}<div class="page"><h1>My cart</h1><div class="cart-cols"><div class="main-col">
     <div class="box"><div class="seg">
       ${s.online_delivery === '1' ? `<label class="${S.mode === 'delivery' ? 'on' : ''}"><input type="radio" name="cmode" value="delivery" ${S.mode === 'delivery' ? 'checked' : ''}> 🛵 Home delivery</label>` : ''}
       ${s.online_pickup === '1' ? `<label class="${S.mode === 'pickup' ? 'on' : ''}"><input type="radio" name="cmode" value="pickup" ${S.mode === 'pickup' ? 'checked' : ''}> 🛍️ Takeaway</label>` : ''}</div>
@@ -229,6 +238,7 @@ function cartView() {
       ${lines.map(([it, q]) => `<div class="cl" data-pid="${it.id}"><div class="ce" style="background:${it.image ? '#fff' : tint(it.cat || it.name)}">${it.image ? `<img src="${esc(it.image)}" alt="">` : itemPic(it)}</div>
         <div class="cm"><b>${esc(it.name)}</b><span>${rs(paise(it.price))}${it.unit === 'kg' ? '/kg' : ''}${it.unit === 'kg' ? ' · approx., weighed when packed' : ''}</span></div>
         <div class="cr pr"><span>${rs(lineP(it, q))}</span><span class="act">${actHtml(it)}</span></div></div>`).join('')}</div>
+    </div><div class="side">
     <div class="box"><h3>Bill details</h3>
       <div class="bill-row"><span>Items total</span><span>${rs(c.total)}</span></div>
       ${S.mode === 'delivery' ? `<div class="bill-row"><span>Delivery charge</span><span>${dc ? rs(dc) : '<b class="okc">FREE</b>'}</span></div>` : ''}
@@ -240,16 +250,18 @@ function cartView() {
       ${days.length ? `<div class="days">${days.map((d, i) => `<button type="button" data-day="${i}" class="${i === S.dayIdx ? 'on' : ''}">${esc(d.label)}</button>`).join('')}</div>
       <div class="slots">${days[S.dayIdx].slots.map((x) => `<button type="button" data-slot="${x.v}" class="${x.v === S.slot ? 'on' : ''}">${esc(x.l)}</button>`).join('')}</div>`
     : '<div class="mut small">No time slots available now.</div>'}</div>
-    <form class="box" id="of"><h3>Your details</h3>
-      <div class="field"><label>Name</label><input name="name" required value="${esc(saved.name || '')}" autocomplete="name"></div>
-      <div class="field"><label>Mobile (WhatsApp)</label><input name="phone" required inputmode="tel" value="${esc(saved.phone || '')}" autocomplete="tel"></div>
-      ${S.mode === 'delivery' ? `<div class="field"><label>Delivery address with landmark</label><textarea name="address" rows="2">${esc(saved.address || '')}</textarea></div>` : ''}
+    ${S.me ? '' : `<div class="box login-cta"><b>Log in to place your order</b><p class="small mut">Your mobile number is your login. New here? Sign up in a minute.</p>
+      <div class="row2"><a class="btn-g" href="#login" data-after="#cart">Log in</a><a class="btn-o" href="#signup" data-after="#cart">Sign up</a></div></div>`}
+    <form class="box" id="of" ${S.me ? '' : 'hidden'}><h3>Your details</h3>
+      <div class="field"><label>Name</label><input name="name" required value="${esc((S.me && S.me.name) || saved.name || '')}" autocomplete="name"></div>
+      <div class="field"><label>Mobile</label><div class="fixed">${esc(S.me ? S.me.phone : '')} ${S.me && S.me.verified ? '<span class="pill">✓ verified</span>' : ''}</div></div>
+      ${S.mode === 'delivery' ? `<div class="field"><label>Delivery address with landmark</label><textarea name="address" rows="2">${esc((S.me && S.me.address) || saved.address || '')}</textarea></div>` : ''}
       <div class="field"><label>Note for the shop (optional)</label><input name="notes" placeholder="e.g. ripe bananas, call before coming"></div>
       <div class="field"><label>Pay by</label><select name="pay"><option value="cash">Cash</option><option value="upi">UPI${s.upi_id ? ` (${esc(s.upi_id)})` : ''}</option></select></div>
       <input name="website" class="hp" tabindex="-1" autocomplete="off"><div id="oerr"></div>
       <p class="small mut">You pay when you ${S.mode === 'delivery' ? 'receive the order' : 'collect'}. The shop confirms on WhatsApp. Weighed items are billed at the exact weight.</p></form>
-    <div style="height:70px"></div></div>
-    <div class="place"><button class="btn-g" id="placeBtn" style="width:100%" ${s.online_enabled === '1' ? '' : 'disabled'}>Place order · ${rs(c.total + dc)} ›</button></div>`;
+    <div class="place"><button class="btn-g" id="placeBtn" style="width:100%" ${s.online_enabled === '1' ? '' : 'disabled'}>${S.me ? 'Place order' : 'Log in to order'} · ${rs(c.total + dc)} ›</button></div>
+    <div class="spacer"></div></div></div></div>`;
   $$('[name=cmode]').forEach((r) => r.addEventListener('change', () => setMode(r.value)));
   $$('[data-day]').forEach((b) => b.addEventListener('click', () => { S.dayIdx = Number(b.dataset.day); S.slot = ''; cartView(); }));
   $$('[data-slot]').forEach((b) => b.addEventListener('click', () => { S.slot = b.dataset.slot; $$('[data-slot]').forEach((x) => x.classList.toggle('on', x === b)); }));
@@ -258,6 +270,7 @@ function cartView() {
 }
 
 async function placeOrder() {
+  if (!S.me) { S.after = '#cart'; location.hash = '#login'; return; }
   const f = $('#of');
   const err = $('#oerr');
   err.innerHTML = '';
@@ -265,15 +278,16 @@ async function placeOrder() {
   if (!S.slot) { fail(`Please choose a ${S.mode === 'delivery' ? 'delivery' : 'pickup'} time.`); $('.days').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
   if (!f.name.value.trim()) { fail('Please enter your name.'); return; }
   const lines = Object.entries(S.cart).map(([id, q]) => ({ id: Number(id), qty: String(q) }));
-  const body = { mode: S.mode, slot: S.slot, name: f.name.value, phone: f.phone.value, address: f.address ? f.address.value : '', notes: f.notes.value,
+  const body = { mode: S.mode, slot: S.slot, name: f.name.value, address: f.address ? f.address.value : '', notes: f.notes.value,
     pay: f.pay.value, website: f.website.value, lines };
   const btn = $('#placeBtn');
   btn.disabled = true; btn.textContent = 'Placing order…';
   try {
     const r = await fetch('/api/shop/order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const d = await r.json();
+    if (r.status === 401) { S.me = null; S.after = '#cart'; location.hash = '#login'; return; }
     if (!d.ok) throw new Error(d.error);
-    localStorage.setItem('mpc_me', JSON.stringify({ name: body.name, phone: body.phone, address: body.address || JSON.parse(localStorage.getItem('mpc_me') || '{}').address || '' }));
+    if (body.address) S.me.address = body.address;
     const mine = JSON.parse(localStorage.getItem('mpc_orders') || '[]');
     mine.unshift({ n: d.number, t: d.token, at: new Date().toISOString() });
     localStorage.setItem('mpc_orders', JSON.stringify(mine.slice(0, 15)));
@@ -287,6 +301,14 @@ async function placeOrder() {
 
 // ------------------------------------------------------------------ my orders and tracking
 async function ordersView() {
+  if (S.me) {
+    const { orders } = await get('/account/orders');
+    view().innerHTML = `<div class="page narrow"><h1>My orders</h1>${orders.map((o) => `<a class="box order-row" href="#o=${o.token}"><span><b>${esc(o.number)}</b>
+      <span class="pill ${o.status === 'cancelled' ? 'red' : o.status === 'done' ? 'grey' : ''}">${esc(o.status === 'done' ? 'Completed' : o.status === 'cancelled' ? 'Cancelled' : 'In progress')}</span><br>
+      <span class="small mut">${o.mode === 'delivery' ? '🛵 Delivery' : '🛍️ Takeaway'} · ${esc(o.slot_label)}</span></span><b>${rs(paise(o.bill_total || o.est_total))} ›</b></a>`).join('')
+      || '<div class="empty">No orders yet. <a href="#" class="okc">Start shopping</a></div>'}</div>`;
+    return;
+  }
   const mine = JSON.parse(localStorage.getItem('mpc_orders') || '[]');
   view().innerHTML = `<div class="page"><h1>My orders</h1><div id="olist">${mine.length ? '<div class="mut small">Loading…</div>' : '<div class="empty">No orders yet from this phone.</div>'}</div></div>`;
   if (!mine.length) return;
@@ -321,6 +343,90 @@ async function trackView(token) {
   clearTimeout(trackTimer);
   if (!['done', 'cancelled'].includes(o.status)) trackTimer = setTimeout(() => { if (location.hash === `#o=${token}`) trackView(token).catch(() => {}); }, 20000);
   drawBars();
+}
+
+// ------------------------------------------------------------------ account: log in, sign up (SMS code), forgot password
+function authView(kind) {
+  const tabs = `<div class="auth-tabs"><a href="#login" class="${kind === 'login' ? 'on' : ''}">Log in</a><a href="#signup" class="${kind === 'signup' ? 'on' : ''}">Sign up</a></div>`;
+  const forms = {
+    login: `<form id="af"><div class="field"><label>Mobile number</label><input name="phone" inputmode="tel" autocomplete="tel" required></div>
+      <div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div>
+      <label class="show"><input type="checkbox" id="showpw"> Show password</label><div id="aerr"></div>
+      <button class="btn-g wide">Log in</button><p class="small" style="text-align:center"><a href="#forgot" class="okc">Forgot password?</a></p></form>`,
+    signup: `<form id="af"><div class="field"><label>Your name</label><input name="name" autocomplete="name" required></div>
+      <div class="field"><label>Mobile number</label><input name="phone" inputmode="tel" autocomplete="tel" required></div>
+      <div class="field"><label>Create a password (at least 6 letters or digits)</label><input name="password" type="password" autocomplete="new-password" required minlength="6"></div>
+      <label class="show"><input type="checkbox" id="showpw"> Show password</label>
+      ${S.sms ? `<div class="field" id="otpBox" hidden><label>6-digit code sent by SMS</label><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+        <button type="button" class="link" id="resend">Send the code again</button></div>` : ''}
+      <div id="aerr"></div><button class="btn-g wide" id="abtn">${S.sms ? 'Send code by SMS' : 'Create account'}</button>
+      <p class="small mut" style="text-align:center">${S.sms ? 'We send a code to check the mobile number is yours.' : 'The shop confirms your number when you collect your first order.'}</p></form>`,
+    forgot: S.sms ? `<form id="af"><p class="small mut">We send a code to your mobile number. Then choose a new password.</p>
+      <div class="field"><label>Mobile number</label><input name="phone" inputmode="tel" autocomplete="tel" required></div>
+      <div class="field" id="otpBox" hidden><label>6-digit code sent by SMS</label><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>
+      <div class="field" id="pwBox" hidden><label>New password</label><input name="password" type="password" autocomplete="new-password" minlength="6"></div>
+      <div id="aerr"></div><button class="btn-g wide" id="abtn">Send code by SMS</button></form>`
+      : `<p>To set a new password, please call the shop${S.info.shop.phone ? ` on <a href="tel:${esc(S.info.shop.phone)}"><b>${esc(S.info.shop.phone)}</b></a>` : ''}.
+      The shop sets a new password for your mobile number.</p><a class="btn-o wide" href="#login">Back to log in</a>`,
+  };
+  view().innerHTML = `<div class="page narrow"><div class="box auth"><div class="auth-head"><img src="/img/logo.webp" alt=""><div><h1>${kind === 'forgot' ? 'Forgot password' :
+    kind === 'signup' ? 'Create your account' : 'Welcome back'}</h1><p class="small mut">${esc(S.info.shop.name)}</p></div></div>
+    ${kind === 'forgot' ? '' : tabs}${forms[kind]}</div></div>`;
+  const f = $('#af');
+  if (!f) return;
+  const err = (m) => { $('#aerr').innerHTML = m ? `<div class="err">${esc(m)}</div>` : ''; };
+  if ($('#showpw')) $('#showpw').addEventListener('change', (e) => { $$('[type=password],[data-pw]', f).forEach((i) => { i.dataset.pw = 1; i.type = e.target.checked ? 'text' : 'password'; }); });
+  const done = (me, msg) => { S.me = me; toast(msg); const to = S.after || '#'; S.after = ''; location.hash = to; drawBars(); };
+  let codeSent = false;
+  const sendCode = async (purpose) => {
+    await post('/account/otp', { phone: f.phone.value, purpose });
+    codeSent = true; $('#otpBox').hidden = false; f.code.focus();
+    toast('Code sent by SMS.');
+  };
+  if ($('#resend')) $('#resend').addEventListener('click', () => sendCode('signup').catch((e) => err(e.message)));
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault(); err('');
+    const btn = $('button.btn-g', f); btn.disabled = true;
+    try {
+      if (kind === 'login') {
+        const r = await post('/account/login', { phone: f.phone.value, password: f.password.value });
+        done(r.me, `Welcome, ${r.me.name}!`);
+      } else if (kind === 'signup') {
+        if (S.sms && !codeSent) { await sendCode('signup'); btn.textContent = 'Create account'; return; }
+        const r = await post('/account/signup', { name: f.name.value, phone: f.phone.value, password: f.password.value, code: f.code ? f.code.value : '' });
+        done(r.me, 'Account created.');
+      } else {
+        if (!codeSent) { await sendCode('reset'); $('#pwBox').hidden = false; btn.textContent = 'Set new password'; return; }
+        const r = await post('/account/reset', { phone: f.phone.value, code: f.code.value, password: f.password.value });
+        done(r.me, 'Password changed.');
+      }
+    } catch (ex) { err(ex.message); } finally { btn.disabled = false; }
+  });
+  setTimeout(() => { const first = $('input', f); if (first && window.innerWidth > 760) first.focus(); }, 50);
+}
+
+function accountView() {
+  const m = S.me;
+  view().innerHTML = `<div class="page narrow"><div class="box acct-head"><div class="avatar">${esc(m.name.slice(0, 1).toUpperCase())}</div>
+      <div><h1 style="margin:0">${esc(m.name)}</h1><div class="mut">${esc(m.phone)} ${m.verified ? '<span class="pill">✓ verified</span>' : '<span class="pill grey">not verified yet</span>'}</div></div></div>
+    <a class="box order-row" href="#orders"><b>🧾 My orders</b><span>›</span></a>
+    <form class="box" id="pf"><h3>My details</h3>
+      <div class="field"><label>Name</label><input name="name" value="${esc(m.name)}" required></div>
+      <div class="field"><label>Delivery address with landmark</label><textarea name="address" rows="2">${esc(m.address)}</textarea></div>
+      <details><summary class="small okc" style="margin-top:10px">Change password</summary>
+        <div class="field"><label>Current password</label><input name="password" type="password" autocomplete="current-password"></div>
+        <div class="field"><label>New password</label><input name="new_password" type="password" autocomplete="new-password" minlength="6"></div></details>
+      <div id="perr"></div><button class="btn-g wide" style="margin-top:12px">Save</button></form>
+    <button class="btn-o wide" id="logout">Log out</button></div>`;
+  $('#pf').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      const r = await post('/account/update', { name: f.name.value, address: f.address.value, password: f.password.value, new_password: f.new_password.value });
+      S.me = r.me; toast('Saved.'); accountView(); drawBars();
+    } catch (ex) { $('#perr').innerHTML = `<div class="err">${esc(ex.message)}</div>`; }
+  });
+  $('#logout').addEventListener('click', async () => { await post('/account/logout'); S.me = null; toast('Logged out.'); location.hash = '#'; drawBars(); });
 }
 
 // ------------------------------------------------------------------ scan a pack's barcode with the phone camera
@@ -372,6 +478,8 @@ async function route() {
   try {
     if (h.startsWith('#o=')) await trackView(h.slice(3));
     else if (h === '#orders') await ordersView();
+    else if (h === '#account') (S.me ? accountView() : authView('login'));
+    else if (h === '#login' || h === '#signup' || h === '#forgot') (S.me && h !== '#forgot' ? accountView() : authView(h.slice(1)));
     else if (h === '#cart') cartView();
     else if (h === '#cats') catsView();
     else if (h.startsWith('#cat=')) await listView({ cat: h.slice(5) });
@@ -390,6 +498,9 @@ async function route() {
   } catch (e) { view().innerHTML = `<div class="page"><div class="err">${esc(e.message)}</div></div>`; return; }
   const s = S.info.shop;
   document.title = `${s.name} – order online`;
+  $('#brandName').textContent = s.name;
+  try { const a = await get('/account'); S.me = a.me; S.sms = a.sms; } catch (_) { /* browse without an account */ }
+  document.addEventListener('click', (e) => { const a = e.target.closest('[data-after]'); if (a) S.after = a.dataset.after; });
   if (!S.mode) S.mode = s.online_delivery === '1' ? 'delivery' : 'pickup';
   $$('#mode button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.m)));
   setMode(S.mode);

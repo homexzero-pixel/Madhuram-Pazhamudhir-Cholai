@@ -135,13 +135,15 @@ test('online order: closed, place, stock held, staff accept, bill at the counter
   require('../src/settings').reset();
   const info = (await customer.get('/api/shop/info')).data;
   const slot = info.slots[0].slots[0].v;
+  // ordering needs an account (no SMS service in tests: mobile + password only)
+  assert.equal((await customer.post('/api/shop/order', { name: 'X', mode: 'pickup', slot, lines: [{ id: rice.id, qty: 1 }] })).status, 401);
+  assert.equal((await customer.post('/api/shop/account/signup', { name: 'Meena', phone: '+91 98765 43210', password: 'secret-1' })).data.ok, true);
   const items = (await customer.get('/api/shop/items?q=ponni')).data.items;
   assert.equal(items[0].available, '21');
   const place = (o) => customer.post('/api/shop/order', { name: 'Meena', phone: '+91 98765 43210', mode: 'delivery', address: '4, Temple Street, near school',
     slot, lines: [{ id: rice.id, qty: 2 }, { id: apple.id, qty: '0.5' }], ...o });
   assert.match((await place({ lines: [{ id: rice.id, qty: 50 }] })).data.error, /Only 21/);
   assert.match((await place({ slot: '2001-01-01T10:00' })).data.error, /time slot/);
-  assert.match((await place({ phone: '12345' })).data.error, /10-digit/);
   assert.match((await place({ address: 'x' })).data.error, /address/);
   const r = await place();
   assert.equal(r.data.ok, true, JSON.stringify(r.data));
