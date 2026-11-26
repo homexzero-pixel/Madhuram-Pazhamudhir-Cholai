@@ -502,8 +502,9 @@ App.views.products = async (main) => {
     <div class="row" style="margin-bottom:10px">
       <input id="pq" placeholder="Scan a barcode or type name / code – Enter opens it" style="max-width:380px" autofocus>
       <select id="ps" style="max-width:200px"><option value="all">All products</option><option value="active">Selling now</option>
-        <option value="inactive">Not selling (no price)</option><option value="low">Low stock</option></select>
-      ${can('products') ? '<button class="primary" id="padd">+ Add product</button><button id="pimp">Import CSV</button>' : ''}
+        <option value="inactive">Not selling (no price)</option><option value="low">Low stock</option><option value="nophoto">No photo (best sellers first)</option></select>
+      ${can('products') ? `<button class="primary" id="padd">+ Add product</button><button id="pimp">Import CSV</button>
+        <button id="pbulk">🖼 Bulk photos</button><button id="pmode">📷 Photo mode</button>` : ''}
     </div><div id="plist"></div><div id="pmore"></div>`;
   let offset = 0;
   const load = async (more = false) => {
@@ -541,6 +542,8 @@ App.views.products = async (main) => {
     load();
   });
   if ($('#pimp')) $('#pimp').addEventListener('click', () => importDialog(() => load()));
+  if ($('#pbulk')) $('#pbulk').addEventListener('click', () => bulkPhotos(() => load()));
+  if ($('#pmode')) $('#pmode').addEventListener('click', () => photoMode(() => load()));
   await load();
 };
 
@@ -682,6 +685,76 @@ function stockDialog(item, mode, onDone) {
   }); });
 }
 
+// Many photo files at once. Each file is named after the product's barcode or code (8901030677106.jpg, 10002.png).
+function bulkPhotos(onDone) {
+  const d = modal(`<h3>Bulk photos</h3>
+    <p class="small">Choose many photo files at once (or a whole folder). <b>Name each file with the product's barcode or product code</b>, for example
+      <code>8901030677106.jpg</code> or <code>10002.png</code>. Distributors and brands often give photo packs named like this. Each photo is made small and
+      linked to its product automatically; a product that already has a photo gets the new one.</p>
+    <div class="row"><label class="btn primary" for="bpf">Choose photo files</label><input id="bpf" type="file" accept="image/*" multiple hidden>
+      <label class="btn" for="bpd">Choose a folder</label><input id="bpd" type="file" webkitdirectory multiple hidden></div>
+    <div id="bpres" style="margin-top:10px"></div><div class="actions"><button data-close>Close</button></div>`);
+  const run = async (files) => {
+    files = [...files].filter((f) => /^image\//.test(f.type) || /\.(jpe?g|png|webp)$/i.test(f.name));
+    if (!files.length) return;
+    let ok = 0; const missing = [];
+    for (const [i, f] of files.entries()) {
+      $('#bpres', d).innerHTML = `<p><b>${i + 1} / ${files.length}</b> · ${ok} linked · ${missing.length} not matched</p>`;
+      try {
+        const blob = await shrinkPhoto(f);
+        await api(`/products/image-by-code/${encodeURIComponent(f.name.replace(/\.[^.]+$/, ''))}`, { method: 'POST', raw: blob, type: blob.type });
+        ok += 1;
+      } catch (e) { missing.push(`${f.name}: ${e.message}`); }
+    }
+    $('#bpres', d).innerHTML = `<p class="ok"><b>${ok}</b> photos linked to products.</p>${missing.length ? `<details><summary class="bad">${missing.length} not matched</summary>
+      <div class="small" style="max-height:200px;overflow:auto">${missing.map(esc).join('<br>')}</div></details>` : ''}`;
+    if (onDone) onDone();
+  };
+  $('#bpf', d).addEventListener('change', (e) => run(e.target.files));
+  $('#bpd', d).addEventListener('change', (e) => run(e.target.files));
+}
+
+// Photo mode: one product after another (best sellers without a photo first). Snap, it saves, the next one comes. Scan to jump to a product.
+async function photoMode(onDone) {
+  let list = [];
+  let i = 0;
+  let saved = 0;
+  const d = modal(`<h3>📷 Photo mode</h3><input id="pmscan" placeholder="Scan a pack to jump to it" autocomplete="off">
+    <div id="pmbody" style="margin-top:10px"><p class="muted">Loading…</p></div>
+    <div class="actions"><button data-close>Finish</button></div>`, { onClose: () => { if (saved && onDone) onDone(); } });
+  const fetchList = async () => { list = (await api('/products?status=nophoto&limit=200')).items; i = 0; };
+  const show = () => {
+    const it = list[i];
+    if (!it) { $('#pmbody', d).innerHTML = '<p class="ok"><b>All done</b> – every product in this list has a photo.</p>'; return; }
+    $('#pmbody', d).innerHTML = `<div class="pm-card"><div class="muted small">${i + 1} of ${list.length} without a photo · ${saved} saved now</div>
+      <h2 style="margin:6px 0 2px">${esc(it.name)}</h2><div class="ta muted">${esc(it.name_ta)}</div>
+      <div class="small">${esc(it.codes.join(', ') || it.sku)} · ₹${esc(it.price || '')}</div>
+      <div class="row" style="margin-top:12px"><label class="btn primary big" for="pmf">📷 Take photo</label>
+        <input id="pmf" type="file" accept="image/*" capture="environment" hidden><button id="pmskip" class="big">Skip ›</button></div></div>`;
+    $('#pmf', d).addEventListener('change', (e) => submitting(null, async () => {
+      const f = e.target.files[0];
+      if (!f) return;
+      $('#pmbody', d).innerHTML = '<p class="muted">Saving…</p>';
+      const blob = await shrinkPhoto(f);
+      await api(`/products/${it.id}/image`, { method: 'POST', raw: blob, type: blob.type });
+      saved += 1; list.splice(i, 1); show();
+    }));
+    $('#pmskip', d).addEventListener('click', () => { i += 1; show(); });
+  };
+  $('#pmscan', d).addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const v = e.target.value.trim(); e.target.value = '';
+    if (!v) return;
+    const { items } = await api(`/products?q=${encodeURIComponent(v)}`);
+    const it = items.find((x) => x.codes.includes(v) || x.sku === v) || items[0];
+    if (!it) { toast('Not found.', true); return; }
+    list.splice(i, 0, it); show();
+  });
+  await fetchList();
+  show();
+}
+
 function importDialog(onDone) {
   const d = modal(`<h3>Import products from a CSV file</h3>
     <p class="muted small">Columns (first row): <b>Product name</b>, and any of SKU, Tamil name, Category, Sale unit (pcs/kg), Pack barcode,
@@ -817,9 +890,11 @@ App.views.settings = async (main) => {
         <div id="bklist" class="small" style="margin-top:10px"></div>
         <p class="small muted">To restore: Hostinger hPanel → Databases → phpMyAdmin → choose the database → Import → the backup file.</p></div>
       <div class="card"><h2 style="margin-top:0">Product photos</h2><div id="phst" class="small">…</div>
-        <p class="small">Finds the photo of each packed product by its barcode in <b>Open Food Facts</b> (a free, open product database; its photos may be
+        <p class="small">Finds the photo of each packed product by its barcode in the open product databases <b>Open Food Facts</b>, <b>Open Beauty Facts</b>
+          and <b>Open Products Facts</b> (food, soap/shampoo/cream, household; free, open data whose photos may be
           used with credit, which the shop page shows). Runs on the server by itself – about 80 products a minute; you can close this page.
-          Loose items and local brands are not there: take their photo from the product (📷 Take / choose photo).</p>
+          Loose items and local brands are not there: use <b>Products → 🖼 Bulk photos</b> (photo files named by barcode, e.g. from your distributor)
+          or <b>📷 Photo mode</b> (best sellers first, one tap per product).</p>
         <button class="primary" id="phgo">Find photos by barcode</button> <button id="phstop">Stop</button></div>
       <div class="card"><h2 style="margin-top:0">Bring data from the shop PC</h2><p class="small">On the shop PC double-click <b>Export_For_Cloud.bat</b>.
         It makes <i>madhuram_cloud_export.json.gz</i> on the desktop with all products, prices, barcodes, stock, customers and staff logins

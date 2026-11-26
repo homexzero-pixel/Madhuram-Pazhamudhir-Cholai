@@ -24,7 +24,7 @@ const call = async (method, p, body, type = 'application/json') => {
 
 test.before(async () => {
   mock = http.createServer((req, res) => {
-    if (req.url.startsWith('/api/v2/product/8901234567890.json')) {
+    if (req.url.startsWith('/beauty/api/v2/product/8901234567890.json')) {
       res.setHeader('Content-Type', 'application/json');
       return res.end(JSON.stringify({ status: 1, product: { image_front_small_url: `http://127.0.0.1:${mock.address().port}/front.jpg` } }));
     }
@@ -32,7 +32,8 @@ test.before(async () => {
     res.statusCode = 404; return res.end('{"status":0}');
   }).listen(0);
   await new Promise((r) => mock.once('listening', r));
-  process.env.OFF_BASE = `http://127.0.0.1:${mock.address().port}`;
+  // the first database does not have it, the second (beauty) does
+  process.env.OFF_BASES = `http://127.0.0.1:${mock.address().port}/food,http://127.0.0.1:${mock.address().port}/beauty`;
   if (!/test/.test(process.env.DB_NAME || '')) throw new Error('DB_NAME must be a test database.');
   for (const t of (await db.query('SHOW TABLES')).map((r) => Object.values(r)[0])) await db.query(`DROP TABLE \`${t}\``);
   await db.migrate();
@@ -64,6 +65,13 @@ test('upload a photo, it is served and shown in the shop; find photos by barcode
   const shop = (await call('GET', '/api/shop/items?ids=' + [a.id, b.id].join(','))).data.items;
   assert.ok(shop.every((x) => x.image && x.image.startsWith('/img/p/')), JSON.stringify(shop));
   assert.equal((await call('GET', `/api/products/${b.id}`)).data.item.image_source, 'openfoodfacts');
+  // products without a photo, best sellers first; bulk upload by file name (barcode or product code)
+  const no = (await call('GET', '/api/products?status=nophoto')).data.items.map((x) => x.name);
+  assert.deepEqual(no, ['Unknown pack']);
+  const byCode = await call('POST', '/api/products/image-by-code/8900000000017', JPG, 'image/jpeg');
+  assert.equal(byCode.data.name, 'Unknown pack', JSON.stringify(byCode.data));
+  assert.equal((await call('POST', '/api/products/image-by-code/123456', JPG, 'image/jpeg')).status, 404);
+  assert.equal((await call('GET', '/api/products?status=nophoto')).data.items.length, 0);
   await call('POST', `/api/products/${a.id}/image/remove`, '{}');
   assert.equal((await call('GET', `/api/products/${a.id}`)).data.item.image, null);
 });

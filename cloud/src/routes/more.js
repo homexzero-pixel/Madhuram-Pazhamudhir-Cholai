@@ -125,6 +125,10 @@ r.post('/products/:id/image', need('products'), express.raw({ type: ['image/*', 
   await auth.audit({ user_id: req.user.id, action: 'product_photo', summary: `Photo added for product ${req.params.id}` });
   ok(res, { image: `/img/p/${name}` });
 }));
+r.post('/products/image-by-code/:code', need('products'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
+  const it = await images.saveByCode(req.params.code, req.body);
+  ok(res, { id: it.id, name: it.name });
+}));
 r.post('/products/:id/image/remove', need('products'), wrap(async (req, res) => { await images.remove(Number(req.params.id)); ok(res); }));
 r.get('/images/fetch', need('products'), wrap(async (req, res) => ok(res, await images.status())));
 r.post('/images/fetch', need('settings'), wrap(async (req, res) => {

@@ -64,9 +64,11 @@ async function search({ q = '', status = 'all', limit = 50, offset = 0 }) {
   if (status === 'inactive') where.push('i.active=0');
   if (status === 'low') where.push('i.active=1 AND i.on_hand <= i.reorder_level');
   if (status === 'noprice') where.push('i.price IS NULL');
+  if (status === 'nophoto') where.push('i.active=1 AND i.image IS NULL');
   const sql = `SELECT i.*, c.name cat, (SELECT GROUP_CONCAT(code) FROM barcodes WHERE item_id=i.id) codes
      FROM items i LEFT JOIN categories c ON c.id=i.category_id ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-     ORDER BY i.active DESC, i.name LIMIT ? OFFSET ?`;
+     ORDER BY ${status === 'nophoto' ? `(SELECT COUNT(*) FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE l.item_id=i.id
+       AND x.business_date > DATE_SUB(CURDATE(), INTERVAL 60 DAY)) DESC, i.on_hand > 0 DESC,` : ''} i.active DESC, i.name LIMIT ? OFFSET ?`;
   const rows = await db.query(sql, [...args, Math.min(Number(limit) || 50, 200), Number(offset) || 0]);
   const total = (await db.one(`SELECT COUNT(*) n FROM items i ${where.length ? `WHERE ${where.join(' AND ')}` : ''}`, args)).n;
   return { total: Number(total), items: rows.map(itemOut) };

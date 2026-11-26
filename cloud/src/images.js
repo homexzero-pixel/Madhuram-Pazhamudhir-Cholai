@@ -11,7 +11,9 @@ const db = require('./db');
 const { nowIST, UserError } = require('./money');
 
 const DIR = process.env.IMAGE_DIR || require('./config').dataDir('madhuram_images');
-const OFF = process.env.OFF_BASE || 'https://world.openfoodfacts.org';
+// Open Food Facts (food), Open Beauty Facts (soap, shampoo, cream…), Open Products Facts (detergent, household…): same open format.
+const SOURCES = (process.env.OFF_BASES || process.env.OFF_BASE ||
+  'https://world.openfoodfacts.org,https://world.openbeautyfacts.org,https://world.openproductsfacts.org').split(',').map((x) => x.trim()).filter(Boolean);
 const NAME = /^p\d+_[0-9a-f]{8}\.(jpg|png|webp)$/;
 const MAX = 800 * 1024;
 
@@ -43,6 +45,17 @@ async function remove(itemId) {
   await db.query('UPDATE items SET image=NULL, image_source=NULL, updated_at=? WHERE id=?', [nowIST(), itemId]);
 }
 
+// A photo file named after a barcode, product code (SKU) or PLU, e.g. 8901030677106.jpg or 10002.png
+async function saveByCode(code, buf) {
+  code = String(code || '').trim().replace(/\.(jpe?g|png|webp)$/i, '').replace(/\s*\(\d+\)$/, '').trim();
+  if (!code) throw new UserError('The file name must be the barcode or product code.');
+  const it = await db.one(`SELECT i.id, i.name FROM items i WHERE i.id IN (SELECT item_id FROM barcodes WHERE code=?) OR i.sku=? OR i.plu=?
+    ORDER BY i.active DESC LIMIT 1`, [code, code, code]);
+  if (!it) throw new UserError(`No product has barcode / code ${code}.`, 404);
+  await save(it.id, buf, 'upload');
+  return it;
+}
+
 function filePath(name) {
   if (!NAME.test(name || '')) return null;
   const p = path.join(DIR, name);
@@ -63,9 +76,19 @@ async function fetchBuf(url, limit) {
 }
 
 async function lookup(code) {
-  const buf = await fetchBuf(`${OFF}/api/v2/product/${encodeURIComponent(code)}.json?fields=image_front_small_url,image_front_url,image_url`);
+  for (const base of SOURCES) {
+    const img = await lookupIn(base, code);
+    if (img) return img;
+    await sleep(300);
+  }
+  return null;
+}
+
+async function lookupIn(base, code) {
+  const buf = await fetchBuf(`${base}/api/v2/product/${encodeURIComponent(code)}.json?fields=image_front_small_url,image_front_url,image_url`);
   if (!buf) return null;
-  const d = JSON.parse(buf.toString('utf8'));
+  let d;
+  try { d = JSON.parse(buf.toString('utf8')); } catch (_) { return null; }
   if (d.status !== 1 || !d.product) return null;
   const url = d.product.image_front_small_url || d.product.image_front_url || d.product.image_url;
   if (!url || !/^https?:\/\//.test(url)) return null;
@@ -118,4 +141,4 @@ async function status() {
   return { ...j, with_photo: Number(c.with_photo || 0), without_photo: Number(c.without_photo || 0), from_db: Number(c.from_db || 0) };
 }
 
-module.exports = { save, remove, filePath, start, stop, status, DIR, kind };
+module.exports = { saveByCode, save, remove, filePath, start, stop, status, DIR, kind };
