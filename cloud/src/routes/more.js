@@ -118,6 +118,21 @@ r.get('/shop/items', wrap(async (req, res) => {
 r.post('/shop/order', wrap(async (req, res) => ok(res, await shop.placeOrder(req.body || {}, clientIp(req)))));
 r.get('/shop/track/:token', wrap(async (req, res) => ok(res, { order: await shop.publicOrder(req.params.token) })));
 
+// ------------------------------------------------------------------ product photos
+const images = require('../images');
+r.post('/products/:id/image', need('products'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
+  const name = await images.save(Number(req.params.id), req.body, 'upload');
+  await auth.audit({ user_id: req.user.id, action: 'product_photo', summary: `Photo added for product ${req.params.id}` });
+  ok(res, { image: `/img/p/${name}` });
+}));
+r.post('/products/:id/image/remove', need('products'), wrap(async (req, res) => { await images.remove(Number(req.params.id)); ok(res); }));
+r.get('/images/fetch', need('products'), wrap(async (req, res) => ok(res, await images.status())));
+r.post('/images/fetch', need('settings'), wrap(async (req, res) => {
+  const st = req.body.action === 'stop' ? images.stop() : images.start();
+  if (req.body.action !== 'stop') await auth.audit({ user_id: req.user.id, action: 'settings', summary: 'Started finding product photos by barcode' });
+  ok(res, await st);
+}));
+
 // ------------------------------------------------------------------ backups kept on the server
 r.get('/backups', need('backup'), wrap(async (req, res) => {
   const key = auth.can(req.user, 'settings') ? await backups.cronKey() : null;

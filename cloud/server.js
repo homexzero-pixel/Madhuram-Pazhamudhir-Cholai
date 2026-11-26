@@ -17,7 +17,7 @@ function createApp() {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('Content-Security-Policy',
-      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; " +
+      "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; " +
       "frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=15552000');
     next();
@@ -63,6 +63,13 @@ function createApp() {
   app.get('/sw.js', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(pub, 'sw.js'));
+  });
+  // product photos (public: the customers' shop shows them)
+  app.get('/img/p/:name', (req, res, next) => {
+    const p = require('./src/images').filePath(req.params.name);
+    if (!p) return next(new UserError('Not found.', 404));
+    res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+    return res.sendFile(p);
   });
   app.use(express.static(pub, { index: false, maxAge: '1h' }));
   app.get(['/shop', '/shop/'], (req, res) => {

@@ -45,6 +45,20 @@ const periodChips = (cur, base) => `<div class="cats periods">${PERIODS.map(([k,
   `<a class="btn ${k === cur ? 'primary' : ''}" href="#/${base}${base.includes('?') ? '&' : '?'}period=${k}">${l}</a>`).join('')}</div>`;
 const backupDoneToday = () => localStorage.getItem('mpc_backup_day') === today();
 
+// Make a phone photo small before sending it: at most 640 px, WebP or JPEG.
+async function shrinkPhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error('Could not read this photo.')); i.src = url; });
+    const k = Math.min(1, 640 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise((ok) => c.toBlob(ok, 'image/webp', 0.82));
+    return blob && blob.type === 'image/webp' ? blob : new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.85));
+  } finally { URL.revokeObjectURL(url); }
+}
+
 // ------------------------------------------------------------------ server calls
 async function api(path, { method = 'GET', body, raw, type } = {}) {
   const opts = { method, headers: {}, credentials: 'same-origin' };
@@ -496,7 +510,9 @@ App.views.products = async (main) => {
     offset = more ? offset + 50 : 0;
     const qs = new URLSearchParams({ q: $('#pq').value, status: $('#ps').value, offset });
     const { items, total } = await api(`/products?${qs}`);
-    const rows = items.map((i) => `<tr class="click" data-id="${i.id}"><td>${esc(i.name)}${i.name_ta ? `<div class="small ta muted">${esc(i.name_ta)}</div>` : ''}</td>
+    const rows = items.map((i) => `<tr class="click" data-id="${i.id}"><td><div class="row" style="flex-wrap:nowrap;gap:8px">
+      ${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy">` : '<span class="thumb none"></span>'}
+      <span>${esc(i.name)}${i.name_ta ? `<div class="small ta muted">${esc(i.name_ta)}</div>` : ''}</span></div></td>
       <td class="hide-sm small">${esc(i.sku)}${i.plu ? ` · PLU ${esc(i.plu)}` : ''}<br>${esc(i.codes.join(', '))}</td>
       <td class="r">${i.price ? inr(i.price) : '<span class="pill off">no price</span>'}${i.unit === 'kg' ? '/kg' : ''}</td>
       <td class="r ${Number(i.on_hand) <= Number(i.reorder_level) && i.active ? 'warn' : ''}">${esc(i.on_hand)} ${esc(i.unit)}</td>
@@ -537,6 +553,10 @@ async function productDialog(id, onSaved, preset = {}) {
   const editable = can('products') || preset.approval;
   const d = modal(`<h3>${id ? 'Product' : 'Add product'}</h3>
     <form id="pf">
+      ${id ? `<div class="photo-row"><div class="photo" id="ph">${item.image ? `<img src="${esc(item.image)}" alt="">` : '<span>No photo</span>'}</div>
+        ${can('products') ? `<div><label class="btn" for="phf">📷 Take / choose photo</label><input id="phf" type="file" accept="image/*" capture="environment" hidden>
+          ${item.image ? '<button type="button" class="danger" id="phx">Remove photo</button>' : ''}
+          <div class="small muted">${item.image_source === 'openfoodfacts' ? 'Photo: Open Food Facts' : 'Shown in the online shop and on the billing tiles.'}</div></div>` : ''}</div>` : ''}
       <label>Name (English)</label><input name="name" value="${esc(item.name)}" required ${id ? '' : 'autofocus'}>
       <label>Name (Tamil)</label><input name="name_ta" class="ta" value="${esc(item.name_ta)}">
       <div class="grid3"><div><label>Selling price ₹</label><input name="price" inputmode="decimal" value="${esc(item.price ?? '')}" ${id ? 'autofocus' : ''}></div>
@@ -563,6 +583,21 @@ async function productDialog(id, onSaved, preset = {}) {
     ${moves.length ? `<h3 style="margin-top:14px">Stock history</h3><div style="max-height:200px;overflow:auto"><table>${moves.map((m) => `<tr><td class="small">${esc(m.at.slice(0, 16))}</td>
       <td>${esc(m.kind)}</td><td class="r">${esc(Number(m.qty))}</td><td class="small">${esc(m.ref)} ${esc(m.reason)}</td><td class="small">${esc(m.who || '')}</td></tr>`).join('')}</table></div>` : ''}`);
   if (!editable) $$('input, select', $('#pf', d)).forEach((el) => { el.disabled = true; });
+  if ($('#phf', d)) $('#phf', d).addEventListener('change', (e) => submitting(null, async () => {
+    const file = e.target.files[0];
+    if (!file) return;
+    $('#ph', d).innerHTML = '<span>Saving…</span>';
+    const blob = await shrinkPhoto(file);
+    const r = await api(`/products/${id}/image`, { method: 'POST', raw: blob, type: blob.type });
+    $('#ph', d).innerHTML = `<img src="${esc(r.image)}" alt="">`;
+    toast('Photo saved.');
+    if (onSaved) onSaved();
+  }));
+  if ($('#phx', d)) $('#phx', d).addEventListener('click', () => submitting($('#phx', d), async () => {
+    await api(`/products/${id}/image/remove`, { method: 'POST', body: {} });
+    $('#ph', d).innerHTML = '<span>No photo</span>'; $('#phx', d).remove();
+    if (onSaved) onSaved();
+  }));
   let codes = [...item.codes];
   const drawCodes = () => {
     $('#bclist', d).innerHTML = codes.map((c, i) => `<span class="chip">${esc(c)} <button type="button" data-x="${i}" title="Remove">×</button></span>`).join('') ||
@@ -781,6 +816,11 @@ App.views.settings = async (main) => {
           <button id="bknow">Save a backup on the server now</button>` : ''}
         <div id="bklist" class="small" style="margin-top:10px"></div>
         <p class="small muted">To restore: Hostinger hPanel → Databases → phpMyAdmin → choose the database → Import → the backup file.</p></div>
+      <div class="card"><h2 style="margin-top:0">Product photos</h2><div id="phst" class="small">…</div>
+        <p class="small">Finds the photo of each packed product by its barcode in <b>Open Food Facts</b> (a free, open product database; its photos may be
+          used with credit, which the shop page shows). Runs on the server by itself – about 80 products a minute; you can close this page.
+          Loose items and local brands are not there: take their photo from the product (📷 Take / choose photo).</p>
+        <button class="primary" id="phgo">Find photos by barcode</button> <button id="phstop">Stop</button></div>
       <div class="card"><h2 style="margin-top:0">Bring data from the shop PC</h2><p class="small">On the shop PC double-click <b>Export_For_Cloud.bat</b>.
         It makes <i>madhuram_cloud_export.json.gz</i> on the desktop with all products, prices, barcodes, stock, customers and staff logins
         (they keep their passwords). Choose that file here. Allowed only before the first cloud bill.</p>
@@ -810,6 +850,19 @@ App.views.settings = async (main) => {
   if ($('#bklist')) {
     loadBackups().catch((e) => { $('#bklist').textContent = e.message; });
     $('#bknow').addEventListener('click', () => submitting($('#bknow'), async () => { await api('/backups', { method: 'POST', body: {} }); toast('Backup saved.'); loadBackups(); }));
+  }
+  const photoStatus = async () => {
+    if (!$('#phst')) return;
+    const p = await api('/images/fetch');
+    $('#phst').innerHTML = `<b>${p.with_photo}</b> products have a photo · <b>${p.without_photo}</b> without.
+      ${p.running ? `<br><b class="ok">Finding photos… ${p.done} of ${p.total} checked, ${p.found} found.</b>` : p.started ? `<br>Last run: ${p.done} of ${p.total} checked, ${p.found} found${p.finished ? ` (${esc(p.finished.slice(11, 16))})` : ''}.` : ''}
+      ${p.error ? `<br><span class="bad">${esc(p.error)}</span>` : ''}`;
+    if (p.running) setTimeout(() => { if ($('#phst')) photoStatus(); }, 4000);
+  };
+  if ($('#phgo')) {
+    photoStatus().catch(() => {});
+    $('#phgo').addEventListener('click', () => submitting($('#phgo'), async () => { await api('/images/fetch', { method: 'POST', body: {} }); toast('Finding photos – this runs by itself.'); photoStatus(); }));
+    $('#phstop').addEventListener('click', () => submitting($('#phstop'), async () => { await api('/images/fetch', { method: 'POST', body: { action: 'stop' } }); photoStatus(); }));
   }
   $('#impgo').addEventListener('click', () => submitting($('#impgo'), async () => {
     const file = $('#impf').files[0];

@@ -16,7 +16,7 @@ async function version() {
 
 async function counterCatalogue() {
   const items = await db.query(
-    `SELECT i.id, i.sku, i.plu, i.name, i.name_ta, i.unit, i.price, i.mrp, i.gst_rate, i.tax_class, i.on_hand, c.name cat
+    `SELECT i.id, i.sku, i.plu, i.name, i.name_ta, i.unit, i.price, i.mrp, i.gst_rate, i.tax_class, i.on_hand, c.name cat, i.image
      FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE i.active=1 ORDER BY i.name`);
   const codes = await db.query('SELECT b.code, b.item_id, b.per FROM barcodes b JOIN items i ON i.id=b.item_id WHERE i.active=1');
   const sold = new Map((await db.query(`SELECT l.item_id, COUNT(*) n FROM sale_lines l JOIN sales x ON x.id=l.sale_id
@@ -25,7 +25,7 @@ async function counterCatalogue() {
     version: await version(),
     // compact rows: [id, sku, plu, name, name_ta, unit, price, mrp, gst, tax_class, on_hand, category, bills in last 30 days]
     items: items.map((i) => [i.id, i.sku, i.plu || '', i.name, i.name_ta, i.unit, i.price, i.mrp, i.gst_rate, i.tax_class,
-      qtyStr(milli(i.on_hand)), i.cat || '', sold.get(i.id) || 0]),
+      qtyStr(milli(i.on_hand)), i.cat || '', sold.get(i.id) || 0, i.image || '']),
     barcodes: codes.map((b) => [b.code, b.item_id, qtyStr(milli(b.per))]),
   };
 }
@@ -77,6 +77,7 @@ function itemOut(i) {
     id: i.id, sku: i.sku, plu: i.plu || '', name: i.name, name_ta: i.name_ta, unit: i.unit, price: i.price, mrp: i.mrp,
     cost: i.cost, gst_rate: i.gst_rate, tax_class: i.tax_class, hsn: i.hsn, reorder_level: qtyStr(milli(i.reorder_level)),
     on_hand: qtyStr(milli(i.on_hand)), active: !!i.active, cat: i.cat || '', codes: i.codes ? String(i.codes).split(',') : [],
+    image: i.image ? `/img/p/${i.image}` : null, image_source: i.image_source || null,
   };
 }
 

@@ -38,7 +38,7 @@ async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', lim
     popular: 'i.on_hand > 0 DESC, sold DESC, i.name',
     offers: 'i.on_hand > 0 DESC, (i.mrp - i.price) / i.mrp DESC, i.name',
   }[sort] || (q || code || cat ? 'i.on_hand > 0 DESC, sold DESC, i.name' : 'i.on_hand > 0 DESC, sold DESC, i.name');
-  const rows = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, i.price, i.mrp, i.on_hand, i.category_id, c.name cat,
+  const rows = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, i.price, i.mrp, i.on_hand, i.category_id, c.name cat, i.image,
       (SELECT COUNT(*) FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE l.item_id=i.id AND x.business_date > DATE_SUB(CURDATE(), INTERVAL 30 DAY)) sold
     FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE ${where.join(' AND ')}
     ORDER BY ${order} LIMIT ?`, [...args, Math.min(Math.max(Number(limit) || 150, 1), 150)]);
@@ -46,7 +46,7 @@ async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', lim
   return rows.map((r) => {
     const avail = Math.max(0, milli(r.on_hand) - (h.get(r.id) || 0));
     return { id: r.id, name: r.name, name_ta: r.name_ta, unit: r.unit, price: r.price, mrp: r.mrp, cat: r.cat || '', cat_id: r.category_id,
-      available: qtyStr(avail), in_stock: avail > 0, popular: Number(r.sold) > 0 };
+      available: qtyStr(avail), in_stock: avail > 0, popular: Number(r.sold) > 0, image: r.image ? `/img/p/${r.image}` : null };
   });
 }
 

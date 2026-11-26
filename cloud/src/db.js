@@ -61,6 +61,8 @@ const COLUMNS = [
   ['online_order_lines', 'ordered_qty', 'DECIMAL(12,3) NULL'],
   ['online_order_lines', 'note', "VARCHAR(120) NOT NULL DEFAULT ''"],
   ['online_orders', 'accepted_at', 'DATETIME NULL'],
+  ['items', 'image', 'VARCHAR(80) NULL'],
+  ['items', 'image_source', 'VARCHAR(20) NULL'],
 ];
 
 async function migrate() {

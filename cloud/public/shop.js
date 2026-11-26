@@ -96,7 +96,7 @@ const actHtml = (it) => {
 const card = (it) => {
   const off = offPct(it);
   return `<div class="pc ${it.in_stock ? '' : 'out'}" data-pid="${it.id}">
-    <div class="pimg" style="background:${tint(it.cat || it.name)}">${itemPic(it)}
+    <div class="pimg" style="background:${it.image ? '#fff' : tint(it.cat || it.name)}">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : itemPic(it)}
       ${off ? `<span class="tag">${off}%<br>OFF</span>` : ''}${it.popular ? '<span class="pop">★ Popular</span>' : ''}</div>
     <div class="pbody"><div class="pn">${esc(it.name)}</div><div class="pt ta">${esc(it.name_ta)}</div>
       <div class="pu">${it.unit === 'kg' ? 'Per kg · choose weight' : '1 piece'}</div>
@@ -121,7 +121,7 @@ async function openSheet(it) {
   const card$ = $('#sheetCard');
   const draw = () => {
     card$.innerHTML = `<div class="grab"></div><button class="x" data-close aria-label="Close">✕</button>
-      <div class="big-img" style="background:${tint(it.cat || it.name)}">${itemPic(it)}${off ? `<span class="tag">${off}%<br>Save</span>` : ''}</div>
+      <div class="big-img" style="background:${it.image ? '#fff' : tint(it.cat || it.name)}">${it.image ? `<img src="${esc(it.image)}" alt="">` : itemPic(it)}${off ? `<span class="tag">${off}%<br>Save</span>` : ''}</div>
       <h2>${esc(it.name)}</h2><div class="ta mut">${esc(it.name_ta)}</div>
       <div style="margin-top:6px"><span class="bp">${rs(paise(it.price))}${it.unit === 'kg' ? '<small>/kg</small>' : ''}</span>
         ${off ? `<span class="mrp" style="display:inline;margin-left:6px">MRP ${rs(paise(it.mrp))}</span>` : ''}${it.popular ? '<span class="sold">★ Popular here</span>' : ''}</div>
@@ -174,7 +174,9 @@ async function homeView() {
     <section><div class="sec-h"><h2>Shop by category</h2><a href="#cats">See all ›</a></div>
       <div class="cats-row">${S.info.cats.slice(0, 14).map(catTile).join('')}</div></section>
     <section id="offersSec" hidden><div class="sec-h"><h2>Offers for you 🔥</h2></div><div class="rail" id="offers"></div></section>
-    <section><div class="sec-h"><h2>Best sellers</h2></div><div class="grid" id="popular"><div class="mut small">Loading…</div></div></section>`;
+    <section><div class="sec-h"><h2>Best sellers</h2></div><div class="grid" id="popular"><div class="mut small">Loading…</div></div></section>
+    <p class="credit">Some product photos: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (CC BY-SA).
+      Pictures are for illustration; packs may differ.</p>`;
   const bn = $('#banners');
   bn.addEventListener('scroll', () => { const i = Math.round(bn.scrollLeft / (bn.firstElementChild.offsetWidth + 12)); $$('.dots i').forEach((d, k) => d.classList.toggle('on', k === i)); });
   try {
@@ -224,7 +226,7 @@ function cartView() {
       ${s.online_pickup === '1' ? `<label class="${S.mode === 'pickup' ? 'on' : ''}"><input type="radio" name="cmode" value="pickup" ${S.mode === 'pickup' ? 'checked' : ''}> 🛍️ Takeaway</label>` : ''}</div>
       <p class="small mut" style="margin:8px 0 0">${S.mode === 'delivery' ? `We deliver${s.online_area ? ` ${esc(s.online_area)}` : ''}. Minimum order ${rs(minOrder)}.` : `Collect at the shop${s.address ? `: ${esc(s.address)}` : ''}.`}</p></div>
     <div class="box"><h3>${c.n} item${c.n === 1 ? '' : 's'}</h3>
-      ${lines.map(([it, q]) => `<div class="cl" data-pid="${it.id}"><div class="ce" style="background:${tint(it.cat || it.name)}">${itemPic(it)}</div>
+      ${lines.map(([it, q]) => `<div class="cl" data-pid="${it.id}"><div class="ce" style="background:${it.image ? '#fff' : tint(it.cat || it.name)}">${it.image ? `<img src="${esc(it.image)}" alt="">` : itemPic(it)}</div>
         <div class="cm"><b>${esc(it.name)}</b><span>${rs(paise(it.price))}${it.unit === 'kg' ? '/kg' : ''}${it.unit === 'kg' ? ' · approx., weighed when packed' : ''}</span></div>
         <div class="cr pr"><span>${rs(lineP(it, q))}</span><span class="act">${actHtml(it)}</span></div></div>`).join('')}</div>
     <div class="box"><h3>Bill details</h3>

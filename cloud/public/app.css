@@ -210,3 +210,11 @@ input.price-in.saved { border: 2px solid var(--ok); background: #e7f7ec; }
   .scan { font-size: 1.05rem; }
   .bill-total .t { font-size: 1.7rem; }
 }
+
+.photo-row { display: flex; gap: 12px; align-items: center; margin-bottom: 6px; }
+.photo { width: 96px; height: 96px; border-radius: 12px; background: #f1f4f8; display: grid; place-items: center; overflow: hidden; flex: none;
+  font-size: .78rem; color: var(--muted); border: 1px solid var(--line); }
+.photo img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.thumb { width: 38px; height: 38px; border-radius: 8px; object-fit: contain; background: #fff; border: 1px solid var(--line); flex: none; }
+.thumb.none { display: inline-block; background: #f1f4f8; }
+.tile.has-img img { width: 100%; height: 64px; object-fit: contain; display: block; margin-bottom: 4px; }

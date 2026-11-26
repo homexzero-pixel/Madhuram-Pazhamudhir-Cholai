@@ -20,7 +20,7 @@ async function loadCatalogue(force = false) {
   const count = new Map();
   for (const r of data.items) {
     const it = { id: r[0], sku: r[1], plu: r[2], name: r[3], name_ta: r[4], unit: r[5], price: Money.paise(r[6]), mrp: r[7] === null ? null : Money.paise(r[7]),
-      gst: r[8], tax: r[9], stock: r[10], cat: r[11], sold: r[12] || 0, key: `${r[3]} ${r[4]} ${r[1]}`.toLowerCase() };
+      gst: r[8], tax: r[9], stock: r[10], cat: r[11], sold: r[12] || 0, image: r[13] ? `/img/p/${r[13]}` : '', key: `${r[3]} ${r[4]} ${r[1]}`.toLowerCase() };
     POS.byId.set(it.id, it);
     if (it.plu) POS.byPlu.set(it.plu, it);
     POS.bySku.set(it.sku.toUpperCase(), it);
@@ -524,7 +524,7 @@ function renderTiles() {
   } else if (POS.tileCat === '_loose') list = all.filter(isLoose).sort(bySold);
   else list = all.filter((it) => it.cat === POS.tileCat).sort(bySold);
   list = list.slice(0, 120);
-  box.innerHTML = list.map((it) => `<button class="tile" data-id="${it.id}"><b>${esc(it.name)}</b><span class="s ta">${esc(it.name_ta)}</span>
+  box.innerHTML = list.map((it) => `<button class="tile ${it.image ? 'has-img' : ''}" data-id="${it.id}">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : ''}<b>${esc(it.name)}</b><span class="s ta">${esc(it.name_ta)}</span>
     <span class="p">${inr(it.price)}${it.unit === 'kg' ? '/kg' : ''}</span>
     <span class="s ${Number(it.stock) > 0 ? '' : 'warn'}">${Number(it.stock) > 0 ? `Stock ${esc(it.stock)}` : 'No stock entered'}</span></button>`).join('') ||
     `<p class="muted">${POS.byId.size ? 'No products here.' : 'No products are selling yet. Add products (Products & stock) or import the list.'}</p>`;
