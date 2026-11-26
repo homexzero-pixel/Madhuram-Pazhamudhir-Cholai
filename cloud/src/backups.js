@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const db = require('./db');
 const { nowIST, todayIST, UserError } = require('./money');
 
-const DIR = process.env.BACKUP_DIR || path.join(__dirname, '..', '..', 'madhuram_backups');
+const DIR = process.env.BACKUP_DIR || require('./config').dataDir('madhuram_backups');
 const NAME = /^madhuram_(auto|manual)_\d{12}\.sql\.gz$/;
 
 async function make(kind = 'auto') {

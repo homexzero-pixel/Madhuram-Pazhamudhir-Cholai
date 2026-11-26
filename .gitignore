@@ -6,3 +6,5 @@ db.sqlite3
 media/
 staticfiles/
 node_modules/
+madhuram_images/
+madhuram_backups/

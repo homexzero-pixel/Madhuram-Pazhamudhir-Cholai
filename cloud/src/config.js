@@ -14,7 +14,14 @@ function loadDotEnv(file) {
 loadDotEnv(path.join(__dirname, '..', '.env'));
 
 const env = process.env;
+
+// Folders for backups and product photos are kept OUTSIDE the deployed app, so a redeploy never deletes them.
+// The app is either this "cloud" folder or (when the whole repository is deployed) its parent, which then has server.js.
+const cloudDir = path.join(__dirname, '..');
+const appRoot = fs.existsSync(path.join(cloudDir, '..', 'server.js')) ? path.join(cloudDir, '..') : cloudDir;
+const dataDir = (name) => path.join(appRoot, '..', name);
 module.exports = {
+  dataDir,
   port: Number(env.PORT || 3000),
   db: {
     host: env.DB_HOST || 'localhost',

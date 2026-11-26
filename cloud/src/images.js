@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const db = require('./db');
 const { nowIST, UserError } = require('./money');
 
-const DIR = process.env.IMAGE_DIR || path.join(__dirname, '..', '..', 'madhuram_images');
+const DIR = process.env.IMAGE_DIR || require('./config').dataDir('madhuram_images');
 const OFF = process.env.OFF_BASE || 'https://world.openfoodfacts.org';
 const NAME = /^p\d+_[0-9a-f]{8}\.(jpg|png|webp)$/;
 const MAX = 800 * 1024;
