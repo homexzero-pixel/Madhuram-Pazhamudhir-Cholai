@@ -71,6 +71,13 @@ const COLUMNS = [
   ['online_orders', 'customer_id', 'INT NULL'],
   ['sales', 'points_earned', 'DECIMAL(10,2) NOT NULL DEFAULT 0'],
   ['sales', 'points_used', 'DECIMAL(10,2) NOT NULL DEFAULT 0'],
+  ['items', 'shop_section', 'VARCHAR(20) NULL'],
+  ['items', 'created_at', 'DATETIME NULL'],
+  ['customers', 'email', "VARCHAR(120) NOT NULL DEFAULT ''"],
+  ['customers', 'ref_code', 'VARCHAR(12) NULL'],
+  ['customers', 'referred_by', 'INT NULL'],
+  ['customers', 'ref_rewarded', 'TINYINT NOT NULL DEFAULT 0'],
+  ['online_orders', 'pay_ref', "VARCHAR(40) NOT NULL DEFAULT ''"],
   ['items', 'image_source', 'VARCHAR(20) NULL'],
 ];
 

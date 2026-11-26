@@ -426,3 +426,96 @@ test('online shop: offer prices, sorting, paging, banner photos and buy again', 
   assert.equal(bill.data.ok, true, JSON.stringify(bill.data));
   assert.equal((await shopper.get('/api/shop/account/again')).data.items[0].id, b.id);
 });
+
+test('shop sections, price stores, new products, suggestions and a festival offer on a whole category', async () => {
+  const t = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const end = new Date(Date.now() + 330 * 60000 + 3 * 86400000).toISOString().slice(0, 10);
+  await db.query('UPDATE items SET created_at = DATE_SUB(created_at, INTERVAL 10 DAY) WHERE id=?', [rice.id]);   // the first products: not "new"
+  const add = async (name, price, cat, unit = 'pcs') => (await owner.post('/api/products', { name, unit, price, opening_qty: '20', cat })).data.item;
+  const tomato = await add('Tomato Nadu', '30', 'Vegetables', 'kg');
+  const kiwi = await add('Kiwi fruit', '25', 'Vegetables');
+  const banana = await add('Banana Rasthali', '60', 'Vegetables', 'kg');
+  const chips = await add('Lays Magic Masala 10rs', '10', 'Food Items');
+  const info = (await customer.get('/api/shop/info')).data;
+  assert.deepEqual(info.groups.map((g) => g.key).slice(0, 2), ['grocery', 'snacks']);
+  assert.ok(info.festival.name, JSON.stringify(info.festival));
+  assert.deepEqual(info.stores, [9, 19, 29, 49, 99, 119]);
+  const ids = async (qs) => (await customer.get(`/api/shop/items?${qs}`)).data.items.map((x) => x.id);
+  assert.ok((await ids('sec=veg')).includes(tomato.id));
+  assert.ok((await ids('sec=fruits')).includes(banana.id));
+  assert.ok((await ids('sec=exotics')).includes(kiwi.id));
+  assert.ok((await ids('sec=munchies')).includes(chips.id));
+  // the owner moves a product to another section
+  await owner.post('/api/products', { id: chips.id, name: chips.name, price: '10', cat: 'Food Items', shop_section: 'sweets' });
+  assert.ok((await ids('sec=sweets')).includes(chips.id));
+  assert.ok(!(await ids('sec=munchies')).includes(chips.id));
+  // price stores
+  const cheap = (await customer.get('/api/shop/items?max_price=19&sort=popular')).data.items;
+  assert.ok(cheap.length && cheap.every((x) => Number(x.price) <= 19));
+  // new in the shop: added after the first products
+  assert.ok((await ids('fresh=1&sort=new')).includes(kiwi.id));
+  assert.ok(!(await ids('fresh=1')).includes(rice.id));
+  assert.ok(Array.isArray((await customer.get('/api/shop/account/suggest')).data.items));
+  // a festival offer for a whole category: counters and the online shop use it, then it is removed
+  const vegCat = info.cats.find((c) => c.name === 'Vegetables').id;
+  assert.match((await owner.post('/api/offers/bulk', { category_id: vegCat, percent: '0', offer_to: end })).data.error, /1 to 80/);
+  const bulk = await owner.post('/api/offers/bulk', { category_id: vegCat, percent: '10', offer_from: t, offer_to: end });
+  const inVeg = (await db.one('SELECT COUNT(*) n FROM items WHERE category_id=? AND active=1 AND price > 0', [vegCat])).n;
+  assert.equal(bulk.data.count, Number(inVeg), JSON.stringify(bulk.data));
+  const tom = (await customer.get(`/api/shop/items?ids=${tomato.id}`)).data.items[0];
+  assert.equal(tom.price, '27.00'); assert.equal(tom.regular, '30.00');
+  const bill = await cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 1', lines: [{ id: tomato.id, qty: '1' }], payments: [{ method: 'cash', amount: '27' }] });
+  assert.equal(bill.data.ok, true, JSON.stringify(bill.data));
+  assert.equal((await owner.post('/api/offers/clear', { category_id: vegCat })).data.count, Number(inVeg));
+  assert.equal((await customer.get(`/api/shop/items?ids=${tomato.id}`)).data.items[0].price, '30.00');
+});
+
+test('customer profile: email, new mobile number, saved addresses, referral reward and the UPI payment number', async () => {
+  await owner.post('/api/settings', { online_enabled: '1', loyalty_enabled: '1', loyalty_points_per_100: '1', referral_points: '30' });
+  const item = (await owner.post('/api/products', { name: 'Saffola Gold Oil 5L', price: '899', opening_qty: '10', cat: 'Food Items' })).data.item;
+  const a = new Browser();
+  assert.equal((await a.post('/api/shop/account/signup', { name: 'Anitha', phone: '9000000011', password: 'secret12' })).data.ok, true);
+  const code = (await a.get('/api/shop/account/refer')).data.code;
+  assert.match(code, /^[A-Z2-9]{6}$/);
+  assert.equal((await a.get('/api/shop/account/refer')).data.code, code);
+  const b = new Browser();
+  assert.equal((await b.post('/api/shop/account/signup', { name: 'Bala', phone: '9000000022', password: 'secret12', ref: code.toLowerCase() })).data.ok, true);
+  assert.equal((await a.get('/api/shop/account/refer')).data.joined, 1);
+  // profile: email and a new mobile number (needs the password, and a number nobody else uses)
+  assert.match((await b.post('/api/shop/account/update', { name: 'Bala K', email: 'bad-mail' })).data.error, /email/);
+  let up = await b.post('/api/shop/account/update', { name: 'Bala K', email: 'Bala@Example.com' });
+  assert.equal(up.data.me.email, 'bala@example.com');
+  assert.match((await b.post('/api/shop/account/update', { name: 'Bala K', phone: '9000000033', password: 'wrong-one' })).data.error, /password/);
+  assert.match((await b.post('/api/shop/account/update', { name: 'Bala K', phone: '9000000011', password: 'secret12' })).data.error, /already used/);
+  up = await b.post('/api/shop/account/update', { name: 'Bala K', phone: '9000000033', password: 'secret12' });
+  assert.equal(up.data.me.phone, '9000000033');
+  // saved addresses: the first is the default, another can be made the default
+  assert.match((await b.post('/api/shop/account/addresses', { address: 'short' })).data.error, /full address/);
+  const home = await b.post('/api/shop/account/addresses', { label: 'Home', address: '12 North Street, Anna Nagar', landmark: 'near the temple', pincode: '625020' });
+  assert.equal(home.data.addresses[0].is_default, true);
+  const work = await b.post('/api/shop/account/addresses', { label: 'Work', address: '5 Bank Road, Town Hall area', make_default: true });
+  assert.equal(work.data.addresses.find((x) => x.is_default).label, 'Work');
+  assert.match((await b.get('/api/shop/account')).data.me.address, /Bank Road/);
+  // an order to a saved address, paid by UPI: the customer types the UPI transaction number
+  const info = (await b.get('/api/shop/info')).data;
+  const slot = info.slots[0].slots[0].v;
+  const ord = await b.post('/api/shop/order', { mode: 'delivery', slot, name: 'Bala K', address_id: home.data.id, pay: 'upi', lines: [{ id: item.id, qty: '1' }] });
+  assert.equal(ord.data.ok, true, JSON.stringify(ord.data));
+  assert.match((await b.post(`/api/shop/track/${ord.data.token}/payref`, { ref: '12' })).data.error, /UTR/);
+  assert.equal((await b.post(`/api/shop/track/${ord.data.token}/payref`, { ref: 'UTR 4561 2378 9012' })).data.ok, true);
+  const tr = (await b.get(`/api/shop/track/${ord.data.token}`)).data.order;
+  assert.equal(tr.pay_ref, 'UTR456123789012');
+  assert.match(tr.address, /North Street.*near the temple.*625020/);
+  const mine = (await b.get('/api/shop/account/orders')).data.orders;
+  assert.equal(mine[0].count, 1); assert.equal(mine[0].items[0].id, item.id);
+  // referral reward: the friend gets the points once, on the new customer's first bill
+  const before = Number((await a.get('/api/shop/account')).data.me.points);
+  for (let i = 0; i < 2; i++) {
+    const bill = await cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 1', customer: { phone: '9000000033' }, lines: [{ id: item.id, qty: '1' }],
+      payments: [{ method: 'cash', amount: '899' }] });
+    assert.equal(bill.data.ok, true, JSON.stringify(bill.data));
+  }
+  assert.equal(Number((await a.get('/api/shop/account')).data.me.points) - before, 30);
+  assert.equal((await a.get('/api/shop/account/refer')).data.bought, 1);
+  await owner.post('/api/settings', { loyalty_enabled: '0' });
+});

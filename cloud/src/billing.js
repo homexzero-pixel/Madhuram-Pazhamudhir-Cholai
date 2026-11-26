@@ -252,6 +252,14 @@ async function checkout(user, body) {
       const id = sale.insertId;
       if (pointsUsed) await loyalty.post(q, { customerId, kind: 'redeem', points: -pointsUsed, ref: billNo, saleId: id, userId: user.id, at: now });
       if (pointsEarned) await loyalty.post(q, { customerId, kind: 'earn', points: pointsEarned, ref: billNo, saleId: id, userId: user.id, at: now });
+      const refPts = Math.max(0, Math.floor(Number(cfg.referral_points) || 0));
+      if (customerId && lr.on && refPts) {
+        const cu = await q.one('SELECT referred_by, ref_rewarded FROM customers WHERE id=? FOR UPDATE', [customerId]);
+        if (cu && cu.referred_by && !cu.ref_rewarded) {
+          await q('UPDATE customers SET ref_rewarded=1 WHERE id=?', [customerId]);
+          await loyalty.post(q, { customerId: cu.referred_by, kind: 'refer', points: refPts, ref: billNo, saleId: id, userId: user.id, at: now });
+        }
+      }
 
       for (const c of calc) {
         const taken = c.item.sku === DELIVERY_SKU ? [] : await catalog.issue(q, c.item, c.p.qty, { kind: 'sale', ref: billNo, user });

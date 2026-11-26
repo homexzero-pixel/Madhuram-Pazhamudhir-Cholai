@@ -45,6 +45,32 @@ async function setOffer(data, user) {
     [price === null ? null : rs(price), price === null ? null : from, price === null ? null : to, nowIST(), it.id]);
   await audit({ user_id: user.id, action: 'offer', summary: price === null ? `${it.name}: offer removed` : `${it.name}: offer ₹${rs(price)} (normal ₹${it.price})${from ? ` from ${from}` : ''}${to ? ` to ${to}` : ''}` });
 }
+// One discount for a whole category, or for everything (a festival offer). The billing counters and the online shop use it
+// on those dates, like any offer. The normal price stays as it is.
+async function bulkOffer(data, user) {
+  const pct = Number(data.percent);
+  if (!(pct >= 1 && pct <= 80)) throw new UserError('Enter the discount: 1 to 80 %.');
+  const date = (v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const from = date(data.offer_from); const to = date(data.offer_to);
+  if (!to) throw new UserError('Enter the last day of the offer.');
+  if (from && from > to) throw new UserError('The offer ends before it starts.');
+  const where = ['active=1', 'price > 0'];
+  const args = [];
+  if (Number(data.category_id)) { where.push('category_id=?'); args.push(Number(data.category_id)); }
+  const r = await db.query(`UPDATE items SET offer_price=ROUND(price * (100 - ?) / 100, 2), offer_from=?, offer_to=?, updated_at=?
+    WHERE ${where.join(' AND ')} AND ROUND(price * (100 - ?) / 100, 2) > 0`, [pct, from, to, nowIST(), ...args, pct]);
+  const cat = Number(data.category_id) ? (await db.one('SELECT name FROM categories WHERE id=?', [Number(data.category_id)]) || {}).name : '';
+  await audit({ user_id: user.id, action: 'offer', summary: `${pct}% off on ${cat || 'all products'}${from ? ` from ${from}` : ''} to ${to} (${r.affectedRows} products)` });
+  return { count: r.affectedRows };
+}
+async function clearOffers(data, user) {
+  const where = ['offer_price IS NOT NULL'];
+  const args = [];
+  if (Number(data.category_id)) { where.push('category_id=?'); args.push(Number(data.category_id)); }
+  const r = await db.query(`UPDATE items SET offer_price=NULL, offer_from=NULL, offer_to=NULL, updated_at=? WHERE ${where.join(' AND ')}`, [nowIST(), ...args]);
+  await audit({ user_id: user.id, action: 'offer', summary: `Offers removed on ${r.affectedRows} products` });
+  return { count: r.affectedRows };
+}
 async function offers() {
   const t = todayIST();
   return db.query(`SELECT i.id, i.name, i.unit, i.price, i.mrp, i.offer_price, i.offer_from, i.offer_to,
@@ -115,7 +141,7 @@ function itemOut(i) {
     cost: i.cost, gst_rate: i.gst_rate, tax_class: i.tax_class, hsn: i.hsn, reorder_level: qtyStr(milli(i.reorder_level)),
     on_hand: qtyStr(milli(i.on_hand)), active: !!i.active, cat: i.cat || '', codes: i.codes ? String(i.codes).split(',') : [],
     image: i.image ? `/img/p/${i.image}` : null, image_source: i.image_source || null,
-    offer_price: i.offer_price, offer_from: i.offer_from, offer_to: i.offer_to,
+    offer_price: i.offer_price, offer_from: i.offer_from, offer_to: i.offer_to, shop_section: i.shop_section || '',
   };
 }
 
@@ -185,7 +211,7 @@ async function save(data, user) {
       } else {
         const sku = await nextSku(q);
         const r = await q(`INSERT INTO items (name, name_ta, category_id, unit, price, mrp, gst_rate, tax_class, hsn, reorder_level, active,
-          plu, updated_at, sku, cost) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [...fields, sku, rs(paise(data.cost) || 0)]);
+          plu, updated_at, sku, cost, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [...fields, sku, rs(paise(data.cost) || 0), now]);
         id = r.insertId;
         await audit({ user_id: user.id, action: 'product_add', summary: `${sku} ${name} added at ₹${fields[4] ?? '-'}` }, q);
       }
@@ -201,6 +227,11 @@ async function save(data, user) {
     if (data.codes !== undefined) {         // the Products page sends the full list: drop codes that were removed
       const keep = codes.length ? codes : ['\u0000'];
       await q(`DELETE FROM barcodes WHERE item_id=? AND code NOT IN (${keep.map(() => '?').join(',')})`, [id, ...keep]);
+    }
+    if (data.shop_section !== undefined) {   // the online-shop section the owner chose ('' = worked out from the name)
+      const sec = require('./sections').KEYS.has(data.shop_section) ? data.shop_section : null;
+      await q('UPDATE items SET shop_section=? WHERE id=?', [sec, id]);
+      require('./sections').reset();
     }
     if (opening > 0) {
       await receiveIn(q, { item_id: id, qty: opening, unit_cost: paise(data.cost) || 0, ref: 'Opening stock', user });
@@ -386,7 +417,7 @@ async function importCsv(text, user) {
         const active = price !== null && price > 0 ? 1 : 0;
         batch.push([sku, name, cell(r, 'name_ta').slice(0, 160), cats.get(cell(r, 'cat').slice(0, 60)) || null, unit,
           price === null ? null : rs(price), mrp === null || mrp === 0 ? null : rs(mrp), rs(gst), gst > 0 ? 'taxable' : 'unset',
-          cell(r, 'hsn').replace(/\D/g, '').slice(0, 8), active, now, (cost / 100).toFixed(4), qtyDb(milli(cell(r, 'reorder') || '0') || 0), plu]);
+          cell(r, 'hsn').replace(/\D/g, '').slice(0, 8), active, now, (cost / 100).toFixed(4), qtyDb(milli(cell(r, 'reorder') || '0') || 0), plu, now]);
         for (const code of cell(r, 'barcode').split(/[|,;\s]+/).filter(Boolean)) {
           try { codes.push([cleanCode(code), sku]); } catch (e) { errors.push(`Row ${n + 2}: ${e.message}`); }
         }
@@ -398,7 +429,7 @@ async function importCsv(text, user) {
     for (let i = 0; i < batch.length; i += 500) {
       const part = batch.slice(i, i + 500);
       const known = (await q('SELECT COUNT(*) n FROM items WHERE sku IN (?)', [part.map((x) => x[0])]))[0];
-      await q(`INSERT INTO items (sku, name, name_ta, category_id, unit, price, mrp, gst_rate, tax_class, hsn, active, updated_at, cost, reorder_level, plu)
+      await q(`INSERT INTO items (sku, name, name_ta, category_id, unit, price, mrp, gst_rate, tax_class, hsn, active, updated_at, cost, reorder_level, plu, created_at)
         VALUES ? ON DUPLICATE KEY UPDATE name=VALUES(name), name_ta=IF(VALUES(name_ta)='', name_ta, VALUES(name_ta)),
         category_id=COALESCE(VALUES(category_id), category_id), unit=VALUES(unit), price=COALESCE(VALUES(price), price),
         mrp=COALESCE(VALUES(mrp), mrp), gst_rate=IF(VALUES(tax_class)='taxable', VALUES(gst_rate), gst_rate),
@@ -421,5 +452,5 @@ async function importCsv(text, user) {
   return { created, updated, barcodes, errors: errors.slice(0, 50) };
 }
 
-module.exports = { setOffer, offers, internalBarcode, stockNow, setCount, counterCatalogue, version, search, get, save, receive, receiveIn, writeOff, issue, moves, importCsv, parseCsv,
+module.exports = { bulkOffer, clearOffers, setOffer, offers, internalBarcode, stockNow, setCount, counterCatalogue, version, search, get, save, receive, receiveIn, writeOff, issue, moves, importCsv, parseCsv,
   categoryId, UNITS };

@@ -369,6 +369,19 @@ CREATE TABLE IF NOT EXISTS otps (
   INDEX (phone, created_at), INDEX (ip, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- customers' saved delivery addresses (customers.address keeps a copy of the default one)
+CREATE TABLE IF NOT EXISTS customer_addresses (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  customer_id INT NOT NULL,
+  label VARCHAR(20) NOT NULL DEFAULT 'Home',
+  address VARCHAR(250) NOT NULL,
+  landmark VARCHAR(100) NOT NULL DEFAULT '',
+  pincode VARCHAR(6) NOT NULL DEFAULT '',
+  is_default TINYINT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL,
+  KEY (customer_id)
+);
+
 -- loyalty points earned and spent (customers.points holds the balance)
 CREATE TABLE IF NOT EXISTS loyalty_ledger (
   id INT AUTO_INCREMENT PRIMARY KEY,

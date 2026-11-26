@@ -48,11 +48,49 @@ const DEFAULTS = {
   online_delivery_charge: '30',
   online_free_delivery_above: '500',
   online_area: '',
-  shop_banners: '[]',              // banner photos at the top of the online shop: [{img, kicker, title, sub, link}]
+  shop_banners: '[]',
+  support_whatsapp: '',            // WhatsApp number customers write to for help (the shop phone when empty)
+  upi_qr: '',                      // photo of the shop's UPI QR code (GPay / PhonePe), shown when a customer pays online
+  festival_name: '',               // e.g. "Pongal Specials"; empty = the next festival from the calendar
+  festival_line: '',
+  festival_from: '',
+  festival_to: '',
+  festival_banner: '',             // photo for the festival banner (else a stock photo)
+  referral_points: '50',           // loyalty points for a customer whose friend joins and buys (0 = no reward)
+  price_stores: '9,19,29,49,99,119',              // banner photos at the top of the online shop: [{img, kicker, title, sub, link}]
 };
 const SHOP_PUBLIC = ['name', 'name_ta', 'tagline', 'address', 'phone', 'upi_id', 'online_enabled', 'online_pickup', 'online_delivery', 'online_open',
   'online_close', 'online_min_order', 'online_delivery_charge', 'online_free_delivery_above', 'online_area',
-  'loyalty_enabled', 'loyalty_points_per_100', 'loyalty_point_value', 'loyalty_min_redeem'];
+  'loyalty_enabled', 'loyalty_points_per_100', 'loyalty_point_value', 'loyalty_min_redeem', 'support_whatsapp', 'referral_points', 'price_stores'];
+const PHOTO_NAME = /^b_[0-9a-f]{8}\.(jpg|png|webp)$/;
+const photoUrl = (name) => (PHOTO_NAME.test(name || '') ? `/img/p/${name}` : null);
+// Festivals on fixed dates; the owner sets others (Diwali, Vinayagar Chathurthi…) with a name and dates.
+const FESTIVALS = [
+  ['01-01', 'New Year Specials', 'Start the year with fresh savings', 'newyear'],
+  ['01-14', 'Pongal Specials', 'Sugarcane, turmeric, jaggery and more', 'pongal'],
+  ['04-14', 'Tamil New Year Specials', 'Fruits and sweets for Puthandu', 'fruits'],
+  ['08-15', 'Independence Day Sale', 'Celebrate with your favourites', 'generic'],
+  ['12-25', 'Christmas Specials', 'Cakes, chocolates and more', 'christmas'],
+];
+function festival(cfg, today) {
+  const style = (name) => (/diwali|deepavali/i.test(name) ? 'diwali' : /pongal|sankranti/i.test(name) ? 'pongal'
+    : /christmas|xmas/i.test(name) ? 'christmas' : /new ?year/i.test(name) ? 'newyear' : 'generic');
+  if (cfg.festival_name && (!cfg.festival_to || cfg.festival_to >= today)) {
+    return { name: cfg.festival_name.slice(0, 40), line: cfg.festival_line.slice(0, 60), from: cfg.festival_from || null, to: cfg.festival_to || null,
+      photo: photoUrl(cfg.festival_banner), style: style(cfg.festival_name) };
+  }
+  const t = new Date(`${today}T00:00:00Z`).getTime();
+  for (let y = Number(today.slice(0, 4)); y <= Number(today.slice(0, 4)) + 1; y++) {
+    for (const [md, name, line, st] of FESTIVALS) {
+      const d = new Date(`${y}-${md}T00:00:00Z`).getTime();
+      const days = (d - t) / 86400000;
+      if (days >= -2 && days <= 30) {
+        return { name, line, from: null, to: new Date(d + 2 * 86400000).toISOString().slice(0, 10), photo: photoUrl(cfg.festival_banner), style: st };
+      }
+    }
+  }
+  return { name: 'Season Specials', line: 'Best prices on your daily needs', from: null, to: null, photo: photoUrl(cfg.festival_banner), style: 'generic' };
+}
 // banners the owner saved, checked again before the shop shows them
 function shopBanners(cfg) {
   let list = [];
@@ -97,4 +135,4 @@ async function shopSettings() {
   return Object.fromEntries(SHOP_PUBLIC.map((k) => [k, s[k]]));
 }
 
-module.exports = { shopBanners, shopSettings, DEFAULTS, load, save, publicSettings, counters, reset: () => { cache = null; } };
+module.exports = { festival, photoUrl, shopBanners, shopSettings, DEFAULTS, load, save, publicSettings, counters, reset: () => { cache = null; } };

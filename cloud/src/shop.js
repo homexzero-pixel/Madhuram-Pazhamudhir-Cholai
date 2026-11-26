@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const db = require('./db');
 const settings = require('./settings');
 const { audit } = require('./auth');
+const sections = require('./sections');
 const { PRICE_NOW, paise, milli, rs, qtyDb, qtyStr, lineAmount, nowIST, UserError } = require('./money');
 
 const OPEN = ['new', 'accepted', 'ready', 'out'];
@@ -24,10 +25,24 @@ async function held(ids) {
 // Products for the customers' shop.
 // sort: popular (best sellers in stock first), offers (biggest saving), price_asc, price_desc, name.
 // only=offers: products on offer or below MRP. instock=1: only what is in stock.
-async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', limit = 150, exclude = '', only = '', instock = '', offset = 0 }) {
+async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', limit = 150, exclude = '', only = '', instock = '', offset = 0,
+  sec = '', max_price: maxPrice = '', min_price: minPrice = '', fresh = '' }) {
   const P = PRICE_NOW(nowIST().slice(0, 10));
   const where = ['i.active=1', 'i.price IS NOT NULL', 'i.price > 0', `i.sku <> '${DELIVERY_SKU}'`];
   const args = [];
+  if (sec) {                                   // a shop section (vegetables, munchies…)
+    const list = await sections.idsOf(String(sec));
+    if (!list.length) return [];
+    where.push('i.id IN (?)'); args.push(list);
+  }
+  if (Number(maxPrice) > 0) { where.push(`${P} <= ?`); args.push(Number(maxPrice)); }
+  if (Number(minPrice) > 0) { where.push(`${P} >= ?`); args.push(Number(minPrice)); }
+  if (String(fresh) === '1') {                 // new in the shop: added in the last 45 days, not the first big import
+    const first = await db.one('SELECT MIN(created_at) m FROM items');
+    if (!first || !first.m) return [];
+    where.push('i.created_at > ? AND i.created_at > DATE_ADD(?, INTERVAL 1 DAY)');
+    args.push(nowIST(Date.now() - 45 * 86400000), first.m);
+  }
   code = String(code).trim().slice(0, 32);
   q = String(q).trim().slice(0, 60);
   const idList = String(ids).split(',').map(Number).filter((n) => n > 0).slice(0, 60);
@@ -43,6 +58,7 @@ async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', lim
     popular: 'i.on_hand > 0 DESC, sold DESC, i.name',
     offers: `i.on_hand > 0 DESC, ${saving} DESC, i.name`,
     price_asc: `${P} ASC, i.name`,
+    new: 'i.created_at DESC, i.id DESC',
     price_desc: `${P} DESC, i.name`,
     name: 'i.name',
   }[sort] || 'i.on_hand > 0 DESC, sold DESC, i.name';
@@ -58,6 +74,25 @@ async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', lim
       regular: onOffer ? r.regular : null, offer_to: onOffer ? r.offer_to : null,
       available: qtyStr(avail), in_stock: avail > 0, popular: Number(r.sold) > 0, image: r.image ? `/img/p/${r.image}` : null };
   });
+}
+
+// "Suggested for you": popular products from the sections this customer buys from, that they have not bought yet.
+async function suggest(customerId) {
+  const popular = () => catalogue({ sort: 'popular', limit: 16, instock: '1' });
+  if (!customerId) return popular();
+  const bought = await db.query(`SELECT DISTINCT item_id FROM (
+      SELECT l.item_id FROM online_order_lines l JOIN online_orders o ON o.id=l.order_id WHERE o.customer_id=?
+      UNION ALL SELECT l.item_id FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE x.customer_id=?) t`, [customerId, customerId]);
+  const have = new Set(bought.map((r) => r.item_id));
+  if (!have.size) return popular();
+  const m = await sections.map();
+  const count = new Map();
+  for (const id of have) { const s = m.of.get(id); if (s) count.set(s, (count.get(s) || 0) + 1); }
+  const top = [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([s]) => s);
+  const lists = await Promise.all(top.map((s) => catalogue({ sec: s, sort: 'popular', limit: 24, instock: '1' })));
+  const out = [];
+  for (let i = 0; i < 24 && out.length < 16; i++) for (const l of lists) { const it = l.filter((x) => !have.has(x.id))[i]; if (it && out.length < 16) out.push(it); }
+  return out.length ? out : popular();
 }
 
 // What this customer bought before (online orders and bills at the counter), most often first.
@@ -141,7 +176,12 @@ async function placeOrder(data, ip, customer) {
   if (!((mode === 'pickup' && cfg.online_pickup === '1') || (mode === 'delivery' && cfg.online_delivery === '1'))) {
     throw new UserError('Choose takeaway or home delivery.');
   }
-  const address = String(data.address || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  let address = String(data.address || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (mode === 'delivery' && Number(data.address_id)) {     // one of the customer's saved addresses
+    const a = await db.one('SELECT * FROM customer_addresses WHERE id=? AND customer_id=?', [Number(data.address_id), customer.id]);
+    if (!a) throw new UserError('Please choose the delivery address again.');
+    address = [a.address, a.landmark && `Landmark: ${a.landmark}`, a.pincode].filter(Boolean).join(', ').slice(0, 300);
+  }
   if (mode === 'delivery' && address.length < 10) throw new UserError('Please enter the full delivery address with a landmark.');
   const slot = String(data.slot || '').slice(0, 16);
   if (!slots(cfg).some((d) => d.slots.includes(slot))) throw new UserError('That time slot is no longer available. Please choose another.');
@@ -221,12 +261,21 @@ const publicOrder = async (token) => {
   if (!/^[0-9a-f]{32}$/.test(token)) throw new UserError('Order not found.', 404);
   const o = await order('o.token=?', [token]);
   const cfg = await settings.load();
-  return { number: o.number, name: o.name, mode: o.mode, status: o.status, status_label: CUSTOMER_STATUS[o.status], note: o.status_note,
+  return { pay_pref: o.pay_pref, pay_ref: o.pay_ref || '', number: o.number, name: o.name, mode: o.mode, status: o.status, status_label: CUSTOMER_STATUS[o.status], note: o.status_note,
     slot_label: o.slot_label, address: o.address, lines: o.lines.map((l) => ({ id: l.item_id, image: l.image ? `/img/p/${l.image}` : null, cat: l.cat || '', name: l.name, name_ta: l.name_ta, unit: l.unit, qty: l.qty, price: l.price,
       ordered: l.ordered_qty === null ? null : qtyStr(milli(l.ordered_qty)), note: l.note })),
     est_items: o.est_items, delivery_charge: o.delivery_charge, est_total: o.est_total, bill_no: o.bill_no, bill_total: o.bill_total,
     shop: { name: cfg.name, phone: cfg.phone, upi_id: cfg.upi_id } };
 };
+
+// The customer types the UPI transaction number after paying by scanning the shop's QR code.
+async function setPayRef(token, ref) {
+  if (!/^[0-9a-f]{32}$/.test(token || '')) throw new UserError('Order not found.', 404);
+  const clean = String(ref || '').replace(/[^0-9A-Za-z]/g, '').slice(0, 40);
+  if (clean.length < 6) throw new UserError('Please type the UPI transaction number (UTR) from your payment app.');
+  const r = await db.query("UPDATE online_orders SET pay_ref=?, pay_pref='upi' WHERE token=? AND status <> 'cancelled'", [clean, token]);
+  if (!r.affectedRows) throw new UserError('Order not found.', 404);
+}
 
 async function staffList(tab = 'open') {
   const where = { open: "o.status IN ('new','accepted','ready','out') ORDER BY o.slot", done: "o.status='done' ORDER BY o.updated_at DESC LIMIT 100",
@@ -335,10 +384,15 @@ async function stats(from, to) {
 // A customer's own orders (newest first) for "My orders".
 async function customerOrders(customerId) {
   const cfg = await settings.load();
-  const rows = await db.query(`SELECT o.number, o.token, o.mode, o.slot, o.status, o.est_items, o.delivery_charge, x.total bill_total, o.created_at
-    FROM online_orders o LEFT JOIN sales x ON x.id=o.sale_id WHERE o.customer_id=? ORDER BY o.id DESC LIMIT 30`, [customerId]);
-  return rows.map((r) => ({ ...r, slot_label: slotLabel(r.slot, cfg), status_label: CUSTOMER_STATUS[r.status],
-    est_total: rs(paise(r.est_items) + paise(r.delivery_charge)) }));
+  const rows = await db.query(`SELECT o.id, o.number, o.token, o.mode, o.slot, o.status, o.est_items, o.delivery_charge, o.pay_pref, x.total bill_total,
+      o.created_at FROM online_orders o LEFT JOIN sales x ON x.id=o.sale_id WHERE o.customer_id=? ORDER BY o.id DESC LIMIT 30`, [customerId]);
+  const lines = rows.length ? await db.query(`SELECT l.order_id, l.item_id, l.name, i.image, c.name cat FROM online_order_lines l
+    LEFT JOIN items i ON i.id=l.item_id LEFT JOIN categories c ON c.id=i.category_id WHERE l.order_id IN (?) ORDER BY l.id`, [rows.map((r) => r.id)]) : [];
+  return rows.map(({ id, ...r }) => {
+    const mine = lines.filter((l) => l.order_id === id);
+    return { ...r, slot_label: slotLabel(r.slot, cfg), status_label: CUSTOMER_STATUS[r.status], est_total: rs(paise(r.est_items) + paise(r.delivery_charge)),
+      count: mine.length, items: mine.slice(0, 5).map((l) => ({ id: l.item_id, name: l.name, cat: l.cat || '', image: l.image ? `/img/p/${l.image}` : null })) };
+  });
 }
 
 async function badge() {
@@ -347,5 +401,5 @@ async function badge() {
   return { new: Number(r.n), last: last.m || 0 };
 }
 
-module.exports = { buyAgain, offerSummary, slotTime, customerOrders, changeLine, stats, CUSTOMER_STATUS, catalogue, categories, slots, slotLabel, placeOrder, publicOrder, order, staffList, setStatus, forCounter, statusMessage, badge,
+module.exports = { suggest, setPayRef, buyAgain, offerSummary, slotTime, customerOrders, changeLine, stats, CUSTOMER_STATUS, catalogue, categories, slots, slotLabel, placeOrder, publicOrder, order, staffList, setStatus, forCounter, statusMessage, badge,
   phone10, STATUS, OPEN };

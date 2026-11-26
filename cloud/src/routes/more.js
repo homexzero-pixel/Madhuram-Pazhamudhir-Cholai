@@ -113,9 +113,20 @@ r.get('/orders-poster.svg', need('orders'), wrap(async (req, res) => {
 }));
 
 // ------------------------------------------------------------------ online shop: customers (no login)
+// stock photos shipped with the app (public/photos/b = banners, public/photos/s = shop sections)
+const PHOTOS = (() => {
+  const fs = require('fs');
+  const dir = require('path').join(__dirname, '..', '..', 'public', 'photos');
+  const read = (d) => { try { return fs.readdirSync(require('path').join(dir, d)).filter((f) => f.endsWith('.webp')).map((f) => f.slice(0, -5)); } catch (_) { return []; } };
+  return { b: read('b'), s: read('s'), p: read('p') };
+})();
 r.get('/shop/info', wrap(async (req, res) => {
   const cfg = await settings.load();
+  const secs = await require('../sections').list();
   ok(res, { shop: await settings.shopSettings(), cats: await shop.categories(), banners: settings.shopBanners(cfg), offers: await shop.offerSummary(),
+    sections: secs, groups: require('../sections').GROUPS.map(([key, name]) => ({ key, name })).filter((g) => secs.some((x) => x.group === g.key)),
+    festival: settings.festival(cfg, nowIST().slice(0, 10)), upi_qr: settings.photoUrl(cfg.upi_qr), photos: PHOTOS,
+    stores: String(cfg.price_stores || '').split(',').map(Number).filter((n) => n > 0 && n < 100000).slice(0, 8),
     slots: shop.slots(cfg).map((d) => ({
     date: d.date, label: new Date(`${d.date}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }),
     slots: d.slots.map((v) => ({ v, l: shop.slotTime(v, cfg) })) })) });
@@ -128,8 +139,34 @@ r.post('/shop/order', wrap(async (req, res) => ok(res, await shop.placeOrder(req
 
 // ------------------------------------------------------------------ customers' accounts (mobile + password, SMS code when set up)
 const cust = require('../custauth');
-const meOut = (c) => (c ? { id: c.id, name: c.name, phone: c.phone, address: c.address || '', verified: !!c.verified, points: Number(c.points || 0) } : null);
+const meOut = (c) => (c ? { id: c.id, name: c.name, phone: c.phone, address: c.address || '', verified: !!c.verified, points: Number(c.points || 0),
+  email: c.email || '' } : null);
 r.get('/shop/account', wrap(async (req, res) => ok(res, { me: meOut(await cust.current(req)), sms: cust.smsEnabled() })));
+const me = async (req) => { const c = await cust.current(req); if (!c) throw new UserError('Please log in.', 401); return c; };
+r.get('/shop/account/addresses', wrap(async (req, res) => ok(res, { addresses: await cust.addresses((await me(req)).id) })));
+r.post('/shop/account/addresses', wrap(async (req, res) => {
+  const c = await me(req);
+  const id = await cust.saveAddress(c.id, req.body || {});
+  ok(res, { id, addresses: await cust.addresses(c.id) });
+}));
+r.post('/shop/account/addresses/:id/default', wrap(async (req, res) => {
+  const c = await me(req); await cust.setDefaultAddress(c.id, Number(req.params.id)); ok(res, { addresses: await cust.addresses(c.id) });
+}));
+r.post('/shop/account/addresses/:id/delete', wrap(async (req, res) => {
+  const c = await me(req); await cust.removeAddress(c.id, Number(req.params.id)); ok(res, { addresses: await cust.addresses(c.id) });
+}));
+r.get('/shop/account/refer', wrap(async (req, res) => {
+  const c = await me(req);
+  ok(res, { code: await cust.refCode(c), ...(await cust.referrals(c.id)) });
+}));
+r.get('/shop/account/suggest', wrap(async (req, res) => {
+  const c = await cust.current(req);
+  ok(res, { items: await shop.suggest(c ? c.id : null) });
+}));
+r.post('/shop/track/:token/payref', wrap(async (req, res) => { await shop.setPayRef(req.params.token, (req.body || {}).ref); ok(res); }));
+r.get('/shop-sections', need('products'), wrap(async (req, res) => ok(res, { sections: require('../sections').SECTIONS.map(([key, name, group]) => ({ key, name, group })) })));
+r.post('/offers/bulk', need('products'), wrap(async (req, res) => ok(res, await catalog.bulkOffer(req.body || {}, req.user))));
+r.post('/offers/clear', need('products'), wrap(async (req, res) => ok(res, await catalog.clearOffers(req.body || {}, req.user))));
 r.post('/shop/account/otp', wrap(async (req, res) => ok(res, await cust.sendOtp(req.body.phone, req.body.purpose, clientIp(req)))));
 r.post('/shop/account/signup', wrap(async (req, res) => {
   const id = await cust.register(req.body || {});

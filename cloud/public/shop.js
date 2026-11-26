@@ -11,13 +11,13 @@ const LS = {
 const S = {
   info: null, items: new Map(), cart: LS.get('mpc_cart', {}), mode: localStorage.getItem('mpc_mode') || '', dayIdx: 0, slot: '',
   me: null, sms: false, after: '', fav: new Set(LS.get('mpc_fav', [])), sort: 'popular', only: '', instock: false,
-  recent: LS.get('mpc_recent', []), active: 0, page: 'home', tok: 0, hist: [],
+  recent: LS.get('mpc_recent', []), active: 0, page: 'home', tok: 0, rtok: 0, hist: [], addresses: null, addrId: 0, pay: LS.get('mpc_pay', 'cash'),
 };
 
 async function get(path) {
   const r = await fetch(`/api/shop${path}`);
   const d = await r.json().catch(() => ({ ok: false, error: 'Please check the internet and try again.' }));
-  if (!d.ok) throw new Error(d.error || 'Please try again.');
+  if (!d.ok) { const e = new Error(d.error || 'Please try again.'); e.status = r.status; throw e; }
   return d;
 }
 async function post(path, body) {
@@ -34,20 +34,19 @@ const rs = (p) => `₹${(p / 100).toFixed(p % 100 ? 2 : 0)}`;
 const step = (it) => (it.unit === 'kg' ? 0.25 : 1);
 const fmtQ = (q, it) => (it.unit === 'kg' ? (q < 1 ? `${Math.round(q * 1000)} g` : `${+q.toFixed(3)} kg`) : `${q}`);
 const lineP = (it, q) => Math.round(paise(it.price) * q);
-const unitLine = (it) => (it.unit === 'kg' ? 'Per 1 kg' : 'Per 1 pc');
+const unitLine = (it) => (it.unit === 'kg' ? '1 kg' : '1 pc');
 const fmtDate = (d) => new Date(`${String(d).slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 // product names as typed in the shop's list ("carrot .", "Cabbage...") shown neatly
 const nice = (n) => { const t = String(n || '').replace(/[\s.]+$/, '').replace(/\s+/g, ' ').trim(); return t.charAt(0).toUpperCase() + t.slice(1); };
-const shortCat = (n) => String(n || '').replace(/\s*items?\.?\s*$/i, '').replace(/\.+$/, '').trim() || n;
-// the bigger of the offer saving and the MRP saving
+// a real saving only: below the printed MRP, or an offer below the shop's normal price
 function saving(it) {
   const p = Number(it.price);
   const was = Math.max(Number(it.regular) || 0, Number(it.mrp) || 0);
-  return was > p ? { was, pct: Math.round((1 - p / was) * 100) } : null;
+  return was > p ? { was, pct: Math.round((1 - p / was) * 100), off: paise(was) - paise(p) } : null;
 }
 function toast(m) { const t = $('#toast'); t.textContent = m; t.className = 'show'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.className = ''; }, 2400); }
 
-// ------------------------------------------------------------------ pictures: the shop's photo, else a 3D picture chosen from the name
+// ------------------------------------------------------------------ pictures: the shop's photo, a real produce photo, else a 3D picture from the name
 const FE = (slug) => `/fe/${slug}.webp`;
 const ART = [
   [/juice|shake|lassi|smoothie|mojito|soda|frooti|maaza|slice|coke|cola|pepsi|fanta|sprite|7 ?up|bovonto|mirinda|limca|thums|\btang\b|rasna|nannari|sherbet|drink|rose ?milk/, 'cup-with-straw'],
@@ -139,9 +138,19 @@ function artFor(name, cat) {
   const byCat = () => (CAT_ART.find(([re]) => re.test(c)) || [])[1];
   return (!c || FOODISH.test(c) ? byName() || byCat() : byCat() || byName()) || 'shopping-bags';
 }
-const catArt = (name) => artFor('', name);
-const pic = (it, cls = '') => (it.image ? `<img class="ph ${cls}" src="${esc(it.image)}" alt="" loading="lazy">`
-  : `<img class="art ${cls}" src="${FE(artFor(it.name, it.cat))}" alt="" loading="lazy">`);
+const SEC_ART = { veg: 'leafy-green', fruits: 'red-apple', exotics: 'avocado', dairy: 'glass-of-milk', staples: 'cooked-rice', masala: 'hot-pepper',
+  breakfast: 'bowl-with-spoon', packaged: 'steaming-bowl', tea: 'hot-beverage', icecream: 'soft-ice-cream', drinks: 'cup-with-straw', juicebar: 'cup-with-straw',
+  munchies: 'popcorn', biscuits: 'cookie', sweets: 'chocolate-bar', bath: 'soap', hair: 'lotion-bottle', skin: 'lotion-bottle', oral: 'toothbrush',
+  fragrance: 'lotion-bottle', shaving: 'razor', baby: 'baby-bottle', pharma: 'pill', cleaning: 'sponge', laundry: 'bubbles', fresheners: 'bubbles',
+  pooja: 'diya-lamp', disposables: 'roll-of-paper', kids: 'teddy-bear' };
+const has = (kind, key) => !!(S.info && S.info.photos && (S.info.photos[kind] || []).includes(key));
+const secImg = (key) => (has('s', key) ? `<img class="ph" src="/photos/s/${key}.webp" alt="" loading="lazy">` : `<img class="art" src="${FE(SEC_ART[key] || 'shopping-bags')}" alt="" loading="lazy">`);
+function pic(it, cls = '') {
+  if (it.image) return `<img class="ph ${cls}" src="${esc(it.image)}" alt="" loading="lazy">`;
+  const art = artFor(it.name, it.cat);
+  if (has('p', art)) return `<img class="ph real ${cls}" src="/photos/p/${art}.webp" alt="" loading="lazy">`;
+  return `<img class="art ${cls}" src="${FE(art)}" alt="" loading="lazy">`;
+}
 const VF = '<svg class="vf" viewBox="0 0 24 24" aria-label="Verified"><path fill="#3b82f6" d="M12 1.6l2.5 1.8 3.1-.1 1 2.9 2.5 1.9-.9 3 .9 3-2.5 1.9-1 2.9-3.1-.1L12 22.4l-2.5-1.8-3.1.1-1-2.9-2.5-1.9.9-3-.9-3 2.5-1.9 1-2.9 3.1.1z"/><path d="m8 12.2 2.7 2.7L16.3 9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 // ------------------------------------------------------------------ basket
@@ -173,26 +182,32 @@ function setQty(it, q) {
   if (S.page === 'detail' && S.detBar) S.detBar();
 }
 function refreshItem(it) {
-  $$(`.pc[data-pid="${it.id}"]`).forEach((el) => {
-    $('.act', el).innerHTML = actHtml(it);
-    $('.pc-b', el).classList.toggle('q', !!S.cart[it.id]);
-  });
+  $$(`.pc[data-pid="${it.id}"]`).forEach((el) => { const a = $('.act', el); a.innerHTML = actHtml(it); a.classList.toggle('q', !!S.cart[it.id]); });
+}
+function toggleFav(id) {
+  if (S.fav.has(id)) { S.fav.delete(id); toast('Removed from your wishlist'); } else { S.fav.add(id); toast('Added to your wishlist'); }
+  LS.set('mpc_fav', [...S.fav]);
+  $$(`[data-fav="${id}"]`).forEach((b) => b.classList.toggle('on', S.fav.has(id)));
 }
 
-// ------------------------------------------------------------------ product card
+// ------------------------------------------------------------------ product card: picture with heart and add button, price, real saving, name, size
 function actHtml(it) {
   if (!it.in_stock) return '<span class="so">Sold out</span>';
   const q = S.cart[it.id] || 0;
   return q ? `<span class="qp"><button data-d="-1" aria-label="Less">${ico('minus')}</button><b>${fmtQ(q, it)}</b><button data-d="1" aria-label="More">${ico('plus')}</button></span>`
-    : `<button class="add" data-d="1" aria-label="Add ${esc(it.name)}">${ico('plus')}</button>`;
+    : `<button class="add" data-d="1" aria-label="Add ${esc(nice(it.name))}">${ico('plus')}</button>`;
 }
 function card(it) {
   const sv = saving(it);
-  const rib = sv && (Number(it.regular) > Number(it.price) || sv.pct >= 5);      // an offer, or a real saving on MRP
-  return `<div class="pc${it.in_stock ? '' : ' out'}" data-pid="${it.id}">${rib ? `<span class="rib">${ico('tag')}${sv.pct}% OFF</span>` : ''}
-    <a class="pc-img" href="#p=${it.id}" aria-label="${esc(nice(it.name))}">${pic(it)}</a>
-    <div class="pc-b${S.cart[it.id] ? ' q' : ''}"><a class="pc-t" href="#p=${it.id}"><div class="pc-p">${rs(paise(it.price))}${it.unit === 'kg' ? '<small>/kg</small>' : ''}</div>
-      <div class="pc-n">${esc(nice(it.name))}</div><div class="pc-u">${unitLine(it)}${sv ? ` · <s>${rs(paise(sv.was))}</s>` : ''}</div></a><div class="act">${actHtml(it)}</div></div></div>`;
+  const offer = Number(it.regular) > Number(it.price);
+  return `<div class="pc${it.in_stock ? '' : ' out'}" data-pid="${it.id}">
+    <div class="pc-img"><a href="#p=${it.id}" aria-label="${esc(nice(it.name))}">${pic(it)}</a>
+      ${offer ? `<span class="tagx">${sv.pct}% OFF</span>` : ''}
+      <button class="fav ${S.fav.has(it.id) ? 'on' : ''}" data-fav="${it.id}" aria-label="Wishlist">${ico('heart')}</button>
+      <div class="act${S.cart[it.id] ? ' q' : ''}">${actHtml(it)}</div></div>
+    <a class="pc-t" href="#p=${it.id}"><div class="pc-pr"><span class="pill-p">${rs(paise(it.price))}${it.unit === 'kg' ? '<small>/kg</small>' : ''}</span>${sv ? `<s>${rs(paise(sv.was))}</s>` : ''}</div>
+      ${sv && sv.off >= 100 ? `<div class="pc-off">${rs(sv.off)} OFF</div>` : '<div class="pc-off none"></div>'}
+      <div class="pc-n">${esc(nice(it.name))}</div><div class="pc-u">${unitLine(it)}</div></a></div>`;
 }
 
 // ------------------------------------------------------------------ header bits, bottom bars
@@ -207,10 +222,18 @@ function drawBars() {
   $$('[data-cartn]').forEach((b) => { b.hidden = !c.n; b.textContent = c.n; });
   $$('[data-ordn]').forEach((b) => { b.hidden = !S.active; b.textContent = S.active; });
   $$('[data-orddot]').forEach((b) => { b.hidden = !S.active; });
-  $('#cbItems').textContent = `${c.n} item${c.n === 1 ? '' : 's'}`;
-  $('#cbTotal').textContent = rs(c.total);
-  $('#cartbar').hidden = !c.n || !['home', 'cats', 'list', 'search'].includes(S.page);
-  const nav = { home: 'home', cats: 'cats', list: 'cats', search: 'search', orders: 'orders', track: 'orders', account: 'account', auth: 'account' }[S.page];
+  const bar = $('#cartbar');
+  bar.hidden = !c.n || !['home', 'cats', 'list', 'search'].includes(S.page);
+  if (S.info && c.n) {
+    const free = paise(S.info.shop.online_free_delivery_above);
+    const need = free - c.total;
+    $('#cbLine').innerHTML = S.mode === 'delivery' && free ? (need > 0 ? `Shop for <b>${rs(need)}</b> more ${ico('right')} <b>FREE delivery</b>` : '<b>FREE delivery unlocked</b>')
+      : `<b>${c.n} item${c.n === 1 ? '' : 's'}</b> · ${rs(c.total)}`;
+    $('#cbBar').style.width = `${S.mode === 'delivery' && free ? Math.min(100, Math.round(c.total * 100 / free)) : 100}%`;
+    $('#cbN').textContent = c.n;
+  }
+  const nav = { home: 'home', cats: 'cats', list: 'cats', search: 'search', orders: 'orders', track: 'orders', account: 'account', auth: 'account', help: 'account',
+    refer: 'account', addresses: 'account' }[S.page];
   $$('.bnav a').forEach((a) => a.classList.toggle('on', a.dataset.nav === nav));
   document.body.dataset.page = S.page;
   if (!S.info) return;
@@ -224,6 +247,9 @@ const appbar = (title, right = '') => `<div class="appbar"><button class="ab-bac
 const closedNote = () => (S.info.shop.online_enabled === '1' ? '' : `<div class="notice">We are not taking online orders right now. Please call the shop${
   S.info.shop.phone ? `: <a href="tel:${esc(S.info.shop.phone)}"><b>${esc(S.info.shop.phone)}</b></a>` : ''}.</div>`);
 const emptyState = (art, title, text, btn = '') => `<div class="empty-state"><img src="${FE(art)}" alt=""><h2>${esc(title)}</h2><p>${esc(text)}</p>${btn}</div>`;
+const seeAll = (href, label = 'See All') => `<a class="see-all" href="${href}">${esc(label)} ${ico('right')}</a>`;
+const secH = (title, href = '') => `<div class="sec-h"><h2>${esc(title)}</h2><i class="dash"></i>${href ? `<a href="${href}">See all</a>` : ''}</div>`;
+const needLogin = () => { S.after = location.hash; location.hash = '#login'; };
 
 // ------------------------------------------------------------------ sheets (bottom on phones, centred on PCs)
 function sheet(html) {
@@ -267,8 +293,8 @@ function sortSheet(onDone, { offersFixed = false } = {}) {
   const c = sheet(`<h2>Sort and filter</h2>
     ${Object.entries(SORTS).map(([k, l]) => `<button class="opt ${S.sort === k ? 'on' : ''}" data-s="${k}"><span><b>${l}</b></span><i class="rad"></i></button>`).join('')}
     <h2 style="margin-top:16px">Show</h2>
-    ${offersFixed ? '' : `<button class="opt ${S.only === 'offers' ? 'on' : ''}" data-t="only"><img src="${FE('label')}" alt=""><span><b>Only offers</b><span>Products below MRP or on offer</span></span><i class="rad"></i></button>`}
-    <button class="opt ${S.instock ? 'on' : ''}" data-t="instock"><img src="${FE('package')}" alt=""><span><b>Only in stock</b><span>Hide sold-out products</span></span><i class="rad"></i></button>
+    ${offersFixed ? '' : `<button class="opt ${S.only === 'offers' ? 'on' : ''}" data-t="only"><span><b>Only offers</b><span>Below MRP or on offer</span></span><i class="rad"></i></button>`}
+    <button class="opt ${S.instock ? 'on' : ''}" data-t="instock"><span><b>Only in stock</b><span>Hide sold-out products</span></span><i class="rad"></i></button>
     <button class="btn-g wide" id="sApply" style="margin-top:8px">Show products</button>`);
   $$('[data-s]', c).forEach((b) => b.addEventListener('click', () => { S.sort = b.dataset.s; $$('[data-s]', c).forEach((x) => x.classList.toggle('on', x === b)); }));
   $$('[data-t]', c).forEach((b) => b.addEventListener('click', () => {
@@ -288,6 +314,8 @@ document.addEventListener('click', (e) => {
     if (it && it.in_stock) setQty(it, +((S.cart[it.id] || 0) + Number(d.dataset.d) * step(it)).toFixed(3));
     return;
   }
+  const f = e.target.closest('[data-fav]');
+  if (f) { e.preventDefault(); e.stopPropagation(); toggleFav(Number(f.dataset.fav)); return; }
   if (e.target.closest('[data-back]')) { e.preventDefault(); goBack(); return; }
   if (e.target.closest('[data-loc]')) { e.preventDefault(); modeSheet(); return; }
   const a = e.target.closest('[data-after]');
@@ -295,38 +323,78 @@ document.addEventListener('click', (e) => {
 });
 function goBack() { if (S.hist.length > 1) history.back(); else location.hash = '#'; }
 
+// ------------------------------------------------------------------ product grids that load more by themselves near the end
+async function results(el, params, { auto = true, limit = 30 } = {}) {
+  const tok = ++S.rtok;                   // a newer grid (other filters, another page) replaces this one
+  let offset = 0;
+  let count = 0;
+  let busy = false;
+  let done = false;
+  el.innerHTML = '<div class="grid"></div><div class="more"></div>';
+  const load = async () => {
+    if (busy || done || tok !== S.rtok) return [];
+    busy = true;
+    const more = $('.more', el);
+    more.innerHTML = '<div class="loading-more">Loading more…</div>';
+    try {
+      const q = new URLSearchParams({ ...params, sort: params.sort || S.sort, limit, offset });
+      if (S.only && !params.only) q.set('only', S.only);
+      if (S.instock) q.set('instock', '1');
+      const { items } = await get(`/items?${q}`);
+      if (tok !== S.rtok) return [];
+      remember(items);
+      offset += items.length; count += items.length;
+      $('.grid', el).insertAdjacentHTML('beforeend', items.map(card).join(''));
+      done = items.length < limit;
+      if (!count) $('.grid', el).outerHTML = emptyState('shopping-cart', 'Nothing here yet', 'Try another word, or look in the categories.', '<a class="btn-o" href="#cats">See categories</a>');
+      more.innerHTML = done ? (count > 8 ? '<div class="end-note">That\'s all for now</div>' : '') : '<button class="more-btn">Show more</button>';
+      const b = $('button', more);
+      if (b) b.addEventListener('click', () => load());
+      $$('[data-count]').forEach((c) => { c.textContent = `${count}${done ? '' : '+'} item${count === 1 ? '' : 's'}`; });
+      return items;
+    } catch (err) { more.innerHTML = `<div class="err">${esc(err.message)}</div>`; return []; } finally { busy = false; }
+  };
+  const first = await load();
+  if (auto && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((ents) => {
+      if (!document.body.contains(el) || tok !== S.rtok || done) { io.disconnect(); return; }
+      if (ents.some((x) => x.isIntersecting)) load();
+    }, { rootMargin: '600px 0px' });
+    io.observe($('.more', el));
+  }
+  return first;
+}
+
 // ------------------------------------------------------------------ home
 function banners() {
   const s = S.info.shop;
+  const f = S.info.festival || {};
   const o = S.info.offers || {};
+  const ph = (k) => (has('b', k) ? `/photos/b/${k}.webp` : null);
   const first = S.info.slots[0] && S.info.slots[0].slots[0];
   const from = first ? first.l.split('–')[0] : '';
-  const veg = S.info.cats.find((c) => /veg|fruit/i.test(c.name));
+  const count = (k) => (S.info.sections.find((x) => x.key === k) || {}).count || 0;
   const per = Number(s.loyalty_points_per_100) || 0;
-  const list = (S.info.banners || []).map((b) => ({ photo: b.img, k: b.kicker, b: b.title, d: b.sub, href: b.link ? `#${b.link}` : '', go: b.link ? 'Get Now' : '' }));
-  if (o.count) {
-    list.push({ k: o.pct ? 'Offers up to' : 'Special offers', b: o.pct ? `${o.pct}% OFF` : `${o.count} products`, d: o.till ? `Till ${fmtDate(o.till)}` : 'Limited time only',
-      href: '#offers', go: 'Get Now', art: ['tomato', 'bell-pepper', 'broccoli', 'onion'], bg: 'linear-gradient(120deg,#f6f5ef,#e8ede0)', id: 'offers' });
-  }
-  list.push({ k: 'Fresh every morning', b: 'Fruits & Vegetables', d: from ? `${S.mode === 'delivery' ? 'Delivered' : 'Ready'} from ${from}` : 'Picked fresh daily',
-    href: veg ? `#cat=${veg.id}` : '#cats', go: 'Order Now', art: ['broccoli', 'tomato', 'carrot', 'banana'], bg: 'linear-gradient(120deg,#f2f7ef,#dcecd9)' });
+  const list = [];
+  list.push({ fest: true, photo: f.photo || ph(`fest_${f.style}`) || ph('fest_generic'), tone: 'dark', badge: o.count ? `Up to ${o.pct}% OFF` : 'Festival offers',
+    b: f.name, d: f.line || (f.to ? `Till ${fmtDate(f.to)}` : ''), href: '#offers', go: 'Shop Now' });
+  for (const b of S.info.banners || []) list.push({ photo: b.img, tone: 'light', k: b.kicker, b: b.title, d: b.sub, href: b.link ? `#${b.link}` : '', go: b.link ? 'Shop Now' : '' });
+  if (count('veg')) list.push({ photo: ph('veg'), tone: 'dark', k: 'Picked fresh every morning', b: 'Farm Fresh Vegetables', d: from ? `${S.mode === 'delivery' ? 'Delivered' : 'Ready'} from ${from}` : '', href: '#sec=veg', go: 'Order Now' });
+  if (count('fruits')) list.push({ photo: ph('fruits'), tone: 'dark', k: 'Sweet and juicy', b: 'Fresh Fruits', d: 'Bananas, mangoes, apples and more', href: '#sec=fruits', go: 'Shop Fruits' });
   if (s.online_delivery === '1' && paise(s.online_free_delivery_above)) {
-    list.push({ k: 'Home delivery', b: 'FREE Delivery', d: `On orders above ${rs(paise(s.online_free_delivery_above))}`, href: '#cats', go: 'Shop Now',
-      art: ['motor-scooter', 'shopping-bags', 'package'], bg: 'linear-gradient(120deg,#f2f4fd,#dfe5fa)' });
+    list.push({ photo: ph('delivery'), tone: 'dark', k: s.online_area ? `Home delivery ${s.online_area}` : 'Home delivery', b: 'FREE Delivery', d: `On orders above ${rs(paise(s.online_free_delivery_above))}`, href: '#cats', go: 'Start Shopping' });
   }
+  if (count('exotics')) list.push({ photo: ph('exotics'), tone: 'dark', k: 'Try something new', b: 'Exotic Picks', d: 'Kiwi, avocado, dragon fruit', href: '#sec=exotics', go: 'Explore' });
+  if (count('staples')) list.push({ photo: ph('grocery'), tone: 'dark', k: 'Monthly shopping', b: 'Atta, Rice, Dals & Masala', d: '', href: '#sec=staples', go: 'Shop Now' });
   if (s.loyalty_enabled === '1' && per) {
-    list.push({ k: 'Loyalty points', b: `Earn ${per} point${per === 1 ? '' : 's'}`, d: 'On every ₹100 you spend', href: S.me ? '#account' : '#signup',
-      go: S.me ? 'My Points' : 'Join Now', art: ['coin', 'wrapped-gift', 'party-popper'], bg: 'linear-gradient(120deg,#fff8ec,#fbe7c4)' });
+    list.push({ photo: ph('snacks') || ph('dairy'), tone: 'dark', k: 'Loyalty points', b: `Earn ${per} point${per === 1 ? '' : 's'}`, d: 'On every ₹100 you spend', href: S.me ? '#account' : '#signup', go: S.me ? 'My Points' : 'Join Now' });
   }
-  if (s.online_pickup === '1') {
-    list.push({ k: 'Takeaway', b: 'Skip the queue', d: 'Order now, collect at the counter', href: '#cats', go: 'Order Now',
-      art: ['shopping-bags', 'stopwatch', 'shopping-cart'], bg: 'linear-gradient(120deg,#f6f6f4,#e7e8e3)' });
-  }
-  return list.slice(0, 5);
+  return list.filter((b) => b.photo).slice(0, 7);
 }
-const bnrHtml = (b) => `<a class="bnr${b.photo ? ' photo' : ''}" ${b.href ? `href="${b.href}"` : ''} ${b.bg ? `style="--bg:${b.bg}"` : ''} ${b.id ? `data-bn="${b.id}"` : ''}>
-  ${b.photo ? `<img class="bnr-img" src="${esc(b.photo)}" alt="">` : `<div class="bnr-art">${(b.art || []).slice(0, 3).map((a, i) => `<img class="a${i + 1}" src="${FE(a)}" alt="">`).join('')}</div>`}
-  <div class="bnr-t">${b.k ? `<span class="k">${esc(b.k)}</span>` : ''}${b.b ? `<b>${esc(b.b)}</b>` : ''}${b.d ? `<span class="d">${esc(b.d)}</span>` : ''}${b.go ? `<span class="go">${esc(b.go)}</span>` : ''}</div></a>`;
+const bnrHtml = (b) => `<a class="bnr photo ${b.tone === 'light' ? 'light' : 'dark'}${b.fest ? ' fest' : ''}" ${b.href ? `href="${b.href}"` : ''}>
+  <img class="bnr-img" src="${esc(b.photo)}" alt="">
+  <div class="bnr-t">${b.badge ? `<span class="badge">${esc(b.badge)}</span>` : ''}${b.k ? `<span class="k">${esc(b.k)}</span>` : ''}${b.b ? `<b>${esc(b.b)}</b>` : ''}
+    ${b.d ? `<span class="d">${esc(b.d)}</span>` : ''}${b.go ? `<span class="go">${esc(b.go)} ${ico('right')}</span>` : ''}</div></a>`;
 function carousel() {
   const el = $('#bnrs');
   clearInterval(S.bnrTimer);
@@ -345,84 +413,111 @@ function carousel() {
     el.scrollTo({ left: n * stepW(), behavior: 'smooth' });
   }, 5000);
 }
-// a long one-word name ("Vegetables") is made a little smaller instead of being cut
-function fitLabels() {
-  $$('.cc-n').forEach((el) => {
-    el.style.fontSize = '';
-    let fs = parseFloat(getComputedStyle(el).fontSize);
-    while (el.scrollWidth > el.clientWidth + 1 && fs > 9.5) { fs -= 0.5; el.style.fontSize = `${fs}px`; }
-  });
+// "Search "Milk"" — the words change every few seconds
+const HINTS = ['Milk', 'Tomato', 'Onion', 'Banana', 'Bread', 'Rice', 'Atta', 'Oil', 'Biscuits', 'Soap', 'Eggs', 'Chips'];
+function rotateHint() {
+  clearInterval(S.hintTimer);
+  let i = 0;
+  S.hintTimer = setInterval(() => {
+    const el = $('.home-srch .ph-t');
+    if (!el) { clearInterval(S.hintTimer); return; }
+    i = (i + 1) % HINTS.length;
+    el.classList.add('fade');
+    setTimeout(() => { el.textContent = `Search "${HINTS[i]}"`; el.classList.remove('fade'); }, 180);
+  }, 2600);
 }
-window.addEventListener('resize', () => { clearTimeout(fitLabels.t); fitLabels.t = setTimeout(fitLabels, 150); });
-const circ = (c) => `<a class="circ" href="#cat=${c.id}"><span class="circ-i"><img src="${FE(catArt(c.name))}" alt=""></span><span class="circ-n">${esc(shortCat(c.name))}</span></a>`;
-const ccTile = (href, art, name) => `<a class="cc" href="${href}"><span class="cc-i"><img src="${FE(art)}" alt=""></span><span class="cc-n">${esc(name)}</span></a>`;
+const tile = (sec, wide) => `<a class="tile${wide ? ' wide' : ''}" href="#sec=${sec.key}"><span class="ti">${secImg(sec.key)}</span><span class="tn">${esc(sec.name)}</span></a>`;
+const groupTiles = (g) => {
+  const list = S.info.sections.filter((s) => s.group === g.key);
+  return list.length ? `<section class="sec grp"><h2 class="grp-h">${esc(g.name)}</h2><div class="tiles">${list.map((s, i) => tile(s, i === 0 && list.length % 4 !== 0)).join('')}</div></section>` : '';
+};
+const railSec = (id, title, href) => `<section class="sec" id="${id}" hidden>${secH(title)}<div class="rail"></div>${href ? seeAll(href) : ''}</section>`;
 
 async function homeView() {
   S.page = 'home';
   const tok = ++S.tok;
   const live = () => tok === S.tok;
   const s = S.info.shop;
-  const cats = S.info.cats;
+  const f = S.info.festival || {};
+  const fphoto = f.photo || (has('b', `fest_${f.style}`) ? `/photos/b/fest_${f.style}.webp` : has('b', 'fest_generic') ? '/photos/b/fest_generic.webp' : '');
   const bl = banners();
+  const stores = S.info.stores || [];
   view().innerHTML = `
     <div class="mhd"><div class="who"><a href="#account" aria-label="Profile">${avatar()}</a><span class="who-t">
       <a class="who-n" href="#account"><span>${esc(S.me ? S.me.name : s.name)}</span>${S.me && S.me.verified ? VF : ''}</a>
       <button class="loc" data-loc type="button"><span>${esc(locText())}</span>${ico('down')}</button></span></div>
       <div class="hd-btns"><a class="cbtn" href="#cart" aria-label="Basket">${ico('bag')}<b class="bdg g" data-cartn hidden></b></a>
         <a class="cbtn" href="#orders" aria-label="My orders">${ico('bell')}<b class="bdg" data-ordn hidden></b></a></div></div>
-    <a class="srch home-srch" href="#search">${ico('search')}<span class="ph-t">What would you like to buy today?</span><span class="srch-f">${ico('sliders')}</span></a>
+    <div class="home-srch"><a class="srch" href="#search">${ico('search')}<span class="ph-t">Search "${HINTS[0]}"</span></a>
+      ${f.name ? `<a class="fest-chip" href="#offers">${fphoto ? `<img src="${esc(fphoto)}" alt="">` : ''}<span>${esc(f.name)}</span></a>` : ''}</div>
     ${closedNote()}
     ${bl.length ? `<div class="bnr-wrap"><div class="bnrs" id="bnrs">${bl.map(bnrHtml).join('')}</div>
       ${bl.length > 1 ? `<div class="dots-tab">${bl.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>` : ''}
-    <div class="catcard"><div class="cc-grid">${ccTile('#offers', 'fire', 'Best Deals')}${cats.slice(0, 9).map((c) => ccTile(`#cat=${c.id}`, catArt(c.name), shortCat(c.name))).join('')}</div>
-      <a class="cc-more" href="#cats">${ico('clover')}View More Categories</a></div>
-    <section class="sec" id="againSec" hidden><div class="sec-h"><h2>Buy again</h2></div><div class="rail" id="again"></div></section>
-    <section class="sec" id="offSec" hidden><div class="sec-h"><h2>Today's offers</h2><a href="#offers">View all</a></div><div class="rail" id="offers"></div></section>
-    ${cats.length > 4 ? `<section class="sec circ-sec"><div class="sec-h"><h2>More categories</h2><a href="#cats">View all</a></div>
-      <div class="circ-row">${cats.slice(4).map(circ).join('')}</div></section>` : ''}
-    <section class="sec"><div class="sec-h"><h2>Best sellers</h2><a href="#search">View all</a></div><div class="rail" id="pop"><span class="mut small">Loading…</span></div></section>
-    ${cats.slice(0, 3).map((c) => `<section class="sec" data-cs="${c.id}" hidden><div class="sec-h"><h2>${esc(c.name)}</h2><a href="#cat=${c.id}">View all</a></div><div class="rail"></div></section>`).join('')}
-    <p class="credit">Pictures: the shop's photos, <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (CC BY-SA)
-      and <a href="/fe/LICENSE.txt" target="_blank">Microsoft Fluent Emoji</a> (MIT). Pictures are for illustration; packs may differ.</p>`;
+    ${railSec('secVeg', 'Fresh Vegetables', '#sec=veg')}
+    ${railSec('secFruits', 'Fresh Fruits', '#sec=fruits')}
+    ${railSec('secNew', 'New Launch', '#new')}
+    ${railSec('secExotic', 'Exotics & Premium', '#sec=exotics')}
+    ${stores.length ? `<section class="sec stores"><div class="st-tabs" role="tablist"><button class="on" data-st="0">${ico('flame')}<b>Trending</b></button>
+      ${stores.map((n) => `<button data-st="${n}"><b>₹${n}</b><span>Store</span></button>`).join('')}</div>
+      <div class="page"><div class="grid g3" id="stGrid"></div></div><a class="see-all" id="stAll" href="#trending">See All ${ico('right')}</a></section>` : ''}
+    ${railSec('secFest', f.name || 'Festival offers', '#offers')}
+    ${railSec('secSuggest', 'Suggested for you', '')}
+    ${railSec('secAgain', 'Buy again', '')}
+    <div class="groups">${(S.info.groups || []).map(groupTiles).join('')}</div>
+    <section class="sec">${secH('More for you')}<div class="page"><div id="feed"></div></div></section>
+    <p class="credit">Pictures: the shop's photos, <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (CC BY-SA),
+      <a href="/photos/credits.html" target="_blank">Wikimedia Commons photos</a> and <a href="/fe/LICENSE.txt" target="_blank">Microsoft Fluent Emoji</a> (MIT).
+      Pictures are for illustration; packs may differ.</p>`;
   carousel();
-  fitLabels();
+  rotateHint();
   drawBars();
-  const fill = (el, items) => { el.innerHTML = remember(items).map(card).join(''); };
+  const fillRail = (id, items) => {
+    const sec = live() && $(`#${id}`);
+    if (!sec || !items.length) return;
+    sec.hidden = false;
+    $('.rail', sec).innerHTML = remember(items).map(card).join('');
+  };
+  const rail = (id, qs) => get(`/items?${qs}`).then(({ items }) => fillRail(id, items)).catch(() => {});
   const jobs = [
-    get('/items?sort=popular&limit=12').then(({ items }) => { if (live()) { if (items.length) fill($('#pop'), items); else $('#pop').closest('.sec').hidden = true; } }),
-    get('/items?only=offers&sort=offers&limit=12').then(({ items }) => {
-      if (!live() || !items.length) return;
-      $('#offSec').hidden = false; fill($('#offers'), items);
-      const arts = [...new Set(items.filter((i) => !i.image).map((i) => artFor(i.name, i.cat)))].slice(0, 3);
-      const bn = $('[data-bn="offers"] .bnr-art');
-      if (bn && arts.length >= 3) bn.innerHTML = arts.map((a, i) => `<img class="a${i + 1}" src="${FE(a)}" alt="">`).join('');
-    }),
-    ...cats.slice(0, 3).map((c) => get(`/items?cat=${c.id}&sort=popular&limit=12`).then(({ items }) => {
-      const sec = live() && $(`[data-cs="${c.id}"]`);
-      if (sec && items.length) { sec.hidden = false; fill($('.rail', sec), items); }
-    })),
+    rail('secVeg', 'sec=veg&sort=popular&limit=12'),
+    rail('secFruits', 'sec=fruits&sort=popular&limit=12'),
+    rail('secNew', 'fresh=1&sort=new&limit=12'),
+    rail('secExotic', 'sec=exotics&sort=popular&limit=12'),
+    rail('secFest', 'only=offers&sort=offers&limit=12'),
+    get('/account/suggest').then(({ items }) => fillRail('secSuggest', items)).catch(() => {}),
   ];
-  if (S.me) jobs.push(get('/account/again').then(({ items }) => { if (live() && items.length) { $('#againSec').hidden = false; fill($('#again'), items); } }));
-  const r = await Promise.allSettled(jobs);
-  if (live() && r[0].status === 'rejected') $('#pop').innerHTML = `<div class="err">${esc(r[0].reason.message)}</div>`;
+  if (S.me) jobs.push(get('/account/again').then(({ items }) => fillRail('secAgain', items)).catch(() => {}));
+  if (stores.length) {
+    const showStore = async (n) => {
+      $$('.st-tabs button').forEach((b) => b.classList.toggle('on', Number(b.dataset.st) === n));
+      $('#stAll').href = n ? `#store=${n}` : '#trending';
+      $('#stAll').innerHTML = `${n ? `See all in ₹${n} Store` : 'See all trending'} ${ico('right')}`;
+      const { items } = await get(`/items?${new URLSearchParams({ sort: 'popular', limit: 6, instock: '1', ...(n ? { max_price: n } : {}) })}`);
+      if (live() && $('#stGrid')) $('#stGrid').innerHTML = remember(items).map(card).join('') || '<p class="mut small">Nothing in this store right now.</p>';
+    };
+    $$('.st-tabs button').forEach((b) => b.addEventListener('click', () => showStore(Number(b.dataset.st)).catch(() => {})));
+    jobs.push(showStore(0).catch(() => {}));
+  }
+  await Promise.allSettled(jobs);
+  if (live() && $('#feed')) results($('#feed'), { sort: 'popular' }, { limit: 20 });
 }
 
-// ------------------------------------------------------------------ categories, lists, search
+// ------------------------------------------------------------------ categories, sections, price stores, lists, search
 function catsView() {
   S.page = 'cats';
   ++S.tok;
-  const o = S.info.offers || {};
-  view().innerHTML = `${appbar('Categories', `<a class="ab-btn" href="#search" aria-label="Search">${ico('search')}</a>`)}${closedNote()}
-    <div class="page"><div class="cat-grid"><a class="ct" href="#offers"><img src="${FE('fire')}" alt=""><b>Best Deals</b><span>${o.count ? `${o.count} on offer` : 'Below MRP'}</span></a>
-    ${S.info.cats.map((c) => `<a class="ct" href="#cat=${c.id}"><img src="${FE(catArt(c.name))}" alt="" loading="lazy"><b>${esc(c.name)}</b><span>${Number(c.items)} item${Number(c.items) === 1 ? '' : 's'}</span></a>`).join('')}</div></div>`;
+  view().innerHTML = `${appbar('All Categories', `<a class="ab-btn" href="#saved" aria-label="Wishlist">${ico('heart')}</a><a class="ab-btn" href="#search" aria-label="Search">${ico('search')}</a>`)}${closedNote()}
+    <div class="groups">${(S.info.groups || []).map(groupTiles).join('')}</div>`;
 }
 
-function chipsHtml({ cat = '', offersFixed = false } = {}) {
+function chipsHtml({ sec = '', offersFixed = false } = {}) {
+  const here = S.info.sections.find((x) => x.key === sec);
+  const sibs = S.info.sections.filter((x) => (here ? x.group === here.group : true) && x.key !== sec).slice(0, 14);
   return `<div class="chips"><button class="chip ic" data-sort aria-label="Sort and filter">${ico('sliders')}</button>
     <button class="chip" data-sort>${ico('sort')}${esc(SORTS[S.sort])}</button>
     ${offersFixed ? '' : `<button class="chip ${S.only === 'offers' ? 'on' : ''}" data-tog="only">${ico('tag')}Offers</button>`}
     <button class="chip ${S.instock ? 'on' : ''}" data-tog="instock">In stock</button>
-    ${S.info.cats.slice(0, 14).filter((c) => String(c.id) !== String(cat)).map((c) => `<a class="chip" href="#cat=${c.id}">${esc(shortCat(c.name))}</a>`).join('')}</div>`;
+    ${sibs.map((x) => `<a class="chip" href="#sec=${x.key}">${esc(x.name)}</a>`).join('')}</div>`;
 }
 function bindChips(rerun, opts = {}) {
   $$('[data-sort]').forEach((b) => b.addEventListener('click', () => sortSheet(rerun, opts)));
@@ -431,54 +526,30 @@ function bindChips(rerun, opts = {}) {
     rerun();
   }));
 }
-function redrawChips(opts) {
-  const old = $('.chips');
-  if (old) { old.outerHTML = chipsHtml(opts); }
-}
+function redrawChips(opts) { const old = $('.chips'); if (old) old.outerHTML = chipsHtml(opts); }
 
-// a grid of products with "Show more"
-async function results(el, params) {
-  const tok = ++S.tok;
-  let offset = 0;
-  let count = 0;
-  const LIM = 40;
-  el.innerHTML = '<div class="grid"></div><div class="more"></div>';
-  const load = async () => {
-    const q = new URLSearchParams({ ...params, sort: S.sort, limit: LIM, offset });
-    if (S.only && !params.only) q.set('only', S.only);
-    if (S.instock) q.set('instock', '1');
-    const { items } = await get(`/items?${q}`);
-    if (tok !== S.tok) return [];
-    remember(items);
-    offset += items.length; count += items.length;
-    $('.grid', el).insertAdjacentHTML('beforeend', items.map(card).join(''));
-    if (!count) $('.grid', el).outerHTML = emptyState('shopping-cart', 'Nothing found', 'Try another word, or look in the categories.', '<a class="btn-o" href="#cats">See categories</a>');
-    const more = $('.more', el);
-    more.innerHTML = items.length === LIM ? '<button class="more-btn">Show more</button>' : '';
-    if ($('button', more)) $('button', more).addEventListener('click', (e) => { e.target.disabled = true; e.target.textContent = 'Loading…'; load().catch((x) => toast(x.message)); });
-    $$('[data-count]').forEach((c) => { c.textContent = `${count}${items.length === LIM ? '+' : ''} item${count === 1 ? '' : 's'}`; });
-    return items;
-  };
-  return load();
-}
-
-async function listView({ cat = '', only = '', saved = false }) {
+// one page for a section, a price store, offers, new products, trending, the wishlist or an old shop category
+async function listView({ sec = '', cat = '', only = '', saved = false, store = 0, fresh = false, trending = false }) {
   S.page = 'list';
+  const section = S.info.sections.find((x) => x.key === sec);
   const c = S.info.cats.find((x) => String(x.id) === String(cat));
-  const title = c ? c.name : only ? 'Best Deals' : saved ? 'Saved items' : 'Products';
-  const opts = { cat, offersFixed: !!only };
+  const f = S.info.festival || {};
+  const title = section ? section.name : c ? c.name : store ? `₹${store} Store` : only ? (f.name || 'Offers') : saved ? 'Your Wishlist' : fresh ? 'New Launch' : trending ? 'Trending' : 'Products';
+  const opts = { sec, offersFixed: !!only };
+  const params = { ...(sec ? { sec } : {}), ...(cat ? { cat } : {}), ...(only ? { only, sort: 'offers' } : {}), ...(store ? { max_price: store } : {}),
+    ...(fresh ? { fresh: 1, sort: 'new' } : {}) };
   view().innerHTML = `${appbar(title, `<a class="ab-btn" href="#search" aria-label="Search">${ico('search')}</a>`)}${closedNote()}
-    <div class="page">${saved ? '' : chipsHtml(opts)}<div class="res-h"><span data-count></span></div><div id="res"></div></div>`;
+    <div class="page">${saved ? '' : chipsHtml(opts)}<div class="res-h">${store ? `<span class="mut small">Everything up to ₹${store}</span>` : ''}<span data-count></span></div><div id="res"></div></div>`;
   drawBars();
   if (saved) {
     const ids = [...S.fav].slice(0, 60);
-    if (!ids.length) { $('#res').innerHTML = emptyState('red-heart', 'No saved items', 'Tap the heart on a product to save it here.', '<a class="btn-o" href="#">Start shopping</a>'); return; }
-    await results($('#res'), { ids: ids.join(',') });
+    if (!ids.length) { $('#res').innerHTML = emptyState('red-heart', 'Your wishlist is empty', 'Tap the heart on any product to keep it here.', '<a class="btn-o" href="#">Start shopping</a>'); return; }
+    await results($('#res'), { ids: ids.join(',') }, { auto: false, limit: 60 });
     return;
   }
-  const rerun = () => { redrawChips(opts); bindChips(rerun, opts); results($('#res'), { ...(cat ? { cat } : {}), ...(only ? { only } : {}) }).catch((e) => toast(e.message)); };
+  const rerun = () => { redrawChips(opts); bindChips(rerun, opts); results($('#res'), params).catch((e) => toast(e.message)); };
   bindChips(rerun, opts);
-  await results($('#res'), { ...(cat ? { cat } : {}), ...(only ? { only } : {}) });
+  await results($('#res'), params);
 }
 
 function addRecent(v) {
@@ -503,9 +574,10 @@ async function searchView(q = '', code = '') {
     if (!v && !code) {
       box.innerHTML = `${S.recent.length ? `<div class="res-h"><h2>Recent searches</h2><button class="small mut" id="clr" type="button">Clear</button></div>
         <div class="recent">${S.recent.map((r) => `<a href="#q=${encodeURIComponent(r)}">${ico('clock')}${esc(r)}</a>`).join('')}</div>` : ''}
-        <div class="res-h"><h2>Top items</h2><span data-count></span></div><div id="sgrid"></div>`;
+        <div class="res-h"><h2>Popular categories</h2></div><div class="circ-row">${S.info.sections.slice(0, 12).map((x) => `<a class="circ" href="#sec=${x.key}"><span class="circ-i">${secImg(x.key)}</span><span class="circ-n">${esc(x.name)}</span></a>`).join('')}</div>
+        <div class="res-h"><h2>Trending now</h2><span data-count></span></div><div id="sgrid"></div>`;
       if ($('#clr')) $('#clr').addEventListener('click', () => { S.recent = []; LS.set('mpc_recent', []); run(''); });
-      await results($('#sgrid'), {});
+      await results($('#sgrid'), { sort: 'popular' });
       return;
     }
     box.innerHTML = `<div class="res-h"><h2>${code ? 'Scanned product' : `Results for “${esc(v)}”`}</h2><span data-count></span></div><div id="sgrid"></div>`;
@@ -552,23 +624,23 @@ async function detailView(id) {
     it.cat ? ['Category', esc(it.cat)] : null,
     ['Sold by', it.unit === 'kg' ? 'Weight (in steps of 250 g)' : 'Piece'],
     it.mrp ? ['MRP', rs(paise(it.mrp))] : null,
-    sv ? ['You save', `${rs(paise(sv.was) - paise(it.price))} (${sv.pct}%)`] : null,
+    sv ? ['You save', `${rs(sv.off)} (${sv.pct}%)`] : null,
     it.offer_to ? ['Offer price till', fmtDate(it.offer_to)] : null,
   ].filter(Boolean);
   view().innerHTML = `<div class="det">${appbar('Details', `<button class="ab-btn" id="shareB" aria-label="Share">${ico('share')}</button>
-      <button class="ab-btn fav ${S.fav.has(it.id) ? 'on' : ''}" id="favB" aria-label="Save">${ico('heart')}</button>`)}
+      <button class="ab-btn fav ${S.fav.has(it.id) ? 'on' : ''}" data-fav="${it.id}" aria-label="Wishlist">${ico('heart')}</button>`)}
     <div class="det-cols"><div class="det-img">${pic(it)}</div>
     <div class="det-sheet">
       <div class="det-top"><div class="det-name"><h2>${esc(nice(it.name))}</h2>${it.name_ta ? `<div class="ta">${esc(it.name_ta)}</div>` : ''}</div>
         <div class="det-pr"><b>${rs(paise(it.price))}${it.unit === 'kg' ? '<small>/kg</small>' : ''}</b>${sv ? `<s>${rs(paise(sv.was))}</s>` : ''}
           <span class="${it.in_stock ? '' : 'bad'}">${it.in_stock ? 'In Stock' : 'Sold out'}</span></div></div>
+      ${sv && sv.off >= 100 ? `<div class="det-off">${rs(sv.off)} OFF · ${sv.pct}% saving</div>` : ''}
       <p class="det-desc">${esc(detailText(it))}</p>
       <div class="det-store"><span class="ds-logo"><img src="/img/logo.webp" alt=""></span><span><b>${esc(s.name)}</b>
         <small>${S.mode === 'delivery' ? `Home delivery${s.online_area ? ` · ${esc(s.online_area)}` : ''}` : 'Takeaway from the shop'}</small></span></div>
       <dl class="det-attr">${attrs.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
       <div class="det-bar" id="detBar"></div>
-      <section class="sec"><div class="sec-h"><h2>People also ordered</h2>${it.cat_id ? `<a href="#cat=${it.cat_id}">View all</a>` : ''}</div>
-        <div class="rail" id="similar"><span class="mut small">Loading…</span></div></section>
+      <section class="sec">${secH('People also ordered', it.cat_id ? `#cat=${it.cat_id}` : '')}<div class="rail" id="similar"><span class="mut small">Loading…</span></div></section>
     </div></div></div>`;
   drawBars();
   S.detBar = () => {
@@ -595,11 +667,6 @@ async function detailView(id) {
     });
   };
   S.detBar();
-  $('#favB').addEventListener('click', (e) => {
-    const b = e.currentTarget;
-    if (S.fav.has(it.id)) { S.fav.delete(it.id); toast('Removed from saved items'); } else { S.fav.add(it.id); toast('Saved. Find it in Profile, Saved items.'); }
-    LS.set('mpc_fav', [...S.fav]); b.classList.toggle('on', S.fav.has(it.id));
-  });
   $('#shareB').addEventListener('click', async () => {
     const url = `${location.origin}/shop/#p=${it.id}`;
     try {
@@ -616,8 +683,37 @@ async function detailView(id) {
   } catch (_) { if ($('#similar')) $('#similar').closest('.sec').hidden = true; }
 }
 
+// ------------------------------------------------------------------ addresses (used by the basket and the profile)
+const addrLine = (a) => [a.address, a.landmark && `Landmark: ${a.landmark}`, a.pincode].filter(Boolean).join(', ');
+const addrIcon = (l) => (l === 'Work' ? 'briefcase' : l === 'Other' ? 'pin' : 'home');
+async function loadAddresses(force = false) {
+  if (!S.me) { S.addresses = []; return []; }
+  if (!S.addresses || force) S.addresses = (await get('/account/addresses')).addresses;
+  return S.addresses;
+}
+function addressSheet(a = {}, onSaved = () => {}) {
+  const c = sheet(`<h2>${a.id ? 'Edit address' : 'Add a new address'}</h2><form>
+    <div class="seg3">${['Home', 'Work', 'Other'].map((l) => `<label class="${(a.label || 'Home') === l ? 'on' : ''}"><input type="radio" name="label" value="${l}" ${(a.label || 'Home') === l ? 'checked' : ''}>${ico(addrIcon(l))}${l}</label>`).join('')}</div>
+    <div class="field"><label>House / flat number, street and area</label><textarea name="address" rows="2" required>${esc(a.address || '')}</textarea></div>
+    <div class="field"><label>Landmark (optional)</label><input name="landmark" value="${esc(a.landmark || '')}" placeholder="Near the temple, opposite the school…"></div>
+    <div class="field"><label>PIN code (optional)</label><input name="pincode" inputmode="numeric" maxlength="6" value="${esc(a.pincode || '')}"></div>
+    <label class="show"><input type="checkbox" name="make_default" ${a.is_default || !(S.addresses || []).length ? 'checked' : ''}> Use as my default address</label>
+    <div class="perr"></div><button class="btn-g wide" style="margin-top:12px">Save address</button></form>`);
+  $$('.seg3 input', c).forEach((r) => r.addEventListener('change', () => $$('.seg3 label', c).forEach((l) => l.classList.toggle('on', $('input', l).checked))));
+  $('form', c).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      const r = await post('/account/addresses', { id: a.id, label: f.label.value, address: f.address.value, landmark: f.landmark.value, pincode: f.pincode.value, make_default: f.make_default.checked });
+      S.addresses = r.addresses;
+      const acct = await get('/account'); S.me = acct.me;
+      closeSheet(); toast('Address saved'); onSaved(r.id);
+    } catch (ex) { $('.perr', c).innerHTML = `<div class="err">${esc(ex.message)}</div>`; }
+  });
+}
+
 // ------------------------------------------------------------------ basket and checkout
-function cartView() {
+async function cartView() {
   S.page = 'cart';
   const s = S.info.shop;
   const lines = Object.entries(S.cart).map(([id, q]) => [S.items.get(Number(id)), q]).filter(([it]) => it);
@@ -626,6 +722,9 @@ function cartView() {
     drawBars();
     return;
   }
+  if (S.me && S.addresses === null) { try { await loadAddresses(); } catch (_) { S.addresses = []; } if (S.page !== 'cart') return; }
+  const addrs = S.addresses || [];
+  if (!addrs.some((a) => a.id === S.addrId)) S.addrId = (addrs.find((a) => a.is_default) || addrs[0] || {}).id || 0;
   const c = cartSums();
   const dc = deliveryCharge(c.total);
   const minOrder = paise(s.online_min_order);
@@ -636,32 +735,43 @@ function cartView() {
   const earn = s.loyalty_enabled === '1' ? Math.floor(Math.floor(c.total / 10000) * per) : 0;
   const placeLabel = S.me ? 'Place Order' : 'Log in to order';
   const closed = s.online_enabled !== '1';
-  view().innerHTML = `${appbar('My Basket', '<button class="ab-btn" id="clearB" aria-label="Empty the basket">' + ico('trash') + '</button>')}${closedNote()}
+  const free = paise(s.online_free_delivery_above);
+  view().innerHTML = `${appbar('My Basket', `<button class="ab-btn" id="clearB" aria-label="Empty the basket">${ico('trash')}</button>`)}${closedNote()}
     <div class="page"><div class="cart-cols"><div class="main-col">
     <div class="modes">
       ${s.online_delivery === '1' ? `<button class="mode-c ${S.mode === 'delivery' ? 'on' : ''}" data-mode="delivery"><img src="${FE('motor-scooter')}" alt=""><b>Home delivery</b>
-        <span>${paise(s.online_delivery_charge) ? `${rs(paise(s.online_delivery_charge))}${paise(s.online_free_delivery_above) ? `, free above ${rs(paise(s.online_free_delivery_above))}` : ''}` : 'Free'}</span></button>` : ''}
+        <span>${paise(s.online_delivery_charge) ? `${rs(paise(s.online_delivery_charge))}${free ? `, free above ${rs(free)}` : ''}` : 'Free'}</span></button>` : ''}
       ${s.online_pickup === '1' ? `<button class="mode-c ${S.mode === 'pickup' ? 'on' : ''}" data-mode="pickup"><img src="${FE('shopping-bags')}" alt=""><b>Takeaway</b><span>Collect at the counter</span></button>` : ''}</div>
+    ${S.mode === 'delivery' && free ? `<div class="free-bar"><div>${c.total >= free ? '<b>Yay! FREE delivery on this order</b>' : `Add <b>${rs(free - c.total)}</b> more for <b>FREE delivery</b>`}</div>
+      <i><u style="width:${Math.min(100, Math.round(c.total * 100 / free))}%"></u></i></div>` : ''}
     <div class="box"><h3>${c.n} item${c.n === 1 ? '' : 's'} in your basket</h3>
       ${lines.map(([it, q]) => `<div class="cl" data-pid="${it.id}"><a class="ce" href="#p=${it.id}">${pic(it)}</a>
         <div class="cm"><b>${esc(nice(it.name))}</b><span>${rs(paise(it.price))}${it.unit === 'kg' ? '/kg · weighed when packed' : ' each'}</span><span class="lt">${rs(lineP(it, q))}</span></div>
         <div class="qpill"><button data-d="-1" class="${q <= step(it) ? 'del' : ''}" aria-label="${q <= step(it) ? 'Remove' : 'Less'}">${ico(q <= step(it) ? 'trash' : 'minus')}</button>
           <b>${fmtQ(q, it)}</b><button data-d="1" aria-label="More">${ico('plus')}</button></div></div>`).join('')}
       <a class="add-more" href="#">${ico('plus')}Add more items</a></div>
+    ${S.mode === 'delivery' && S.me ? `<div class="box"><h3>Deliver to</h3>
+      ${addrs.map((a) => `<label class="addr ${a.id === S.addrId ? 'on' : ''}"><input type="radio" name="addr" value="${a.id}" ${a.id === S.addrId ? 'checked' : ''}>
+        <span class="ai">${ico(addrIcon(a.label))}</span><span class="at"><b>${esc(a.label)}${a.is_default ? ' <span class="pill">Default</span>' : ''}</b><span>${esc(addrLine(a))}</span></span></label>`).join('')}
+      <button type="button" class="add-more" id="addAddr" style="width:100%">${ico('plus')}Add a new address</button></div>` : ''}
     <div class="box"><h3>${S.mode === 'delivery' ? 'Delivery' : 'Pickup'} time</h3>
       ${days.length ? `<div class="days">${days.map((d, i) => `<button type="button" data-day="${i}" class="${i === S.dayIdx ? 'on' : ''}">${esc(d.label)}</button>`).join('')}</div>
       <div class="slots">${days[S.dayIdx].slots.map((x) => `<button type="button" data-slot="${x.v}" class="${x.v === S.slot ? 'on' : ''}">${esc(x.l)}</button>`).join('')}</div>`
     : '<div class="mut small">No time slots are open now. Please try again later.</div>'}</div>
+    <div class="box"><h3>Payment</h3>
+      <label class="addr ${S.pay === 'cash' ? 'on' : ''}"><input type="radio" name="pay" value="cash" ${S.pay === 'cash' ? 'checked' : ''}><span class="ai">${ico('cash')}</span>
+        <span class="at"><b>Pay on ${S.mode === 'delivery' ? 'delivery' : 'collection'}</b><span>Cash or UPI when you ${S.mode === 'delivery' ? 'receive the order' : 'collect'}</span></span></label>
+      <label class="addr ${S.pay === 'upi' ? 'on' : ''}"><input type="radio" name="pay" value="upi" ${S.pay === 'upi' ? 'checked' : ''}><span class="ai">${ico('qr')}</span>
+        <span class="at"><b>Pay online by UPI</b><span>Scan the shop's QR code or pay${s.upi_id ? ` to ${esc(s.upi_id)}` : ''} with GPay, PhonePe or Paytm after placing the order</span></span></label></div>
     ${S.me ? '' : `<div class="box"><h3>Log in to place your order</h3><p class="small mut" style="margin-top:-6px">Your mobile number is your login. New here? Sign up in a minute.</p>
       <div style="display:flex;gap:10px"><a class="btn-g" href="#login" data-after="#cart">Log in</a><a class="btn-o" href="#signup" data-after="#cart" style="flex:1">Sign up</a></div></div>`}
     <form class="box" id="of" ${S.me ? '' : 'hidden'}><h3>Your details</h3>
       <div class="field"><label>Name</label><input name="name" required value="${esc((S.me && S.me.name) || saved.name || '')}" autocomplete="name"></div>
       <div class="field"><label>Mobile</label><div class="fixed">${esc(S.me ? S.me.phone : '')} ${S.me && S.me.verified ? '<span class="pill">Verified</span>' : ''}</div></div>
-      ${S.mode === 'delivery' ? `<div class="field"><label>Delivery address with landmark</label><textarea name="address" rows="2">${esc((S.me && S.me.address) || saved.address || '')}</textarea></div>` : ''}
+      ${S.mode === 'delivery' && !addrs.length ? `<div class="field"><label>Delivery address with landmark</label><textarea name="address" rows="2">${esc((S.me && S.me.address) || saved.address || '')}</textarea></div>` : ''}
       <div class="field"><label>Note for the shop (optional)</label><input name="notes" placeholder="e.g. ripe bananas, call before coming"></div>
-      <div class="field"><label>Pay by</label><select name="pay"><option value="cash">Cash</option><option value="upi">UPI${s.upi_id ? ` (${esc(s.upi_id)})` : ''}</option></select></div>
       <input name="website" class="hp" tabindex="-1" autocomplete="off"><div id="oerr"></div>
-      <p class="small mut">You pay when you ${S.mode === 'delivery' ? 'receive the order' : 'collect'}. The shop confirms on WhatsApp. Weighed items are billed at the exact weight.</p></form>
+      <p class="small mut">The shop confirms on WhatsApp. Weighed items are billed at the exact weight.</p></form>
     </div><div class="side">
     <div class="box"><h3>Bill details</h3>
       <div class="bill-row"><span>Items total</span><span>${rs(c.total)}</span></div>
@@ -669,7 +779,6 @@ function cartView() {
       <div class="bill-row total"><span>To pay (approx.)</span><span>${rs(c.total + dc)}</span></div>
       ${c.saved > 0 ? `<div class="save-strip">You save ${rs(c.saved)} on this order</div>` : ''}
       ${earn > 0 ? `<p class="small okc" style="margin:10px 0 0">You earn about ${earn} loyalty point${earn === 1 ? '' : 's'}${S.me && Number(S.me.points) ? ` (you have ${Number(S.me.points)})` : ''}.</p>` : ''}
-      ${S.mode === 'delivery' && dc && paise(s.online_free_delivery_above) ? `<p class="small mut" style="margin:10px 0 0">Add ${rs(paise(s.online_free_delivery_above) - c.total)} more for free delivery.</p>` : ''}
       ${S.mode === 'delivery' && c.total < minOrder ? `<div class="err">Minimum order for delivery is ${rs(minOrder)}. Add ${rs(minOrder - c.total)} more, or choose takeaway.</div>` : ''}
       <div class="place" style="margin-top:14px"><button class="btn-g wide" data-place ${closed ? 'disabled' : ''}>${placeLabel} - ${rs(c.total + dc)}</button></div></div>
     </div></div></div>
@@ -677,6 +786,9 @@ function cartView() {
   $$('[data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
   $$('[data-day]').forEach((b) => b.addEventListener('click', () => { S.dayIdx = Number(b.dataset.day); S.slot = ''; const y = window.scrollY; cartView(); window.scrollTo(0, y); }));
   $$('[data-slot]').forEach((b) => b.addEventListener('click', () => { S.slot = b.dataset.slot; $$('[data-slot]').forEach((x) => x.classList.toggle('on', x === b)); }));
+  $$('[name=addr]').forEach((r) => r.addEventListener('change', () => { S.addrId = Number(r.value); $$('label.addr').forEach((l) => { const i = $('input', l); if (i.name === 'addr') l.classList.toggle('on', i.checked); }); }));
+  $$('[name=pay]').forEach((r) => r.addEventListener('change', () => { S.pay = r.value; LS.set('mpc_pay', S.pay); $$('label.addr').forEach((l) => { const i = $('input', l); if (i.name === 'pay') l.classList.toggle('on', i.checked); }); }));
+  if ($('#addAddr')) $('#addAddr').addEventListener('click', () => addressSheet({}, (id) => { S.addrId = id; cartView(); }));
   $$('[data-place]').forEach((b) => b.addEventListener('click', placeOrder));
   $('#clearB').addEventListener('click', () => { if (confirm('Remove everything from the basket?')) { S.cart = {}; saveCart(); cartView(); } });
   drawBars();
@@ -695,8 +807,10 @@ async function placeOrder() {
     return;
   }
   if (!f.name.value.trim()) { fail('Please enter your name.'); return; }
+  if (S.mode === 'delivery' && (S.addresses || []).length && !S.addrId) { toast('Please choose the delivery address'); return; }
   const lines = Object.entries(S.cart).map(([id, q]) => ({ id: Number(id), qty: String(q) }));
-  const body = { mode: S.mode, slot: S.slot, name: f.name.value, address: f.address ? f.address.value : '', notes: f.notes.value, pay: f.pay.value, website: f.website.value, lines };
+  const body = { mode: S.mode, slot: S.slot, name: f.name.value, address: f.address ? f.address.value : '', address_id: S.mode === 'delivery' ? S.addrId || 0 : 0,
+    notes: f.notes.value, pay: S.pay, website: f.website.value, lines };
   const btns = $$('[data-place]');
   btns.forEach((b) => { b.disabled = true; b.textContent = 'Placing order…'; });
   try {
@@ -704,7 +818,9 @@ async function placeOrder() {
     const d = await r.json();
     if (r.status === 401) { S.me = null; S.after = '#cart'; location.hash = '#login'; return; }
     if (!d.ok) throw new Error(d.error);
-    if (body.address) S.me.address = body.address;
+    if (body.address && !body.address_id) {       // the first address typed here is kept for next time
+      try { S.addresses = (await post('/account/addresses', { address: body.address, make_default: true })).addresses; } catch (_) { /* kept on the order anyway */ }
+    }
     const mine = LS.get('mpc_orders', []);
     mine.unshift({ n: d.number, t: d.token, at: new Date().toISOString() });
     LS.set('mpc_orders', mine.slice(0, 15));
@@ -716,40 +832,76 @@ async function placeOrder() {
   }
 }
 
-// ------------------------------------------------------------------ my orders and tracking
+// ------------------------------------------------------------------ your orders and tracking
 const OPEN = ['new', 'accepted', 'ready', 'out'];
 const ORDER_ART = { new: 'package', accepted: 'shopping-bags', ready: 'shopping-bags', out: 'motor-scooter', done: 'party-popper', cancelled: 'package' };
-const orderRow = (o) => `<a class="box order-row" href="#o=${o.token}"><img src="${FE(ORDER_ART[o.status] || 'package')}" alt="">
-  <span class="or-t"><b>${esc(o.number)}</b> <span class="pill ${o.status === 'cancelled' ? 'red' : o.status === 'done' ? 'grey' : ''}">${esc(o.status === 'done' ? 'Completed' : o.status === 'cancelled' ? 'Cancelled' : 'In progress')}</span>
-  <span class="or-s">${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'} · ${esc(o.slot_label)}</span></span><span class="or-a">${rs(paise(o.bill_total || o.est_total))}</span></a>`;
+const statusPill = (st) => `<span class="pill ${st === 'cancelled' ? 'red' : st === 'done' ? 'grey' : ''}">${st === 'done' ? 'Delivered / collected' : st === 'cancelled' ? 'Cancelled' : 'In progress'}</span>`;
+const orderCard = (o) => `<div class="box ocard"><a class="oc-top" href="#o=${o.token}"><img src="${FE(ORDER_ART[o.status] || 'package')}" alt="">
+    <span class="oc-t"><b>Order ${esc(o.number)}</b>${statusPill(o.status)}<span class="or-s">${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'} · ${esc(o.slot_label)}</span></span>
+    <span class="oc-a">${rs(paise(o.bill_total || o.est_total))}${ico('right')}</span></a>
+  ${o.items && o.items.length ? `<div class="oc-items">${o.items.map((l) => `<span class="ce">${pic(l)}</span>`).join('')}${o.count > o.items.length ? `<span class="oc-more">+${o.count - o.items.length}</span>` : ''}</div>` : ''}
+  ${o.token ? `<div class="oc-btns"><a class="btn-o sm" href="#o=${o.token}">Details</a><button class="btn-g sm" data-reorder="${o.token}">${ico('undo')}Order again</button></div>` : ''}</div>`;
+async function reorder(token) {
+  const { order: o } = await get(`/track/${token}`);
+  const ids = o.lines.map((l) => l.id).filter(Boolean);
+  if (!ids.length) { toast('These items are not available now'); return; }
+  const { items } = await get(`/items?ids=${ids.join(',')}`);
+  remember(items);
+  let added = 0;
+  for (const l of o.lines) {
+    const it = S.items.get(l.id);
+    if (!it || !it.in_stock) continue;
+    S.cart[it.id] = Math.min(Number(l.ordered || l.qty) || step(it), Number(it.available));
+    added += 1;
+  }
+  saveCart();
+  toast(added ? `${added} item${added === 1 ? '' : 's'} added to the basket` : 'These items are not available now');
+  if (added) location.hash = '#cart';
+}
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-reorder]'); if (b) { e.preventDefault(); reorder(b.dataset.reorder).catch((x) => toast(x.message)); } });
+
 async function ordersView() {
   S.page = 'orders';
-  view().innerHTML = `${appbar('My Orders')}<div class="page narrow" id="olist"><div class="loading">Loading…</div></div>`;
+  view().innerHTML = `${appbar('Your Orders')}<div class="page narrow" id="olist"><div class="loading">Loading…</div></div>`;
   drawBars();
   let orders;
   if (S.me) orders = (await get('/account/orders')).orders;
   else {
     const mine = LS.get('mpc_orders', []);
-    orders = (await Promise.all(mine.map((m) => get(`/track/${m.t}`).then((r) => ({ ...r.order, token: m.t })).catch(() => null)))).filter(Boolean);
+    orders = (await Promise.all(mine.map((m) => get(`/track/${m.t}`).then((r) => ({ ...r.order, token: m.t, items: r.order.lines.slice(0, 5), count: r.order.lines.length }))
+      .catch(() => null)))).filter(Boolean);
   }
   if (S.page !== 'orders') return;
   S.active = orders.filter((o) => OPEN.includes(o.status)).length;
   drawBars();
-  $('#olist').innerHTML = orders.map(orderRow).join('') || emptyState('package', 'No orders yet', 'Your orders and their status show here.', '<a class="btn-g" href="#" style="display:inline-flex;max-width:260px">Start shopping</a>')
-    + (S.me ? '' : '<p class="small mut" style="text-align:center">Log in to see orders placed on other phones. <a class="okc" href="#login">Log in</a></p>');
+  $('#olist').innerHTML = orders.map(orderCard).join('') || emptyState('package', 'No orders yet', 'Your orders and their status show here.', '<a class="btn-g" href="#" style="display:inline-flex;max-width:260px">Start shopping</a>');
+  if (!S.me) $('#olist').insertAdjacentHTML('beforeend', '<p class="small mut" style="text-align:center">Log in to see orders placed on other phones. <a class="okc" href="#login">Log in</a></p>');
 }
 
 let trackTimer;
 async function trackView(token) {
   S.page = 'track';
   const { order: o } = await get(`/track/${token}`);
+  const s = S.info.shop;
   const steps = ['new', 'accepted', o.mode === 'pickup' ? 'ready' : 'out', 'done'];
   const names = { new: 'Order received', accepted: 'Packing your order', ready: 'Ready to collect', out: 'On the way to you', done: 'Completed' };
   const at = steps.indexOf(o.status);
+  const amount = paise(o.bill_total || o.est_total);
+  const upi = s.upi_id ? `upi://pay?${new URLSearchParams({ pa: s.upi_id, pn: s.name, am: (amount / 100).toFixed(2), cu: 'INR', tn: `Order ${o.number}` })}` : '';
+  const payBox = o.pay_pref === 'upi' && o.status !== 'cancelled' ? `<div class="box paybox"><h3>${ico('qr')} Pay ${rs(amount)} by UPI</h3>
+      ${S.info.upi_qr ? `<img class="qr" src="${esc(S.info.upi_qr)}" alt="Shop UPI QR code">` : ''}
+      ${s.upi_id ? `<div class="upi-id">UPI ID: <b>${esc(s.upi_id)}</b> <button class="link" id="copyUpi" type="button">${ico('copy')}Copy</button></div>` : ''}
+      ${upi ? `<a class="btn-g wide" href="${esc(upi)}">Pay in a UPI app</a>` : ''}
+      ${!S.info.upi_qr && !s.upi_id ? '<p class="small mut">Please pay the shop by UPI when the order arrives.</p>' : ''}
+      ${o.pay_ref ? `<p class="okc"><b>Payment number received: ${esc(o.pay_ref)}</b>. The shop checks it before packing.</p>`
+    : `<form id="refF" class="field"><label>After paying, type the UPI transaction number (UTR) from your app</label>
+        <div style="display:flex;gap:8px"><input name="ref" inputmode="text" placeholder="e.g. 431256789012" required><button class="btn-g sm">Send</button></div></form>`}
+      <p class="small mut">Weighed items are billed at the exact weight; the shop settles any small difference.</p></div>` : '';
   view().innerHTML = `${appbar(`Order ${o.number}`)}<div class="page narrow">
     <div class="status-card ${o.status === 'cancelled' ? 'cancel' : ''}"><img src="${FE(ORDER_ART[o.status] || 'package')}" alt="">
       <div><div class="small">${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'} · ${esc(o.slot_label)}</div><div class="st">${esc(o.status_label)}</div>
       ${o.status === 'cancelled' && o.note ? `<div class="small">Reason: ${esc(o.note)}</div>` : ''}</div></div>
+    ${payBox}
     ${o.status !== 'cancelled' ? `<div class="box"><ol class="steps">${steps.map((st, i) => `<li class="${i <= at ? 'done' : ''}">${names[st]}</li>`).join('')}</ol></div>` : ''}
     ${o.lines.some((l) => l.note) ? '<div class="notice">Some items were not available. They are not charged, and anything already paid for them is refunded.</div>' : ''}
     <div class="box"><h3>Items</h3>${o.lines.map((l) => `<div class="cl" ${l.note && !Number(l.qty) ? 'style="opacity:.55"' : ''}><span class="ce">${pic({ ...l })}</span>
@@ -757,35 +909,26 @@ async function trackView(token) {
       ${l.note ? `<span class="bad">${esc(l.note)}${l.ordered ? ` (you ordered ${esc(l.ordered)})` : ''}</span>` : ''}</div>
       <b>${rs(Math.round(paise(l.price) * Number(l.qty)))}</b></div>`).join('')}
       ${Number(o.delivery_charge) ? `<div class="bill-row"><span>Delivery charge</span><span>${rs(paise(o.delivery_charge))}</span></div>` : ''}
-      <div class="bill-row total"><span>${o.bill_no ? `Bill ${esc(o.bill_no)}` : 'Approx. total'}</span><span>${rs(paise(o.bill_total || o.est_total))}</span></div></div>
-    <div class="box small">Questions? ${o.shop.phone ? `Call <a href="tel:${esc(o.shop.phone)}" class="okc"><b>${esc(o.shop.phone)}</b></a>` : 'Call the shop'}.
-      ${o.shop.upi_id ? `<br>UPI: <b>${esc(o.shop.upi_id)}</b>` : ''}</div>
-    <button class="btn-g wide" id="again">${ico('undo')}Order these items again</button></div>`;
+      <div class="bill-row total"><span>${o.bill_no ? `Bill ${esc(o.bill_no)}` : 'Approx. total'}</span><span>${rs(amount)}</span></div>
+      ${o.address ? `<p class="small mut">${ico('pin')} ${esc(o.address)}</p>` : ''}</div>
+    <div class="box small">Questions? ${o.shop.phone ? `Call <a href="tel:${esc(o.shop.phone)}" class="okc"><b>${esc(o.shop.phone)}</b></a>` : 'Call the shop'} or see <a class="okc" href="#help">Help & support</a>.</div>
+    <button class="btn-g wide" data-reorder="${esc(token)}">${ico('undo')}Order these items again</button></div>`;
   drawBars();
-  $('#again').addEventListener('click', async () => {
-    const ids = o.lines.map((l) => l.id).filter(Boolean);
-    if (!ids.length) { location.hash = '#'; return; }
-    const { items } = await get(`/items?ids=${ids.join(',')}`);
-    remember(items);
-    let added = 0;
-    for (const l of o.lines) {
-      const it = S.items.get(l.id);
-      if (!it || !it.in_stock) continue;
-      const want = Number(l.ordered || l.qty) || step(it);
-      S.cart[it.id] = Math.min(want, Number(it.available));
-      added += 1;
-    }
-    saveCart();
-    toast(added ? `${added} item${added === 1 ? '' : 's'} added to the basket` : 'These items are not available now');
-    if (added) location.hash = '#cart';
-  });
+  if ($('#copyUpi')) $('#copyUpi').addEventListener('click', async () => { try { await navigator.clipboard.writeText(s.upi_id); toast('UPI ID copied'); } catch (_) { /* ignore */ } });
+  if ($('#refF')) {
+    $('#refF').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try { await post(`/track/${token}/payref`, { ref: e.target.ref.value }); toast('Thank you! The shop will check the payment.'); trackView(token); } catch (ex) { toast(ex.message); }
+    });
+  }
   clearTimeout(trackTimer);
-  if (OPEN.includes(o.status)) trackTimer = setTimeout(() => { if (location.hash === `#o=${token}`) trackView(token).catch(() => {}); }, 20000);
+  if (OPEN.includes(o.status)) trackTimer = setTimeout(() => { if (location.hash === `#o=${token}` && !(document.activeElement && document.activeElement.name === 'ref')) trackView(token).catch(() => {}); }, 25000);
 }
 
-// ------------------------------------------------------------------ account: log in, sign up (SMS code), forgot password, profile
+// ------------------------------------------------------------------ account: log in, sign up (SMS code), forgot password
 function authView(kind) {
   S.page = 'auth';
+  const ref = LS.get('mpc_ref', '');
   const tabs = `<div class="auth-tabs"><a href="#login" class="${kind === 'login' ? 'on' : ''}">Log in</a><a href="#signup" class="${kind === 'signup' ? 'on' : ''}">Sign up</a></div>`;
   const forms = {
     login: `<form id="af"><div class="field"><label>Mobile number</label><input name="phone" inputmode="tel" autocomplete="tel" required placeholder="10-digit mobile number"></div>
@@ -795,6 +938,7 @@ function authView(kind) {
     signup: `<form id="af"><div class="field"><label>Your name</label><input name="name" autocomplete="name" required></div>
       <div class="field"><label>Mobile number</label><input name="phone" inputmode="tel" autocomplete="tel" required placeholder="10-digit mobile number"></div>
       <div class="field"><label>Create a password (at least 6 letters or numbers)</label><input name="password" type="password" autocomplete="new-password" required minlength="6"></div>
+      <div class="field"><label>Referral code from a friend (optional)</label><input name="ref" value="${esc(ref)}" maxlength="12" autocapitalize="characters"></div>
       <label class="show"><input type="checkbox" id="showpw"> Show password</label>
       ${S.sms ? `<div class="field" id="otpBox" hidden><label>6-digit code sent by SMS</label><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
         <button type="button" class="link" id="resend">Send the code again</button></div>` : ''}
@@ -817,7 +961,7 @@ function authView(kind) {
   const err = (m) => { $('#aerr').innerHTML = m ? `<div class="err">${esc(m)}</div>` : ''; };
   if ($('#showpw')) $('#showpw').addEventListener('change', (e) => { $$('[type=password],[data-pw]', f).forEach((i) => { i.dataset.pw = 1; i.type = e.target.checked ? 'text' : 'password'; }); });
   const done = async (me, msg) => {
-    S.me = me; toast(msg);
+    S.me = me; S.addresses = null; toast(msg);
     const to = S.after || '#'; S.after = '';
     location.hash = to;
     loadActive();
@@ -838,7 +982,8 @@ function authView(kind) {
         await done(r.me, `Welcome, ${r.me.name}!`);
       } else if (kind === 'signup') {
         if (S.sms && !codeSent) { await sendCode('signup'); btn.textContent = 'Create account'; return; }
-        const r = await post('/account/signup', { name: f.name.value, phone: f.phone.value, password: f.password.value, code: f.code ? f.code.value : '' });
+        const r = await post('/account/signup', { name: f.name.value, phone: f.phone.value, password: f.password.value, code: f.code ? f.code.value : '', ref: f.ref.value });
+        localStorage.removeItem('mpc_ref');
         await done(r.me, 'Account created');
       } else {
         if (!codeSent) { await sendCode('reset'); $('#pwBox').hidden = false; btn.textContent = 'Set new password'; return; }
@@ -850,6 +995,7 @@ function authView(kind) {
   setTimeout(() => { const first = $('input', f); if (first && window.innerWidth > 760) first.focus(); }, 50);
 }
 
+// ------------------------------------------------------------------ profile, help, referral, address book
 function accountView() {
   S.page = 'account';
   const m = S.me;
@@ -858,40 +1004,127 @@ function accountView() {
   const row = (attr, icon, title, sub = '', cls = '') => `<${attr.startsWith('href') ? 'a' : 'button type="button"'} ${attr} class="${cls}"><span class="mi">${ico(icon)}</span>
     <span class="mt">${title}${sub ? `<small>${sub}</small>` : ''}</span>${cls ? '' : ico('right', 'chev')}</${attr.startsWith('href') ? 'a' : 'button'}>`;
   view().innerHTML = `${appbar('Profile')}<div class="page narrow">
-    <div class="box prof">${avatar()}<div><h2>${esc(m.name)}${m.verified ? VF : ''}</h2><div class="mut">${esc(m.phone)}${m.verified || !S.sms ? '' : ' · <span class="pill grey">not verified yet</span>'}</div></div></div>
+    <div class="box prof">${avatar()}<div class="pf-t"><h2>${esc(m.name)}${m.verified ? VF : ''}</h2><div class="mut">${esc(m.phone)}</div>${m.email ? `<div class="mut small">${esc(m.email)}</div>` : ''}</div>
+      <button class="pf-edit" data-edit type="button">${ico('edit')}Edit</button></div>
+    <div class="quick"><a href="#orders"><span>${ico('activity')}</span>Your orders</a><a href="#help"><span>${ico('chat')}</span>Help & support</a>
+      <a href="#saved"><span>${ico('heart')}</span>Your wishlist</a></div>
     ${s.loyalty_enabled === '1' ? `<div class="box pts"><img src="${FE('coin')}" alt=""><div><div class="small mut">Loyalty points</div><div class="pts-n">${Number(m.points || 0)}</div>
       <div class="small mut">Earn ${per} point${per === 1 ? '' : 's'} for every ₹100, in the shop and online. 1 point = ${rs(Math.round(Number(s.loyalty_point_value) * 100))} off a later bill${
         Number(s.loyalty_min_redeem) ? ` (from ${Number(s.loyalty_min_redeem)} points)` : ''}. Ask the cashier to use them.</div></div></div>` : ''}
+    <h3 class="menu-h">Your information</h3>
     <div class="box menu">
-      ${row('href="#orders"', 'activity', 'My orders', 'Track orders and order again')}
-      ${row('href="#saved"', 'heart', 'Saved items', `${S.fav.size} saved`)}
-      ${row('data-edit', 'pin', 'My details', m.address ? esc(m.address) : 'Name and delivery address')}
+      ${row('href="#addresses"', 'pin', 'Address book', m.address ? esc(m.address) : 'Add your delivery addresses')}
+      ${row('href="#refer"', 'gift', 'Refer a friend', s.loyalty_enabled === '1' && Number(s.referral_points) ? `Get ${Number(s.referral_points)} points when your friend shops` : 'Share the shop with friends')}
+      ${row('data-edit', 'user', 'Edit profile', 'Name, mobile number and email')}
       ${row('data-pw', 'lock', 'Change password')}
-      ${s.phone ? row(`href="tel:${esc(s.phone)}"`, 'phone', 'Call the shop', esc(s.phone)) : ''}
+      ${row('href="#help"', 'help', 'Help & support', 'Call or WhatsApp the shop')}
       ${row('data-out', 'logout', 'Log out', '', 'red')}
     </div></div>`;
   drawBars();
-  const save = async (body, el) => {
-    try {
-      const r = await post('/account/update', { name: m.name, address: m.address, password: '', new_password: '', ...body });
-      S.me = r.me; closeSheet(); toast('Saved'); accountView();
-    } catch (ex) { $('.perr', el).innerHTML = `<div class="err">${esc(ex.message)}</div>`; }
-  };
-  $('[data-edit]').addEventListener('click', () => {
-    const c = sheet(`<h2>My details</h2><form><div class="field"><label>Name</label><input name="name" value="${esc(m.name)}" required></div>
-      <div class="field"><label>Delivery address with landmark</label><textarea name="address" rows="3">${esc(m.address)}</textarea></div>
-      <div class="perr"></div><button class="btn-g wide" style="margin-top:16px">Save</button></form>`);
-    $('form', c).addEventListener('submit', (e) => { e.preventDefault(); save({ name: e.target.name.value, address: e.target.address.value }, c); });
-  });
+  $$('[data-edit]').forEach((b) => b.addEventListener('click', editProfile));
   $('[data-pw]').addEventListener('click', () => {
     const c = sheet(`<h2>Change password</h2><form><div class="field"><label>Current password</label><input name="password" type="password" autocomplete="current-password" required></div>
       <div class="field"><label>New password (at least 6 letters or numbers)</label><input name="new_password" type="password" autocomplete="new-password" minlength="6" required></div>
       <div class="perr"></div><button class="btn-g wide" style="margin-top:16px">Change password</button></form>`);
-    $('form', c).addEventListener('submit', (e) => { e.preventDefault(); save({ password: e.target.password.value, new_password: e.target.new_password.value }, c); });
+    $('form', c).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try { const r = await post('/account/update', { name: m.name, password: e.target.password.value, new_password: e.target.new_password.value }); S.me = r.me; closeSheet(); toast('Password changed'); } catch (ex) { $('.perr', c).innerHTML = `<div class="err">${esc(ex.message)}</div>`; }
+    });
   });
   $('[data-out]').addEventListener('click', async () => {
-    await post('/account/logout'); S.me = null; S.active = 0; toast('Logged out'); location.hash = '#';
+    await post('/account/logout'); S.me = null; S.active = 0; S.addresses = null; toast('Logged out'); location.hash = '#';
   });
+}
+function editProfile() {
+  const m = S.me;
+  const c = sheet(`<h2>Edit profile</h2><form>
+    <div class="field"><label>Name</label><input name="name" value="${esc(m.name)}" required autocomplete="name"></div>
+    <div class="field"><label>Mobile number</label><input name="phone" value="${esc(m.phone)}" inputmode="tel" autocomplete="tel"></div>
+    <div class="field" id="pwRow" hidden><label>Your password (needed to change the number)</label><input name="password" type="password" autocomplete="current-password"></div>
+    ${S.sms ? '<div class="field" id="codeRow" hidden><label>6-digit code sent to the new number</label><div style="display:flex;gap:8px"><input name="code" inputmode="numeric" maxlength="6"><button type="button" class="btn-o sm" id="sendC">Send code</button></div></div>' : ''}
+    <div class="field"><label>Email (optional, for bills and offers)</label><input name="email" type="email" value="${esc(m.email || '')}" autocomplete="email"></div>
+    <div class="perr"></div><button class="btn-g wide" style="margin-top:16px">Save</button></form>`);
+  const f = $('form', c);
+  f.phone.addEventListener('input', () => {
+    const changed = f.phone.value.replace(/\D/g, '').slice(-10) !== m.phone;
+    $('#pwRow', c).hidden = !changed;
+    if ($('#codeRow', c)) $('#codeRow', c).hidden = !changed;
+  });
+  if ($('#sendC', c)) $('#sendC', c).addEventListener('click', async () => { try { await post('/account/otp', { phone: f.phone.value, purpose: 'change' }); toast('Code sent by SMS'); } catch (ex) { toast(ex.message); } });
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const r = await post('/account/update', { name: f.name.value, email: f.email.value, phone: f.phone.value, password: f.password.value, code: f.code ? f.code.value : '' });
+      S.me = r.me; closeSheet(); toast('Profile saved'); accountView();
+    } catch (ex) { $('.perr', c).innerHTML = `<div class="err">${esc(ex.message)}</div>`; }
+  });
+}
+
+function helpView() {
+  S.page = 'help';
+  const s = S.info.shop;
+  const wa = (s.support_whatsapp || s.phone || '').replace(/\D/g, '');
+  const waNum = wa.length === 10 ? `91${wa}` : wa;
+  const faq = [
+    ['When will my order come?', `You choose the time when you order. Slots run from ${s.online_open || '8:00'} to ${s.online_close || '21:00'}. The shop sends a WhatsApp message when your order is packed and when it leaves.`],
+    ['What does delivery cost?', paise(s.online_delivery_charge) ? `${rs(paise(s.online_delivery_charge))} per order${paise(s.online_free_delivery_above) ? `, FREE above ${rs(paise(s.online_free_delivery_above))}` : ''}. Minimum order for delivery: ${rs(paise(s.online_min_order))}.` : 'Delivery is free.'],
+    ['How do I pay?', `Pay on delivery (cash or UPI), or pay online by UPI after placing the order${s.upi_id ? ` (UPI ID ${s.upi_id})` : ''}.`],
+    ['Fruits and vegetables are sold by weight. What will I pay?', 'They are weighed when your order is packed. The bill shows the exact weight and price; it can be a little more or less than the basket.'],
+    ['Something is missing or not fresh', 'Call or WhatsApp the shop. Items not available are not charged; anything already paid for them is refunded.'],
+  ];
+  view().innerHTML = `${appbar('Help & Support')}<div class="page narrow">
+    <div class="help-cards">
+      ${s.phone ? `<a class="box hc" href="tel:${esc(s.phone)}"><span class="mi">${ico('phone')}</span><b>Call the shop</b><span>${esc(s.phone)}</span></a>` : ''}
+      ${waNum ? `<a class="box hc wa" target="_blank" rel="noopener" href="https://wa.me/${esc(waNum)}?text=${encodeURIComponent(`Hello ${s.name}, I need help with my order.`)}"><span class="mi">${ico('chat')}</span><b>WhatsApp us</b><span>${esc(s.support_whatsapp || s.phone)}</span></a>` : ''}
+    </div>
+    <div class="box"><h3>${ico('store')} ${esc(s.name)}</h3>${s.address ? `<p class="mut" style="margin:0 0 6px">${esc(s.address)}</p>` : ''}
+      <p class="mut small" style="margin:0">Online orders: ${esc(s.online_open || '')} to ${esc(s.online_close || '')}${s.online_area ? ` · Delivery ${esc(s.online_area)}` : ''}</p></div>
+    <h3 class="menu-h">Common questions</h3>
+    <div class="box faq">${faq.map(([q, a]) => `<details><summary>${esc(q)}${ico('down')}</summary><p>${esc(a)}</p></details>`).join('')}</div></div>`;
+  drawBars();
+}
+
+async function referView() {
+  S.page = 'refer';
+  const s = S.info.shop;
+  view().innerHTML = `${appbar('Refer a Friend')}<div class="page narrow"><div class="loading">Loading…</div></div>`;
+  drawBars();
+  const r = await get('/account/refer');
+  if (S.page !== 'refer') return;
+  const link = `${location.origin}/shop/?ref=${r.code}#signup`;
+  const pts = s.loyalty_enabled === '1' ? Number(s.referral_points) || 0 : 0;
+  const msg = `I order fruits, vegetables and groceries from ${s.name}. Join with my code ${r.code}: ${link}`;
+  view().innerHTML = `${appbar('Refer a Friend')}<div class="page narrow">
+    <div class="box refer"><img src="${FE('wrapped-gift')}" alt=""><h2>${pts ? `Get ${pts} points for every friend` : 'Share the shop with friends'}</h2>
+      <p class="mut">${pts ? `Your friend signs up with your code. When they make their first purchase, ${pts} loyalty points are added to your account.` : 'Your friend signs up with your code and starts ordering.'}</p>
+      <div class="code-box"><span>Your code</span><b>${esc(r.code)}</b><button class="link" id="copyC" type="button">${ico('copy')}Copy</button></div>
+      <a class="btn-g wide" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg)}">${ico('chat')}Share on WhatsApp</a>
+      <button class="btn-o wide" id="shareL" type="button" style="margin-top:10px">${ico('share')}Share link</button>
+      <div class="ref-stats"><div><b>${r.joined}</b><span>Friends joined</span></div><div><b>${r.bought}</b><span>Made a purchase</span></div></div></div></div>`;
+  $('#copyC').addEventListener('click', async () => { try { await navigator.clipboard.writeText(r.code); toast('Code copied'); } catch (_) { /* ignore */ } });
+  $('#shareL').addEventListener('click', async () => {
+    try { if (navigator.share) await navigator.share({ title: s.name, text: msg, url: link }); else { await navigator.clipboard.writeText(msg); toast('Message copied'); } } catch (_) { /* closed */ }
+  });
+}
+
+async function addressesView() {
+  S.page = 'addresses';
+  view().innerHTML = `${appbar('Address Book')}<div class="page narrow" id="abox"><div class="loading">Loading…</div></div>`;
+  drawBars();
+  const list = await loadAddresses(true);
+  if (S.page !== 'addresses') return;
+  $('#abox').innerHTML = `${list.map((a) => `<div class="box adr"><span class="ai">${ico(addrIcon(a.label))}</span><div class="at"><b>${esc(a.label)}${a.is_default ? ' <span class="pill">Default</span>' : ''}</b>
+      <span>${esc(addrLine(a))}</span><div class="adr-btns">${a.is_default ? '' : `<button class="link" data-def="${a.id}" type="button">Make default</button>`}
+      <button class="link" data-ed="${a.id}" type="button">${ico('edit')}Edit</button><button class="link bad" data-del="${a.id}" type="button">${ico('trash')}Delete</button></div></div></div>`).join('')
+    || emptyState('package', 'No saved addresses', 'Add your home or work address for faster checkout.')}
+    <button class="btn-g wide" id="newA" type="button">${ico('plus')}Add a new address</button>`;
+  $('#newA').addEventListener('click', () => addressSheet({}, () => addressesView()));
+  $$('[data-ed]').forEach((b) => b.addEventListener('click', () => addressSheet(list.find((a) => a.id === Number(b.dataset.ed)), () => addressesView())));
+  $$('[data-def]').forEach((b) => b.addEventListener('click', async () => { S.addresses = (await post(`/account/addresses/${b.dataset.def}/default`)).addresses; S.me = (await get('/account')).me; toast('Default address changed'); addressesView(); }));
+  $$('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Delete this address?')) return;
+    S.addresses = (await post(`/account/addresses/${b.dataset.del}/delete`)).addresses; S.me = (await get('/account')).me; toast('Address deleted'); addressesView();
+  }));
 }
 
 // ------------------------------------------------------------------ scan a pack's barcode with the phone camera
@@ -925,25 +1158,35 @@ async function loadActive() {
   } catch (_) { /* later */ }
   drawBars();
 }
+const NEEDS_LOGIN = ['#refer', '#addresses'];
 async function route() {
   const h = decodeURIComponent(location.hash);
   if (S.hist.length > 1 && S.hist[S.hist.length - 2] === location.hash) S.hist.pop();
   else if (S.hist[S.hist.length - 1] !== location.hash) S.hist.push(location.hash);
   if (!$('#sheet').hidden) closeSheet();
-  ++S.tok;
+  ++S.tok; ++S.rtok;
   clearInterval(S.bnrTimer);
+  clearInterval(S.hintTimer);
   S.detBar = null;
   window.scrollTo(0, 0);
   if (!h.startsWith('#q=') && document.activeElement !== $('#pcq')) $('#pcq').value = '';
   try {
+    if (NEEDS_LOGIN.includes(h) && !S.me) { needLogin(); return; }
     if (h.startsWith('#o=')) await trackView(h.slice(3));
     else if (h === '#orders') await ordersView();
     else if (h === '#account') (S.me ? accountView() : authView('login'));
     else if (h === '#login' || h === '#signup' || h === '#forgot') (S.me && h !== '#forgot' ? accountView() : authView(h.slice(1)));
-    else if (h === '#cart') cartView();
+    else if (h === '#help') helpView();
+    else if (h === '#refer') await referView();
+    else if (h === '#addresses') await addressesView();
+    else if (h === '#cart') await cartView();
     else if (h === '#cats') catsView();
     else if (h === '#offers') await listView({ only: 'offers' });
     else if (h === '#saved') await listView({ saved: true });
+    else if (h === '#new') await listView({ fresh: true });
+    else if (h === '#trending') await listView({ trending: true });
+    else if (h.startsWith('#store=')) await listView({ store: Number(h.slice(7)) || 0 });
+    else if (h.startsWith('#sec=')) await listView({ sec: h.slice(5) });
     else if (h.startsWith('#cat=')) await listView({ cat: h.slice(5) });
     else if (h.startsWith('#p=')) await detailView(Number(h.slice(3)));
     else if (h === '#search') await searchView('');
@@ -951,15 +1194,18 @@ async function route() {
     else if (h.startsWith('#code=')) await searchView('', h.slice(6));
     else await homeView();
   } catch (e) {
+    if (e.status === 401) { S.me = null; needLogin(); return; }
     view().innerHTML = `${appbar('')}<div class="page">${emptyState('package', 'Something went wrong', e.message, '<a class="btn-o" href="#">Go to home</a>')}</div>`;
   }
   drawBars();
 }
 
 (async () => {
+  const ref = new URLSearchParams(location.search).get('ref');
+  if (ref && /^[A-Za-z0-9]{4,12}$/.test(ref)) LS.set('mpc_ref', ref.toUpperCase());
   try {
     S.info = await get('/info');
-  } catch (e) { view().innerHTML = `<div class="page">${emptyState('package', 'Could not open the shop', e.message, '<button class="btn-o" onclick="location.reload()">Try again</button>')}</div>`; return; }
+  } catch (e) { view().innerHTML = `<div class="page">${emptyState('package', 'Could not open the shop', e.message, '<a class="btn-o" href="/shop/">Try again</a>')}</div>`; return; }
   const s = S.info.shop;
   document.title = `${s.name} | Order online`;
   $('#pcName').textContent = s.name;
