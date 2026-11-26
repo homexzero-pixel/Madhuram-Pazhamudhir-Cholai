@@ -380,3 +380,49 @@ test('loyalty points: off by default, earned per ₹100, spent as payment, taken
   assert.equal(Number((await owner.get(`/api/customers/${cid}`)).data.customer.points), 52);
   await owner.post('/api/settings', { loyalty_enabled: '0' });
 });
+
+test('online shop: offer prices, sorting, paging, banner photos and buy again', async () => {
+  await owner.post('/api/settings', { online_enabled: '1' });
+  const t = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const a = (await owner.post('/api/products', { name: 'Shop test mango', unit: 'kg', price: '120', opening_qty: '30', cat: 'Shop fruits' })).data.item;
+  const b = (await owner.post('/api/products', { name: 'Shop test guava', unit: 'kg', price: '60', opening_qty: '30', cat: 'Shop fruits' })).data.item;
+  const c = (await owner.post('/api/products', { name: 'Shop test papaya', unit: 'kg', price: '45', opening_qty: '30', cat: 'Shop fruits' })).data.item;
+  await owner.post('/api/offers', { item_id: a.id, offer_price: '99', offer_from: t, offer_to: t });
+  // the offer price is shown against the normal price, with its last day
+  const offers = (await customer.get('/api/shop/items?only=offers&sort=offers')).data.items;
+  const m = offers.find((x) => x.id === a.id);
+  assert.equal(m.price, '99.00'); assert.equal(m.regular, '120.00'); assert.equal(m.offer_to, t);
+  assert.ok(!offers.some((x) => x.id === b.id));
+  const info = (await customer.get('/api/shop/info')).data;
+  assert.ok(info.offers.count >= 1 && info.offers.pct >= 17, JSON.stringify(info.offers));
+  assert.deepEqual(info.banners, []);
+  const cat = info.cats.find((x) => x.name === 'Shop fruits');
+  // sorting and "show more"
+  const asc = (await customer.get(`/api/shop/items?cat=${cat.id}&sort=price_asc`)).data.items.map((x) => x.id);
+  assert.deepEqual(asc, [c.id, b.id, a.id]);
+  assert.deepEqual((await customer.get(`/api/shop/items?cat=${cat.id}&sort=price_desc`)).data.items.map((x) => x.id), [a.id, b.id, c.id]);
+  const page2 = (await customer.get(`/api/shop/items?cat=${cat.id}&sort=price_asc&limit=2&offset=2`)).data.items;
+  assert.deepEqual(page2.map((x) => x.id), [a.id]);
+  // banner photos: only the owner uploads; bad entries are dropped before customers see them
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(300)]);
+  const upload = (who) => fetch(`${base}/api/shop-banners/image`, { method: 'POST', headers: { Origin: base, Cookie: who.cookie, 'Content-Type': 'image/jpeg' }, body: jpg });
+  assert.equal((await upload(cashier)).status, 403);
+  const up = await (await upload(owner)).json();
+  assert.match(up.name, /^b_[0-9a-f]{8}\.jpg$/);
+  await owner.post('/api/settings', { shop_banners: JSON.stringify([{ img: up.name, kicker: 'Pongal offers', title: '30% OFF', sub: 'Till Sunday', link: 'offers' },
+    { img: '../../etc/passwd', title: 'bad' }, { img: up.name, title: 'Second', link: 'javascript:alert(1)' }]) });
+  const bn = (await customer.get('/api/shop/info')).data.banners;
+  assert.equal(bn.length, 2);
+  assert.deepEqual(bn[0], { img: `/img/p/${up.name}`, kicker: 'Pongal offers', title: '30% OFF', sub: 'Till Sunday', link: 'offers' });
+  assert.equal(bn[1].link, '');
+  assert.equal((await fetch(base + bn[0].img)).status, 200);
+  // buy again: what this customer bought at the counter shows up in their online account
+  const shopper = new Browser();
+  assert.deepEqual((await shopper.get('/api/shop/account/again')).data.items, []);
+  const su = await shopper.post('/api/shop/account/signup', { name: 'Meena', phone: '9123456780', password: 'secret12' });
+  assert.equal(su.data.ok, true, JSON.stringify(su.data));
+  const bill = await cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 1', customer: { phone: '9123456780' }, lines: [{ id: b.id, qty: '2' }],
+    payments: [{ method: 'cash', amount: '120' }] });
+  assert.equal(bill.data.ok, true, JSON.stringify(bill.data));
+  assert.equal((await shopper.get('/api/shop/account/again')).data.items[0].id, b.id);
+});

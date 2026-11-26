@@ -21,8 +21,11 @@ async function held(ids) {
   return new Map(rows.map((r) => [r.item_id, milli(r.q)]));
 }
 
-// Products for the customers' shop. sort: popular (best sellers in stock first), offers (biggest saving on MRP), name.
-async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', limit = 150, exclude = '' }) {
+// Products for the customers' shop.
+// sort: popular (best sellers in stock first), offers (biggest saving), price_asc, price_desc, name.
+// only=offers: products on offer or below MRP. instock=1: only what is in stock.
+async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', limit = 150, exclude = '', only = '', instock = '', offset = 0 }) {
+  const P = PRICE_NOW(nowIST().slice(0, 10));
   const where = ['i.active=1', 'i.price IS NOT NULL', 'i.price > 0', `i.sku <> '${DELIVERY_SKU}'`];
   const args = [];
   code = String(code).trim().slice(0, 32);
@@ -33,28 +36,58 @@ async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', lim
   } else if (q) for (const w of q.split(/\s+/).slice(0, 5)) { where.push('(i.name LIKE ? OR i.name_ta LIKE ?)'); args.push(`%${w}%`, `%${w}%`); }
   if (cat) { where.push('i.category_id=?'); args.push(Number(cat) || 0); }
   if (Number(exclude)) { where.push('i.id <> ?'); args.push(Number(exclude)); }
-  if (sort === 'offers') where.push('i.mrp > i.price');
+  if (sort === 'offers' || only === 'offers') where.push(`(${P} < i.price OR i.mrp > ${P})`);
+  if (String(instock) === '1') where.push('i.on_hand > 0');
+  const saving = `GREATEST(1 - ${P} / i.price, IFNULL(1 - ${P} / NULLIF(i.mrp, 0), 0))`;
   const order = {
     popular: 'i.on_hand > 0 DESC, sold DESC, i.name',
-    offers: 'i.on_hand > 0 DESC, (i.mrp - i.price) / i.mrp DESC, i.name',
-  }[sort] || (q || code || cat ? 'i.on_hand > 0 DESC, sold DESC, i.name' : 'i.on_hand > 0 DESC, sold DESC, i.name');
-  const rows = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, ${PRICE_NOW(nowIST().slice(0, 10))} price, i.mrp, i.on_hand, i.category_id, c.name cat, i.image,
+    offers: `i.on_hand > 0 DESC, ${saving} DESC, i.name`,
+    price_asc: `${P} ASC, i.name`,
+    price_desc: `${P} DESC, i.name`,
+    name: 'i.name',
+  }[sort] || 'i.on_hand > 0 DESC, sold DESC, i.name';
+  const rows = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, ${P} price, i.price regular, i.offer_to, i.mrp, i.on_hand, i.category_id, c.name cat, i.image,
       (SELECT COUNT(*) FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE l.item_id=i.id AND x.business_date > DATE_SUB(CURDATE(), INTERVAL 30 DAY)) sold
     FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE ${where.join(' AND ')}
-    ORDER BY ${order} LIMIT ?`, [...args, Math.min(Math.max(Number(limit) || 150, 1), 150)]);
+    ORDER BY ${order} LIMIT ?, ?`, [...args, Math.min(Math.max(Math.trunc(Number(offset)) || 0, 0), 100000), Math.min(Math.max(Number(limit) || 150, 1), 150)]);
   const h = await held(rows.map((r) => r.id));
   return rows.map((r) => {
     const avail = Math.max(0, milli(r.on_hand) - (h.get(r.id) || 0));
+    const onOffer = Number(r.price) < Number(r.regular);
     return { id: r.id, name: r.name, name_ta: r.name_ta, unit: r.unit, price: r.price, mrp: r.mrp, cat: r.cat || '', cat_id: r.category_id,
+      regular: onOffer ? r.regular : null, offer_to: onOffer ? r.offer_to : null,
       available: qtyStr(avail), in_stock: avail > 0, popular: Number(r.sold) > 0, image: r.image ? `/img/p/${r.image}` : null };
   });
 }
 
-// Categories that have something to sell, the busiest first.
+// What this customer bought before (online orders and bills at the counter), most often first.
+async function buyAgain(customerId) {
+  const rows = await db.query(`SELECT item_id, COUNT(*) n FROM (
+      SELECT l.item_id FROM online_order_lines l JOIN online_orders o ON o.id=l.order_id WHERE o.customer_id=? AND o.status <> 'cancelled'
+      UNION ALL SELECT l.item_id FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE x.customer_id=?) t
+    GROUP BY item_id ORDER BY n DESC LIMIT 20`, [customerId, customerId]);
+  if (!rows.length) return [];
+  const rank = new Map(rows.map((r, i) => [r.item_id, i]));
+  const items = await catalogue({ ids: rows.map((r) => r.item_id).join(',') });
+  return items.sort((a, b) => rank.get(a.id) - rank.get(b.id));
+}
+
+// Categories that have something to sell: the ones bought most in the last 30 days first.
 async function categories() {
-  return db.query(`SELECT c.id, c.name, COUNT(*) items, SUM(i.on_hand > 0) in_stock FROM categories c JOIN items i ON i.category_id=c.id
+  return db.query(`SELECT c.id, c.name, COUNT(*) items, SUM(i.on_hand > 0) in_stock, COALESCE(MAX(s.n), 0) sold
+    FROM categories c JOIN items i ON i.category_id=c.id
+    LEFT JOIN (SELECT j.category_id, COUNT(*) n FROM sale_lines l JOIN sales x ON x.id=l.sale_id JOIN items j ON j.id=l.item_id
+      WHERE x.business_date > DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY j.category_id) s ON s.category_id=c.id
     WHERE i.active=1 AND i.price IS NOT NULL AND i.price > 0 AND i.sku <> '${DELIVERY_SKU}'
-    GROUP BY c.id, c.name ORDER BY in_stock DESC, items DESC, c.name`);
+    GROUP BY c.id, c.name ORDER BY sold DESC, in_stock DESC, items DESC, c.name`);
+}
+
+// Offers running today, for the shop's banner: how many, the biggest saving and the last day.
+async function offerSummary() {
+  const P = PRICE_NOW(nowIST().slice(0, 10));
+  const r = await db.one(`SELECT COUNT(*) n, MAX(ROUND((1 - ${P} / i.price) * 100)) pct, MAX(i.offer_to) till, SUM(i.offer_to IS NULL) open_ended
+    FROM items i WHERE i.active=1 AND i.price > 0 AND ${P} < i.price`);
+  return { count: Number(r.n), pct: Number(r.pct || 0), till: Number(r.open_ended) ? null : r.till };
 }
 
 // ------------------------------------------------------------------ time slots (India time, as 'YYYY-MM-DDTHH:MM')
@@ -177,7 +210,8 @@ async function order(where, args) {
     LEFT JOIN customers c ON c.id=o.customer_id WHERE ${where}`, args);
   if (!o) throw new UserError('Order not found.', 404);
   const cfg = await settings.load();
-  o.lines = (await db.query('SELECT * FROM online_order_lines WHERE order_id=? ORDER BY id', [o.id])).map((l) => ({ ...l, qty: qtyStr(milli(l.qty)) }));
+  o.lines = (await db.query(`SELECT l.*, i.image, c.name cat FROM online_order_lines l LEFT JOIN items i ON i.id=l.item_id
+    LEFT JOIN categories c ON c.id=i.category_id WHERE l.order_id=? ORDER BY l.id`, [o.id])).map((l) => ({ ...l, qty: qtyStr(milli(l.qty)) }));
   o.slot_label = slotLabel(o.slot, cfg);
   o.status_label = STATUS[o.status];
   o.est_total = rs(paise(o.est_items) + paise(o.delivery_charge));
@@ -188,7 +222,7 @@ const publicOrder = async (token) => {
   const o = await order('o.token=?', [token]);
   const cfg = await settings.load();
   return { number: o.number, name: o.name, mode: o.mode, status: o.status, status_label: CUSTOMER_STATUS[o.status], note: o.status_note,
-    slot_label: o.slot_label, address: o.address, lines: o.lines.map((l) => ({ name: l.name, name_ta: l.name_ta, unit: l.unit, qty: l.qty, price: l.price,
+    slot_label: o.slot_label, address: o.address, lines: o.lines.map((l) => ({ id: l.item_id, image: l.image ? `/img/p/${l.image}` : null, cat: l.cat || '', name: l.name, name_ta: l.name_ta, unit: l.unit, qty: l.qty, price: l.price,
       ordered: l.ordered_qty === null ? null : qtyStr(milli(l.ordered_qty)), note: l.note })),
     est_items: o.est_items, delivery_charge: o.delivery_charge, est_total: o.est_total, bill_no: o.bill_no, bill_total: o.bill_total,
     shop: { name: cfg.name, phone: cfg.phone, upi_id: cfg.upi_id } };
@@ -313,5 +347,5 @@ async function badge() {
   return { new: Number(r.n), last: last.m || 0 };
 }
 
-module.exports = { slotTime, customerOrders, changeLine, stats, CUSTOMER_STATUS, catalogue, categories, slots, slotLabel, placeOrder, publicOrder, order, staffList, setStatus, forCounter, statusMessage, badge,
+module.exports = { buyAgain, offerSummary, slotTime, customerOrders, changeLine, stats, CUSTOMER_STATUS, catalogue, categories, slots, slotLabel, placeOrder, publicOrder, order, staffList, setStatus, forCounter, statusMessage, badge,
   phone10, STATUS, OPEN };

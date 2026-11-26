@@ -303,3 +303,9 @@ kbd { border-radius: 3px; }
 .state { font-size: .72rem; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
 .state.running { background: #e6f4ea; color: #157a32; } .state.upcoming { background: #eef3fe; color: #1d4fd7; } .state.ended { background: #f2f4f7; color: #667085; }
 .held-lines { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+
+.sb-row { display: flex; gap: 14px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); }
+.sb-img { width: 168px; height: 84px; border-radius: 8px; background: #f2f4f7; display: grid; place-items: center; overflow: hidden; flex: none; }
+.sb-img img { width: 100%; height: 100%; object-fit: cover; }
+.sb-f { flex: 1; min-width: 0; }
+@media (max-width: 900px) { .sb-row { flex-direction: column; } .sb-img { width: 100%; height: 120px; } }

@@ -48,10 +48,20 @@ const DEFAULTS = {
   online_delivery_charge: '30',
   online_free_delivery_above: '500',
   online_area: '',
+  shop_banners: '[]',              // banner photos at the top of the online shop: [{img, kicker, title, sub, link}]
 };
 const SHOP_PUBLIC = ['name', 'name_ta', 'tagline', 'address', 'phone', 'upi_id', 'online_enabled', 'online_pickup', 'online_delivery', 'online_open',
   'online_close', 'online_min_order', 'online_delivery_charge', 'online_free_delivery_above', 'online_area',
   'loyalty_enabled', 'loyalty_points_per_100', 'loyalty_point_value', 'loyalty_min_redeem'];
+// banners the owner saved, checked again before the shop shows them
+function shopBanners(cfg) {
+  let list = [];
+  try { list = JSON.parse(cfg.shop_banners || '[]'); } catch (_) { list = []; }
+  if (!Array.isArray(list)) return [];
+  return list.filter((b) => b && /^b_[0-9a-f]{8}\.(jpg|png|webp)$/.test(b.img || '')).slice(0, 4).map((b) => ({
+    img: `/img/p/${b.img}`, kicker: String(b.kicker || '').slice(0, 40), title: String(b.title || '').slice(0, 40),
+    sub: String(b.sub || '').slice(0, 60), link: /^(offers|cat=\d+|)$/.test(b.link || '') ? b.link || '' : '' }));
+}
 const PUBLIC = Object.keys(DEFAULTS);       // safe to send to every logged-in screen
 
 let cache = null;
@@ -87,4 +97,4 @@ async function shopSettings() {
   return Object.fromEntries(SHOP_PUBLIC.map((k) => [k, s[k]]));
 }
 
-module.exports = { shopSettings, DEFAULTS, load, save, publicSettings, counters, reset: () => { cache = null; } };
+module.exports = { shopBanners, shopSettings, DEFAULTS, load, save, publicSettings, counters, reset: () => { cache = null; } };

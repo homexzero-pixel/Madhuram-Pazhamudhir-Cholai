@@ -115,7 +115,8 @@ r.get('/orders-poster.svg', need('orders'), wrap(async (req, res) => {
 // ------------------------------------------------------------------ online shop: customers (no login)
 r.get('/shop/info', wrap(async (req, res) => {
   const cfg = await settings.load();
-  ok(res, { shop: await settings.shopSettings(), cats: await shop.categories(), slots: shop.slots(cfg).map((d) => ({
+  ok(res, { shop: await settings.shopSettings(), cats: await shop.categories(), banners: settings.shopBanners(cfg), offers: await shop.offerSummary(),
+    slots: shop.slots(cfg).map((d) => ({
     date: d.date, label: new Date(`${d.date}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }),
     slots: d.slots.map((v) => ({ v, l: shop.slotTime(v, cfg) })) })) });
 }));
@@ -161,6 +162,10 @@ r.get('/shop/account/orders', wrap(async (req, res) => {
 r.post('/customers/:id/online-password', need('customers'), wrap(async (req, res) => {
   await cust.staffSetPassword(req.params.id, req.body.password, req.user); ok(res);
 }));
+r.get('/shop/account/again', wrap(async (req, res) => {
+  const c = await cust.current(req);
+  ok(res, { items: c ? await shop.buyAgain(c.id) : [] });
+}));
 r.get('/shop/track/:token', wrap(async (req, res) => ok(res, { order: await shop.publicOrder(req.params.token) })));
 
 // ------------------------------------------------------------------ offers, shop barcodes, expenses
@@ -186,6 +191,9 @@ r.post('/products/:id/image', need('products'), express.raw({ type: ['image/*', 
 r.post('/products/image-by-code/:code', need('products'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
   const it = await images.saveByCode(req.params.code, req.body);
   ok(res, { id: it.id, name: it.name });
+}));
+r.post('/shop-banners/image', need('settings'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
+  ok(res, { name: images.saveBanner(req.body) });
 }));
 r.post('/products/:id/image/remove', need('products'), wrap(async (req, res) => { await images.remove(Number(req.params.id)); ok(res); }));
 r.get('/images/fetch', need('products'), wrap(async (req, res) => ok(res, await images.status())));

@@ -65,6 +65,17 @@ Owner phone: open the address in Chrome → ⋮ → **Install app** / Add to Hom
 - **Internet is needed to complete a bill.** If the internet stops, the open bill stays on the screen; complete it when the internet
   returns. Keep a mobile hotspot ready. (The shop PC version keeps working without internet, if you prefer that at the counter.)
 
+## Online shop look
+
+- The shop (`/shop/`) works on phones and PCs: home with banners, categories, offers and best sellers; search with sort and
+  filters; product details with "Add to Basket"; basket with delivery or takeaway and a time; order tracking; profile with
+  loyalty points and saved items.
+- **Banner photos** (optional): Settings & backup → Online orders → *Banner photos*. Take a wide photo of your fresh stock or a
+  festival offer, write a small line, big words and a last line, choose what the button opens, then **Save**. Without photos the
+  shop shows its own banners (offers, fresh produce, free delivery, loyalty points).
+- Products without a photo show a picture chosen from the name (tomato, onion, banana, soap…). These pictures are Microsoft
+  Fluent Emoji, free to use under the MIT licence (`public/fe/LICENSE.txt`). A photo you add for a product always replaces it.
+
 ## Updates
 
 Push to GitHub (or upload a new ZIP) and press **Redeploy** in hPanel. Database tables are updated automatically at start. The PCs

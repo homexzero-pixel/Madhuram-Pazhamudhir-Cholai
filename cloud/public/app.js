@@ -46,11 +46,11 @@ const periodChips = (cur, base) => `<div class="cats periods">${PERIODS.map(([k,
 const backupDoneToday = () => localStorage.getItem('mpc_backup_day') === today();
 
 // Make a phone photo small before sending it: at most 640 px, WebP or JPEG.
-async function shrinkPhoto(file) {
+async function shrinkPhoto(file, max = 640) {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error('Could not read this photo.')); i.src = url; });
-    const k = Math.min(1, 640 / Math.max(img.naturalWidth, img.naturalHeight));
+    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
     const c = document.createElement('canvas');
     c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
@@ -904,6 +904,10 @@ App.views.settings = async (main) => {
       <div class="grid3">${f('online_open', 'Orders from (time)', 'type="time"')}${f('online_close', 'Orders until (time)', 'type="time"')}${f('online_slot_minutes', 'Slot length (minutes)')}</div>
       <div class="grid3">${f('online_lead_minutes', 'First slot after (minutes)')}${f('online_days_ahead', 'Days ahead customers can choose')}${f('online_min_order', 'Minimum order for delivery ₹')}</div>
       <div class="grid3">${f('online_delivery_charge', 'Delivery charge ₹')}${f('online_free_delivery_above', 'Free delivery above ₹ (0 = never)')}<div></div></div>
+      <h3 style="margin:18px 0 4px">Banner photos at the top of the online shop</h3>
+      <p class="small muted" style="margin:0 0 8px">Optional. Take a wide photo of your fresh stock or a festival offer; it shows first, with your words on the left.
+        Without photos the shop shows its own banners for offers, fresh produce, delivery and loyalty points.</p>
+      <input type="hidden" name="shop_banners" id="sbJson" value="${esc(s.shop_banners || '[]')}"><div id="sbRows"></div>
       <h2>Weighing scale labels</h2>
       <label class="row" style="font-weight:400"><input type="checkbox" name="scale_enabled" style="width:auto" ${s.scale_enabled === '1' ? 'checked' : ''}> The shop uses barcode labels printed by the weighing scale</label>
       <div class="grid3">${f('scale_prefixes', 'Label starts with')}${f('scale_item_start', 'Item code starts at (0 = first digit)')}${f('scale_item_length', 'Item code digits')}</div>
@@ -935,6 +939,43 @@ App.views.settings = async (main) => {
   };
   ['loyalty_points_per_100', 'loyalty_point_value'].forEach((n) => $('#sf')[n].addEventListener('input', loyEx));
   loyEx();
+  // banner photos for the online shop: up to 3, kept as JSON in one setting
+  let banners = [];
+  try { banners = JSON.parse(s.shop_banners || '[]'); } catch (_) { banners = []; }
+  if (!Array.isArray(banners)) banners = [];
+  const cats = (await api('/shop/info').catch(() => ({ cats: [] }))).cats || [];
+  const drawBanners = () => {
+    while (banners.length < 3) banners.push({ img: '', kicker: '', title: '', sub: '', link: '' });
+    $('#sbJson').value = JSON.stringify(banners.filter((b) => b.img));
+    $('#sbRows').innerHTML = banners.slice(0, 3).map((b, i) => `<div class="sb-row" data-i="${i}">
+      <div class="sb-img">${b.img ? `<img src="/img/p/${esc(b.img)}" alt="">` : `<span class="small muted">No photo</span>`}</div>
+      <div class="sb-f"><div class="grid3"><div><label>Small line</label><input data-k="kicker" value="${esc(b.kicker)}" placeholder="Vegetable offers" maxlength="40"></div>
+        <div><label>Big words</label><input data-k="title" value="${esc(b.title)}" placeholder="20% OFF" maxlength="40"></div>
+        <div><label>Last line</label><input data-k="sub" value="${esc(b.sub)}" placeholder="Till 30 November" maxlength="60"></div></div>
+        <div class="row" style="margin-top:6px"><select data-k="link" style="max-width:240px"><option value="">Button: none</option>
+          <option value="offers" ${b.link === 'offers' ? 'selected' : ''}>Button opens: all offers</option>
+          ${cats.map((c) => `<option value="cat=${c.id}" ${b.link === `cat=${c.id}` ? 'selected' : ''}>Button opens: ${esc(c.name)}</option>`).join('')}</select>
+          <label class="btn" style="margin:0">${ico('camera')} ${b.img ? 'Change photo' : 'Choose photo'}<input type="file" accept="image/*" data-up hidden></label>
+          ${b.img ? `<button type="button" class="danger" data-rm>${ico('x')} Remove</button>` : ''}</div></div></div>`).join('');
+    $$('#sbRows [data-k]').forEach((el) => el.addEventListener('input', () => {
+      banners[Number(el.closest('.sb-row').dataset.i)][el.dataset.k] = el.value;
+      $('#sbJson').value = JSON.stringify(banners.filter((b) => b.img));
+    }));
+    $$('#sbRows [data-up]').forEach((el) => el.addEventListener('change', () => submitting(null, async () => {
+      const file = el.files[0];
+      if (!file) return;
+      const blob = await shrinkPhoto(file, 1400);
+      const r = await api('/shop-banners/image', { method: 'POST', raw: blob, type: blob.type });
+      banners[Number(el.closest('.sb-row').dataset.i)].img = r.name;
+      drawBanners();
+      toast('Photo added. Press Save to show it in the online shop.');
+    })));
+    $$('#sbRows [data-rm]').forEach((el) => el.addEventListener('click', () => {
+      banners[Number(el.closest('.sb-row').dataset.i)] = { img: '', kicker: '', title: '', sub: '', link: '' };
+      drawBanners();
+    }));
+  };
+  drawBanners();
   $('#sf').addEventListener('submit', (e) => { e.preventDefault(); submitting($('button.primary', e.target), async () => {
     const v = formData(e.target);
     for (const el of e.target.elements) if (el.type === 'checkbox') v[el.name] = el.checked ? '1' : '0';

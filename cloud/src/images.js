@@ -14,7 +14,7 @@ const DIR = process.env.IMAGE_DIR || require('./config').dataDir('madhuram_image
 // Open Food Facts (food), Open Beauty Facts (soap, shampoo, cream…), Open Products Facts (detergent, household…): same open format.
 const SOURCES = (process.env.OFF_BASES || process.env.OFF_BASE ||
   'https://world.openfoodfacts.org,https://world.openbeautyfacts.org,https://world.openproductsfacts.org').split(',').map((x) => x.trim()).filter(Boolean);
-const NAME = /^p\d+_[0-9a-f]{8}\.(jpg|png|webp)$/;
+const NAME = /^(p\d+|b)_[0-9a-f]{8}\.(jpg|png|webp)$/;
 const MAX = 800 * 1024;
 
 function kind(buf) {
@@ -36,6 +36,18 @@ async function save(itemId, buf, source = 'upload') {
   fs.writeFileSync(path.join(DIR, name), buf);
   await db.query('UPDATE items SET image=?, image_source=?, updated_at=? WHERE id=?', [name, source, nowIST(), it.id]);
   if (it.image && NAME.test(it.image)) { try { fs.unlinkSync(path.join(DIR, it.image)); } catch (_) { /* gone */ } }
+  return name;
+}
+
+// A banner photo for the online shop (wide picture, resized on the PC before upload).
+function saveBanner(buf) {
+  if (!Buffer.isBuffer(buf) || !buf.length) throw new UserError('Choose a photo.');
+  if (buf.length > MAX) throw new UserError('The photo is too large (more than 800 KB).');
+  const ext = kind(buf);
+  if (!ext) throw new UserError('This is not a JPG, PNG or WebP photo.');
+  fs.mkdirSync(DIR, { recursive: true });
+  const name = `b_${crypto.randomBytes(4).toString('hex')}.${ext}`;
+  fs.writeFileSync(path.join(DIR, name), buf);
   return name;
 }
 
@@ -141,4 +153,4 @@ async function status() {
   return { ...j, with_photo: Number(c.with_photo || 0), without_photo: Number(c.without_photo || 0), from_db: Number(c.from_db || 0) };
 }
 
-module.exports = { saveByCode, save, remove, filePath, start, stop, status, DIR, kind };
+module.exports = { saveBanner, saveByCode, save, remove, filePath, start, stop, status, DIR, kind };

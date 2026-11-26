@@ -3,53 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1fa64a">
+<meta name="theme-color" content="#ffffff">
 <title>Order online</title>
 <link rel="icon" href="/img/icon-192.png">
 <link rel="apple-touch-icon" href="/img/icon-192.png">
 <link rel="stylesheet" href="/shop.css">
 </head>
-<body>
-<div class="app">
-  <header class="top" id="top">
-    <div class="top-in">
-      <div class="top-row">
-        <a href="#" class="brand"><img src="/img/logo.webp" alt="" class="logo"><span class="brand-name" id="brandName"></span></a>
-        <div class="where">
-          <div class="mode" id="mode" role="tablist">
-            <button data-m="delivery" role="tab"><i data-ico="truck"></i>Delivery</button>
-            <button data-m="pickup" role="tab"><i data-ico="bag"></i>Takeaway</button>
-          </div>
-          <div class="where-line" id="whereLine">…</div>
-        </div>
-        <a href="#account" class="round" id="acctBtn" aria-label="My account"><i data-ico="user"></i></a>
-      </div>
-      <label class="search" for="q">
-        <i data-ico="search" class="s-ico"></i>
-        <input id="q" type="search" placeholder="Search products" autocomplete="off">
-        <button id="scanBtn" class="s-scan" type="button" aria-label="Scan a barcode"><i data-ico="scan"></i></button>
-      </label>
-      <nav class="top-links">
-        <a href="#cats"><i data-ico="grid"></i>Categories</a>
-        <a href="#orders"><i data-ico="receipt"></i>My orders</a>
-        <a href="#account" id="acctLink"><i data-ico="user"></i>Login</a>
-        <a href="#cart" class="top-cart" id="topCart"><i data-ico="cart"></i><span id="topCartText">Cart</span></a>
-      </nav>
-    </div>
-  </header>
-  <main id="view"><div class="loading">Loading…</div></main>
-  <div id="cartbar" hidden>
-    <span class="cb-left"><span class="cb-ico"><i data-ico="cart"></i></span><span><b id="cbItems"></b><br><span id="cbTotal"></span></span></span>
-    <a href="#cart" class="cb-go">View cart ›</a>
+<body data-page="home">
+<header class="pcbar" id="pcbar">
+  <div class="pc-in">
+    <a href="#" class="pc-brand"><img src="/img/logo.webp" alt=""><span id="pcName"></span></a>
+    <label class="srch pc-srch"><i data-ico="search"></i>
+      <input id="pcq" type="search" placeholder="Search for fruits, vegetables and groceries" autocomplete="off" enterkeyhint="search">
+      <a href="#search" class="srch-f" aria-label="Sort and filter"><i data-ico="sliders"></i></a></label>
+    <button type="button" class="pc-loc" id="pcLoc"></button>
+    <a href="#orders" class="cbtn" aria-label="My orders"><i data-ico="bell"></i><b class="bdg" data-ordn hidden></b></a>
+    <a href="#cart" class="cbtn" aria-label="Basket"><i data-ico="bag"></i><b class="bdg g" data-cartn hidden></b></a>
+    <a href="#account" class="pc-acct" id="pcAcct"></a>
   </div>
-  <nav class="bottom" id="bottom">
-    <a href="#" data-nav="home"><span><i data-ico="home"></i></span>Home</a>
-    <a href="#cats" data-nav="cats"><span><i data-ico="grid"></i></span>Categories</a>
-    <button type="button" id="navScan" class="nav-scan" aria-label="Scan a barcode"><i data-ico="scan"></i></button>
-    <a href="#cart" data-nav="cart"><span><i data-ico="cart"></i><b id="navCount" hidden></b></span>Cart</a>
-    <a href="#account" data-nav="account"><span><i data-ico="user"></i></span>Account</a>
-  </nav>
-</div>
+</header>
+<main id="view"><div class="loading">Loading…</div></main>
+<a href="#cart" id="cartbar" hidden><span class="cb-l"><span id="cbItems"></span><b id="cbTotal"></b></span><span class="cb-r">View Basket <i data-ico="right"></i></span></a>
+<nav class="bnav" id="bnav">
+  <a href="#" data-nav="home"><span class="bi"><i data-ico="home" class="i-off"></i><i data-ico="homeF" class="i-on"></i></span><span>Home</span></a>
+  <a href="#cats" data-nav="cats"><span class="bi"><i data-ico="store"></i></span><span>Categories</span></a>
+  <a href="#search" data-nav="search"><span class="bi"><i data-ico="search"></i></span><span>Search</span></a>
+  <a href="#orders" data-nav="orders"><span class="bi"><i data-ico="activity"></i><i class="dot" data-orddot hidden></i></span><span>Orders</span></a>
+  <a href="#account" data-nav="account"><span class="bi"><i data-ico="user"></i></span><span>Profile</span></a>
+</nav>
 <div id="sheet" class="sheet" hidden><div class="sheet-bg" data-close></div><div class="sheet-card" id="sheetCard"></div></div>
 <div id="toast"></div>
 <script src="/icons.js"></script>
