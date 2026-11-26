@@ -1,6 +1,6 @@
 {
   "name": "madhuram-cloud",
-  "version": "2026.11.25",
+  "version": "2026.11.26",
   "description": "Madhuram Pazhamudhir Cholai – cloud billing for Hostinger Business (Node.js + MySQL)",
   "main": "server.js",
   "private": true,

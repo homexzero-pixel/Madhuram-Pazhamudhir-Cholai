@@ -156,7 +156,7 @@ test('online order: closed, place, stock held, staff accept, bill at the counter
   let st = await cashier.post(`/api/orders/${order.id}/status`, { status: 'cancelled', note: '' });
   assert.match(st.data.error, /why/);
   st = await cashier.post(`/api/orders/${order.id}/status`, { status: 'accepted' });
-  assert.match(st.data.whatsapp.text, /confirmed/);
+  assert.match(st.data.whatsapp.text, /accepted/);
   assert.equal(st.data.whatsapp.phone, '919876543210');
 
   const b = (await cashier.post(`/api/orders/${order.id}/bill`)).data.bill;
@@ -251,14 +251,59 @@ test('product master import with several barcodes, and billing before stock is e
   assert.deepEqual([beans.unit, beans.plu, beans.active], ['kg', '901', true]);
   assert.equal((await owner.get('/api/products?q=No%20price')).data.items[0].active, false);
 
+  // a product in the customer's hand is always billed; stock never goes below zero
   const sale = () => cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 1', lines: [{ id: ind.id, qty: 2 }], payments: [{ method: 'cash', amount: '860' }] });
-  assert.match((await sale()).data.error, /Not enough stock/);
-  await owner.post('/api/settings', { allow_negative_stock: '1' });
-  require('../src/settings').reset();
   assert.equal((await sale()).data.ok, true);
-  assert.equal((await owner.get(`/api/products/${ind.id}`)).data.item.on_hand, '-2');
-  await owner.post('/api/stock/receive', { item_id: ind.id, qty: '10', cost: '320' });
+  assert.equal((await owner.get(`/api/products/${ind.id}`)).data.item.on_hand, '0');
+  await owner.post('/api/stock/receive', { item_id: ind.id, qty: '7', cost: '320' });
+  await owner.post('/api/stock/receive', { item_id: ind.id, qty: '3', cost: '320' });
+  assert.equal((await owner.get(`/api/products/${ind.id}`)).data.item.on_hand, '10');          // 7 + 3
+  assert.equal((await sale()).data.ok, true);
   assert.equal((await owner.get(`/api/products/${ind.id}`)).data.item.on_hand, '8');
-  const lots = await db.query('SELECT qty, status FROM lots WHERE item_id=? ORDER BY id', [ind.id]);
-  assert.deepEqual(lots.map((l) => [l.qty, l.status]), [['0.000', 'short'], ['8.000', 'sellable']]);
+  assert.equal((await owner.post('/api/stock/count', { item_id: ind.id, count: '5' })).data.on_hand, '5');
+  assert.equal((await owner.get(`/api/products/${ind.id}`)).data.item.on_hand, '5');
+  const live = (await cashier.get('/api/stock/now')).data.stock;
+  assert.deepEqual(live.find((x) => x[0] === ind.id), [ind.id, '5']);
+});
+
+test('counters, opening balance check, dashboard and bills by period, order changes and online performance', async () => {
+  // counters: managers add a counter; a counter with an open shift cannot be removed
+  assert.match((await owner.post('/api/counters', { counters: ['Counter 2'] })).data.error, /Counter 1 still has an open shift/);
+  assert.deepEqual((await owner.post('/api/counters', { counters: ['Counter 1', 'Counter 2', 'Counter 3', 'Counter 4'] })).data.counters.length, 4);
+  assert.equal((await cashier.post('/api/counters', { counters: ['X'] })).status, 403);
+  // closing → next opening of the same counter is compared with the closing
+  const sh = (await cashier.get('/api/shift?counter=Counter%201')).data;
+  await cashier.post('/api/shift/close', { shift_id: sh.shift.id, counted: '1234.50' });
+  const next = (await cashier.get('/api/shift?counter=Counter%201')).data;
+  assert.equal(next.last_closed.counted, '1234.50');
+  await cashier.post('/api/shift/open', { counter: 'Counter 1', float: '1200' });
+  assert.match((await db.one("SELECT summary FROM audit WHERE action='float_mismatch'")).summary, /last closing was ₹1234.50/);
+  // dashboard / bills by period
+  const d = (await owner.get('/api/dashboard?period=month')).data;
+  assert.ok(d.bills >= 3 && d.channels.some((c) => c.channel === 'online') && d.top.length > 0, JSON.stringify(d.channels));
+  assert.ok((await cashier.get('/api/bills?period=week&counter=Counter%201')).data.bills.length >= 1);
+  // order: remove an unavailable item before billing; the customer sees it
+  await owner.post('/api/settings', { online_enabled: '1', online_open: '00:00', online_close: '23:59', online_lead_minutes: '30' });
+  require('../src/settings').reset();
+  const info = (await customer.get('/api/shop/info')).data;
+  const o = await customer.post('/api/shop/order', { name: 'Ravi', phone: '9876500000', mode: 'pickup', slot: info.slots[0].slots[0].v,
+    lines: [{ id: rice.id, qty: 2 }, { id: apple.id, qty: '1' }] });
+  assert.equal(o.data.ok, true, JSON.stringify(o.data));
+  const id = (await cashier.get('/api/orders')).data.orders.find((x) => x.number === o.data.number).id;
+  const full = (await cashier.get(`/api/orders/${id}`)).data.order;
+  const appleLine = full.lines.find((l) => l.name === 'Apple');
+  const ch = await cashier.post(`/api/orders/${id}/line`, { line_id: appleLine.id, qty: '0' });
+  assert.equal(ch.data.ok, true, JSON.stringify(ch.data));
+  assert.match(ch.data.whatsapp.text, /Apple: removed/);
+  assert.equal(ch.data.order.est_items, '150.00');
+  await cashier.post(`/api/orders/${id}/status`, { status: 'accepted' });
+  const track = (await customer.get(`/api/shop/track/${o.data.token}`)).data.order;
+  assert.match(track.status_label, /Processing/);
+  assert.equal(track.lines.find((l) => l.name === 'Apple').note, 'Not available – removed');
+  const b = (await cashier.post(`/api/orders/${id}/bill`)).data.bill;
+  assert.equal(b.lines.length, 1);
+  const st = (await cashier.get('/api/orders-stats?period=month')).data;
+  assert.ok(st.orders >= 2 && st.removed_items === 1, JSON.stringify(st));
+  const day = (await owner.get('/api/owner/day?period=week')).data.text;
+  assert.match(day, /This week/);
 });

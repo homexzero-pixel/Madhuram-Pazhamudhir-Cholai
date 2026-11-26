@@ -9,6 +9,9 @@ const { paise, milli, rs, qtyDb, qtyStr, lineAmount, nowIST, UserError } = requi
 
 const OPEN = ['new', 'accepted', 'ready', 'out'];
 const STATUS = { new: 'New', accepted: 'Accepted – packing', ready: 'Ready for pickup', out: 'Out for delivery', done: 'Completed', cancelled: 'Cancelled' };
+// what the customer sees on the tracking page
+const CUSTOMER_STATUS = { new: 'Order received – waiting for the shop to accept', accepted: 'Processing – the shop is packing your order',
+  ready: 'Ready – please collect from the counter', out: 'The delivery person is on the way', done: 'Completed – thank you!', cancelled: 'Cancelled' };
 const DELIVERY_SKU = 'DELIVERY';
 
 async function held(ids) {
@@ -164,8 +167,9 @@ const publicOrder = async (token) => {
   if (!/^[0-9a-f]{32}$/.test(token)) throw new UserError('Order not found.', 404);
   const o = await order('o.token=?', [token]);
   const cfg = await settings.load();
-  return { number: o.number, name: o.name, mode: o.mode, status: o.status, status_label: o.status_label, note: o.status_note,
-    slot_label: o.slot_label, address: o.address, lines: o.lines.map((l) => ({ name: l.name, name_ta: l.name_ta, unit: l.unit, qty: l.qty, price: l.price })),
+  return { number: o.number, name: o.name, mode: o.mode, status: o.status, status_label: CUSTOMER_STATUS[o.status], note: o.status_note,
+    slot_label: o.slot_label, address: o.address, lines: o.lines.map((l) => ({ name: l.name, name_ta: l.name_ta, unit: l.unit, qty: l.qty, price: l.price,
+      ordered: l.ordered_qty === null ? null : qtyStr(milli(l.ordered_qty)), note: l.note })),
     est_items: o.est_items, delivery_charge: o.delivery_charge, est_total: o.est_total, bill_no: o.bill_no, bill_total: o.bill_total,
     shop: { name: cfg.name, phone: cfg.phone, upi_id: cfg.upi_id } };
 };
@@ -189,8 +193,9 @@ async function setStatus(id, status, user, note = '') {
       if (String(note).trim().length < 3) throw new UserError('Enter why the order is cancelled (the customer will see it).');
       if (o.sale_id) throw new UserError('This order is already billed; use a return instead.');
     }
-    await q('UPDATE online_orders SET status=?, status_note=IF(?="", status_note, ?), updated_at=? WHERE id=?',
-      [status, String(note).trim(), String(note).trim().slice(0, 200), nowIST(), id]);
+    await q(`UPDATE online_orders SET status=?, status_note=IF(?="", status_note, ?), updated_at=?,
+      accepted_at=IF(accepted_at IS NULL AND ? IN ('accepted','ready','out'), ?, accepted_at) WHERE id=?`,
+    [status, String(note).trim(), String(note).trim().slice(0, 200), nowIST(), status, nowIST(), id]);
     await audit({ user_id: user.id, action: 'online_order', summary: `Online order ${o.number}: ${STATUS[status]}${note ? ` – ${note}` : ''}` }, q);
   });
 }
@@ -200,7 +205,8 @@ async function forCounter(id) {
   const o = await order('o.id=?', [id]);
   if (o.sale_id) throw new UserError(`${o.number} is already billed (${o.bill_no}).`);
   if (!OPEN.includes(o.status)) throw new UserError(`${o.number} is ${STATUS[o.status].toLowerCase()}.`);
-  const lines = o.lines.map((l) => ({ id: l.item_id, qty: l.qty }));
+  const lines = o.lines.filter((l) => milli(l.qty) > 0).map((l) => ({ id: l.item_id, qty: l.qty }));
+  if (!lines.length) throw new UserError('Every item was removed from this order. Cancel it instead.');
   let delivery = null;
   if (paise(o.delivery_charge) > 0) {
     await db.query(`INSERT IGNORE INTO items (sku, name, name_ta, unit, price, active, tax_class, updated_at)
@@ -217,14 +223,59 @@ async function statusMessage(id, baseUrl) {
   const when = o.slot_label;
   const body = {
     new: `We have received your order. We will confirm it shortly.\n${when}`,
-    accepted: `Your order is confirmed and being packed. ${o.mode === 'pickup' ? 'Pickup' : 'Delivery'}: ${when}.`,
+    accepted: `Your order is accepted and being packed. ${o.mode === 'pickup' ? 'Pickup' : 'Delivery'}: ${when}.`,
     ready: `Your order is ready for pickup at the counter. Approx. ₹${o.est_total}.`,
-    out: 'Your order is out for delivery. Please keep cash/UPI ready.',
+    out: `Our delivery person is on the way with your order. Approx. ₹${o.est_total} – please keep cash/UPI ready.`,
     done: `Thank you! Your order is complete.${o.bill_no ? ` Bill ${o.bill_no}, ₹${o.bill_total}.` : ''}`,
     cancelled: `Sorry, your order was cancelled: ${o.status_note}`,
   }[o.status];
+  const changed = o.lines.filter((l) => l.ordered_qty !== null);
+  const changes = changed.length ? `\n\nChanges (not available):\n${changed.map((l) => `• ${l.name}: ${milli(l.qty) ? `${l.qty} ${l.unit} instead of ${qtyStr(milli(l.ordered_qty))}` : 'removed'}`).join('\n')}` +
+    `\nYou are not charged for these. If you already paid for them, we will refund the difference.` : '';
   const link = OPEN.includes(o.status) ? `\nTrack: ${baseUrl}/shop/#o=${o.token}` : '';
-  return { phone: `91${o.phone}`, text: `*${cfg.name}* – order *${o.number}*\n${body}${link}\nநன்றி 🙏` };
+  return { phone: `91${o.phone}`, text: `*${cfg.name}* – order *${o.number}*\n${body}${changes}${link}\nநன்றி 🙏` };
+}
+
+// Staff: an item is not available (or less of it). Quantity 0 removes it; the customer is not charged for it.
+async function changeLine(orderId, lineId, qtyText, user) {
+  return db.tx(async (q) => {
+    const o = await q.one('SELECT * FROM online_orders WHERE id=? FOR UPDATE', [orderId]);
+    if (!o) throw new UserError('Order not found.', 404);
+    if (o.sale_id || !OPEN.includes(o.status)) throw new UserError('This order can no longer be changed.');
+    const l = await q.one('SELECT * FROM online_order_lines WHERE id=? AND order_id=? FOR UPDATE', [lineId, orderId]);
+    if (!l) throw new UserError('Line not found.');
+    const qty = milli(qtyText === '' || qtyText === undefined ? '0' : qtyText, 'quantity');
+    const was = milli(l.ordered_qty ?? l.qty);
+    if (qty === null || qty < 0 || qty > was) throw new UserError(`Enter 0 to remove, or less than the ordered ${qtyStr(was)}.`);
+    if (l.unit === 'pcs' && qty % 1000) throw new UserError('Use whole pieces.');
+    await q('UPDATE online_order_lines SET qty=?, ordered_qty=?, note=? WHERE id=?',
+      [qtyDb(qty), qty === was ? null : qtyDb(was), qty === was ? '' : qty ? 'Less available' : 'Not available – removed', l.id]);
+    const lines = await q('SELECT qty, price FROM online_order_lines WHERE order_id=?', [orderId]);
+    const items = lines.reduce((s, x) => s + lineAmount(paise(x.price), milli(x.qty)), 0);
+    await q('UPDATE online_orders SET est_items=?, updated_at=? WHERE id=?', [rs(items), nowIST(), orderId]);
+    await audit({ user_id: user.id, action: 'online_order', value: rs(lineAmount(paise(l.price), was - qty)),
+      summary: `Online order ${o.number}: ${l.name} ${qtyStr(was)} → ${qtyStr(qty)} ${l.unit} (${qty ? 'less available' : 'not available'})` }, q);
+  });
+}
+
+// Online performance for a period.
+async function stats(from, to) {
+  const R = [from, to];
+  const o = await db.one(`SELECT COUNT(*) n, SUM(status='done') done, SUM(status='cancelled') cancelled, SUM(status IN ('new','accepted','ready','out')) open,
+    SUM(mode='delivery') delivery, SUM(mode='pickup') pickup,
+    AVG(IF(accepted_at IS NULL, NULL, TIMESTAMPDIFF(MINUTE, created_at, accepted_at))) accept_min
+    FROM online_orders WHERE DATE(created_at) BETWEEN ? AND ?`, R);
+  const billed = await db.one('SELECT COUNT(*) n, COALESCE(SUM(x.total),0) t FROM sales x WHERE x.order_id IS NOT NULL AND x.business_date BETWEEN ? AND ?', R);
+  const removed = await db.one(`SELECT COUNT(*) n, COALESCE(SUM((l.ordered_qty - l.qty) * l.price),0) v FROM online_order_lines l
+    JOIN online_orders o ON o.id=l.order_id WHERE l.ordered_qty IS NOT NULL AND DATE(o.created_at) BETWEEN ? AND ?`, R);
+  const top = await db.query(`SELECT l.name, l.unit, SUM(l.qty) qty, COUNT(*) orders FROM online_order_lines l JOIN online_orders o ON o.id=l.order_id
+    WHERE o.status <> 'cancelled' AND DATE(o.created_at) BETWEEN ? AND ? GROUP BY l.item_id, l.name, l.unit ORDER BY orders DESC LIMIT 10`, R);
+  const reasons = await db.query(`SELECT status_note reason, COUNT(*) n FROM online_orders WHERE status='cancelled' AND DATE(created_at) BETWEEN ? AND ?
+    GROUP BY status_note ORDER BY n DESC LIMIT 5`, R);
+  return { from, to, orders: Number(o.n), done: Number(o.done || 0), cancelled: Number(o.cancelled || 0), open: Number(o.open || 0),
+    delivery: Number(o.delivery || 0), pickup: Number(o.pickup || 0), accept_minutes: o.accept_min === null ? null : Math.round(Number(o.accept_min)),
+    billed: Number(billed.n), sales: billed.t, removed_items: Number(removed.n), removed_value: rs(Math.round(Number(removed.v) * 100)),
+    top: top.map((x) => ({ ...x, qty: qtyStr(milli(x.qty)) })), cancel_reasons: reasons };
 }
 
 async function badge() {
@@ -233,5 +284,5 @@ async function badge() {
   return { new: Number(r.n), last: last.m || 0 };
 }
 
-module.exports = { catalogue, categories, slots, slotLabel, placeOrder, publicOrder, order, staffList, setStatus, forCounter, statusMessage, badge,
+module.exports = { changeLine, stats, CUSTOMER_STATUS, catalogue, categories, slots, slotLabel, placeOrder, publicOrder, order, staffList, setStatus, forCounter, statusMessage, badge,
   phone10, STATUS, OPEN };

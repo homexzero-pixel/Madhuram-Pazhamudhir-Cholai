@@ -20,15 +20,25 @@ async function openShift(counter) {
   return db.one(`SELECT s.*, u.name cashier FROM shifts s JOIN users u ON u.id=s.cashier_id WHERE s.open_key=?`, [counter]);
 }
 
+async function lastClosed(counter) {
+  return db.one(`SELECT s.id, s.counted, s.closed_at, u.name closed_by FROM shifts s LEFT JOIN users u ON u.id=s.closed_by
+    WHERE s.counter=? AND s.status='closed' ORDER BY s.closed_at DESC LIMIT 1`, [counter]);
+}
+
 async function startShift(user, counter, float) {
   if (!can(user, 'cash')) throw new UserError('Your role cannot open a cashier shift.', 403);
   counter = cleanCounter(counter);
   const amount = paise(float, 'opening cash') ?? 0;
   if (amount < 0) throw new UserError('Opening cash cannot be negative.');
+  const last = await lastClosed(counter);
   try {
     const r = await db.query(`INSERT INTO shifts (counter, open_key, cashier_id, business_date, opened_at, opening_float)
       VALUES (?,?,?,?,?,?)`, [counter, counter, user.id, todayIST(), nowIST(), rs(amount)]);
     await audit({ user_id: user.id, action: 'shift_open', summary: `Shift ${r.insertId} opened on ${counter} with ₹${rs(amount)}`, value: rs(amount) });
+    if (last && last.counted !== null && paise(last.counted) !== amount) {
+      await audit({ user_id: user.id, action: 'float_mismatch', value: rs(amount - paise(last.counted)),
+        summary: `${counter}: opened with ₹${rs(amount)} but last closing was ₹${last.counted} (${last.closed_at.slice(0, 16)})` });
+    }
     return r.insertId;
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') throw new UserError(`A shift is already open on ${counter}. Close it first.`);
@@ -76,8 +86,8 @@ async function closeShift(user, shiftId, counted, retained, note) {
     if (shift.cashier_id !== user.id && !can(user, 'reopen_shift')) throw new UserError('Only the shift\'s cashier or a manager can close it.', 403);
     const c = paise(counted, 'counted cash');
     if (c === null || c < 0) throw new UserError('Enter the cash counted in the drawer.');
-    const keep = retained === '' || retained === undefined || retained === null ? c : paise(retained, 'cash left');
-    if (keep > c) throw new UserError('Cash left in the drawer cannot be more than the cash counted.');
+    const keep = c;                     // the counted cash is the next opening balance of this counter
+    void retained;
     const sum = await cashSummary(shiftId, q);
     const variance = c - paise(sum.expected);
     await q(`UPDATE shifts SET status='closed', open_key=NULL, closed_at=?, closed_by=?, counted=?, expected=?, variance=?, retained=?, note=?
@@ -296,16 +306,17 @@ async function markPrinted(saleId, user, reprint) {
   if (reprint && s.print_count > 0) await audit({ user_id: user.id, action: 'reprint', summary: `${s.bill_no} printed again` });
 }
 
-async function recentBills({ q = '', date = '', counter = '' }) {
+async function recentBills({ q = '', date = '', counter = '', from = '', to = '' }) {
   const where = [];
   const args = [];
   if (q) { where.push('(x.bill_no LIKE ? OR c.phone LIKE ? OR c.name LIKE ?)'); args.push(`%${q}%`, `%${q}%`, `%${q}%`); }
   if (date) { where.push('x.business_date=?'); args.push(date); }
+  if (from && to) { where.push('x.business_date BETWEEN ? AND ?'); args.push(from, to); }
   if (counter) { where.push('x.counter=?'); args.push(counter); }
   return db.query(`SELECT x.id, x.bill_no, x.created_at, x.counter, x.total, u.name cashier, c.name customer,
     (SELECT GROUP_CONCAT(DISTINCT method) FROM payments WHERE sale_id=x.id) methods
     FROM sales x JOIN users u ON u.id=x.cashier_id LEFT JOIN customers c ON c.id=x.customer_id
-    ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY x.id DESC LIMIT 100`, args);
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY x.id DESC LIMIT 500`, args);
 }
 
 async function findCustomers(text) {
@@ -317,5 +328,5 @@ async function findCustomers(text) {
     ORDER BY name LIMIT 15`, digits.length >= 3 ? [`%${text}%`, `%${digits}%`] : [`%${text}%`]);
 }
 
-module.exports = { checkout, receipt, markPrinted, recentBills, openShift, startShift, closeShift, cashSummary, cashMove, findCustomers,
+module.exports = { lastClosed, checkout, receipt, markPrinted, recentBills, openShift, startShift, closeShift, cashSummary, cashMove, findCustomers,
   cleanCounter, METHODS, DELIVERY_SKU };

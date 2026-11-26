@@ -19,13 +19,37 @@ async function counterCatalogue() {
     `SELECT i.id, i.sku, i.plu, i.name, i.name_ta, i.unit, i.price, i.mrp, i.gst_rate, i.tax_class, i.on_hand, c.name cat
      FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE i.active=1 ORDER BY i.name`);
   const codes = await db.query('SELECT b.code, b.item_id, b.per FROM barcodes b JOIN items i ON i.id=b.item_id WHERE i.active=1');
+  const sold = new Map((await db.query(`SELECT l.item_id, COUNT(*) n FROM sale_lines l JOIN sales x ON x.id=l.sale_id
+    WHERE x.business_date > DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY l.item_id`)).map((r) => [r.item_id, Number(r.n)]));
   return {
     version: await version(),
-    // compact rows: [id, sku, plu, name, name_ta, unit, price, mrp, gst, tax_class, on_hand, category]
+    // compact rows: [id, sku, plu, name, name_ta, unit, price, mrp, gst, tax_class, on_hand, category, bills in last 30 days]
     items: items.map((i) => [i.id, i.sku, i.plu || '', i.name, i.name_ta, i.unit, i.price, i.mrp, i.gst_rate, i.tax_class,
-      qtyStr(milli(i.on_hand)), i.cat || '']),
+      qtyStr(milli(i.on_hand)), i.cat || '', sold.get(i.id) || 0]),
     barcodes: codes.map((b) => [b.code, b.item_id, qtyStr(milli(b.per))]),
   };
+}
+
+// Light list of stock for the counters (refreshed every minute): [[id, on_hand], …]
+async function stockNow() {
+  return (await db.query('SELECT id, on_hand FROM items WHERE active=1')).map((r) => [r.id, qtyStr(milli(r.on_hand))]);
+}
+
+// Stock count: set the stock to what is really on the shelf (adds or removes the difference, with a reason).
+async function setCount(data, user) {
+  const count = milli(data.count, 'counted quantity');
+  if (count === null || count < 0) throw new UserError('Enter the quantity counted on the shelf.');
+  const it = await db.one('SELECT id, name, unit, on_hand, cost FROM items WHERE id=?', [data.item_id]);
+  if (!it) throw new UserError('Product not found.', 404);
+  if (it.unit === 'pcs' && count % 1000) throw new UserError('This product is counted in pieces: enter a whole number.');
+  const diff = count - milli(it.on_hand);
+  if (!diff) return qtyStr(count);
+  await db.tx(async (q) => {
+    if (diff > 0) await receiveIn(q, { item_id: it.id, qty: diff, unit_cost: Math.round(Number(it.cost) * 100), ref: 'Stock count', user, kind: 'count' });
+    else await issue(q, { id: it.id, name: it.name, unit: it.unit, cost: it.cost }, -diff, { kind: 'count', ref: 'Stock count', reason: 'Counted less on the shelf', user });
+    await audit({ user_id: user.id, action: 'stock_count', summary: `${it.name}: stock ${qtyStr(milli(it.on_hand))} → ${qtyStr(count)} ${it.unit} (count)` }, q);
+  });
+  return qtyStr(count);
 }
 
 async function search({ q = '', status = 'all', limit = 50, offset = 0 }) {
@@ -210,8 +234,8 @@ async function issue(q, item, qty, { kind, ref, reason = '', user }) {
   const lots = await q(`SELECT id, qty, unit_cost FROM lots WHERE item_id=? AND status='sellable' AND qty > 0
     ORDER BY expiry IS NULL, expiry, id FOR UPDATE`, [item.id]);
   const have = lots.reduce((s, l) => s + milli(l.qty), 0);
-  const allowShort = kind === 'sale' && (await require('./settings').load()).allow_negative_stock === '1';
-  if (have < qty && !allowShort) {
+  // A product in the customer's hand is sold even if the stock was never entered; stock then stays at 0 (never minus).
+  if (have < qty && kind !== 'sale') {
     throw new UserError(`Not enough stock of ${item.name}: need ${qtyStr(qty)}, in stock ${qtyStr(have)} ${item.unit}. ` +
       'Receive the stock first (Products → Stock in).', 409);
   }
@@ -227,18 +251,17 @@ async function issue(q, item, qty, { kind, ref, reason = '', user }) {
       [now, item.id, lot.id, kind, qtyDb(-take), lot.unit_cost, ref, reason.slice(0, 200), user ? user.id : null]);
     taken.push({ lot_id: lot.id, qty: take, unit_cost: lot.unit_cost });
   }
-  if (left > 0) {          // sold before the stock was entered: kept on a "short" lot, settled by the next stock in
+  if (left > 0) {          // sold with no stock entered: recorded (for reports) on a zero "not entered" lot; stock stays at 0
     let sh = (await q("SELECT id FROM lots WHERE item_id=? AND status='short' ORDER BY id LIMIT 1 FOR UPDATE", [item.id]))[0];
     if (!sh) {
-      sh = { id: (await q(`INSERT INTO lots (item_id, qty, received, unit_cost, status, ref, created_at) VALUES (?,0,0,?,'short','Sold before stock entry',?)`,
+      sh = { id: (await q(`INSERT INTO lots (item_id, qty, received, unit_cost, status, ref, created_at) VALUES (?,0,0,?,'short','Sold without stock entry',?)`,
         [item.id, item.cost || 0, now])).insertId };
     }
-    await q('UPDATE lots SET qty = qty - ? WHERE id=?', [qtyDb(left), sh.id]);
     await q(`INSERT INTO stock_moves (at, item_id, lot_id, kind, qty, unit_cost, ref, reason, user_id) VALUES (?,?,?,?,?,?,?,?,?)`,
-      [now, item.id, sh.id, kind, qtyDb(-left), item.cost || 0, ref, 'Sold before stock was entered', user ? user.id : null]);
+      [now, item.id, sh.id, kind, qtyDb(-left), item.cost || 0, ref, 'Sold when stock showed 0', user ? user.id : null]);
     taken.push({ lot_id: sh.id, qty: left, unit_cost: String(item.cost || 0) });
   }
-  await q('UPDATE items SET on_hand = on_hand - ? WHERE id=?', [qtyDb(qty), item.id]);
+  await q('UPDATE items SET on_hand = GREATEST(on_hand - ?, 0) WHERE id=?', [qtyDb(qty), item.id]);
   return taken;
 }
 
@@ -359,5 +382,5 @@ async function importCsv(text, user) {
   return { created, updated, barcodes, errors: errors.slice(0, 50) };
 }
 
-module.exports = { counterCatalogue, version, search, get, save, receive, receiveIn, writeOff, issue, moves, importCsv, parseCsv,
+module.exports = { stockNow, setCount, counterCatalogue, version, search, get, save, receive, receiveIn, writeOff, issue, moves, importCsv, parseCsv,
   categoryId, UNITS };

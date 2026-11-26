@@ -39,6 +39,11 @@ function inr(v) {                       // '1234567.5' or paise number -> ₹12,
   return `${p < 0 ? '-' : ''}₹${w}.${f}`;
 }
 const today = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+const PERIODS = [['today', 'Today'], ['yesterday', 'Yesterday'], ['week', 'This week'], ['month', 'This month'], ['lastmonth', 'Last month'],
+  ['quarter', 'This quarter'], ['year', 'This year']];
+const periodChips = (cur, base) => `<div class="cats periods">${PERIODS.map(([k, l]) =>
+  `<a class="btn ${k === cur ? 'primary' : ''}" href="#/${base}${base.includes('?') ? '&' : '?'}period=${k}">${l}</a>`).join('')}</div>`;
+const backupDoneToday = () => localStorage.getItem('mpc_backup_day') === today();
 
 // ------------------------------------------------------------------ server calls
 async function api(path, { method = 'GET', body, raw, type } = {}) {
@@ -155,20 +160,31 @@ function counterFromUrl() {
 const myCounter = () => localStorage.getItem('mpc_counter') || '';
 function pickCounter(after) {
   const d = modal(`<h3>Which counter is this PC?</h3><p class="muted">Each counter has its own shift and cash drawer. This is remembered on this PC.</p>
-    <div class="cards">${App.counters.map((c) => `<button class="big" data-c="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <div class="cards">${App.counters.map((c) => `<button class="big ${c === myCounter() ? 'primary' : ''}" data-c="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    ${can('reopen_shift') ? `<form id="addc" class="row"><input name="name" placeholder="New counter name" value="Counter ${App.counters.length + 1}" style="max-width:220px">
+      <button>+ Add counter</button></form>` : ''}
     <div class="actions"><button data-close>Close</button></div>`);
   $$('[data-c]', d).forEach((b) => b.addEventListener('click', () => {
     localStorage.setItem('mpc_counter', b.dataset.c);
+    const w = $('.who span'); if (w) w.textContent = b.dataset.c;
     d.close('ok');
     if (after) after();
   }));
+  if ($('#addc', d)) $('#addc', d).addEventListener('submit', (e) => { e.preventDefault(); submitting($('button', e.target), async () => {
+    const name = e.target.name.value.trim();
+    const r = await api('/counters', { method: 'POST', body: { counters: [...App.counters, name] } });
+    App.counters = r.counters;
+    toast(`${name} added.`);
+    d.close();
+    pickCounter(after);
+  }); });
 }
 
 // ------------------------------------------------------------------ frame, menu and routing
 const MENU = [
   ['bill', 'Billing', 'bill'], ['orders', 'Online orders', 'orders'], ['bills', 'Bills', 'bill'], ['returns', 'Returns', 'bill'],
   ['cash', 'Cash closing', 'cash'], ['customers', 'Customers & credit', 'customers'], ['products', 'Products & stock', 'stock_view'],
-  ['purchases', 'Purchases & suppliers', 'purchase'], ['dashboard', 'Owner dashboard', 'reports'], ['owner', 'Owner tools', 'reports'],
+  ['purchases', 'Purchases & suppliers', 'purchase'], ['dashboard', 'Dashboard', 'reports'], ['owner', 'Daily tools', 'daily'],
   ['reports', 'Reports', 'reports'], ['staff', 'Staff logins', 'users'], ['settings', 'Settings & backup', 'settings'],
   ['install', 'Install on this PC', null],
 ];
@@ -192,6 +208,8 @@ function frame() {
   if (App.installEvent) $$('.install-btn').forEach((b) => b.classList.add('show'));
   $$('.install-btn').forEach((b) => b.addEventListener('click', installApp));
   $('#menu-btn').addEventListener('click', () => $('#side').classList.toggle('open'));
+  markBackup();
+  if (window.matchMedia('(display-mode: standalone)').matches) { const a = $('.nav a[data-r="install"]'); if (a) a.innerHTML = 'Install on this PC <span class="ok">✓</span>'; }
   App.afterFrame.forEach((fn) => fn());
   $('#logout').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -199,6 +217,13 @@ function frame() {
     App.me = null;
     showLogin();
   });
+}
+
+// The settings menu shows a red dot until today's backup has been downloaded on this PC.
+function markBackup() {
+  const a = $('.nav a[data-r="settings"]');
+  if (!a || !can('backup')) return;
+  a.innerHTML = `Settings & backup ${backupDoneToday() ? '<span class="dot ok-dot" title="Backup downloaded today"></span>' : '<span class="dot bad-dot" title="Download today\'s backup"></span>'}`;
 }
 
 async function route() {
@@ -352,29 +377,37 @@ async function printBill(bill, reprint = false) {
 // ================================================================== Bills (recent bills, reprint)
 App.views.bills = async (main) => {
   main.innerHTML = `<h1>Bills</h1><div class="row" style="margin-bottom:10px">
-    <input id="bq" placeholder="Bill number, customer name or mobile" style="max-width:320px">
-    <input id="bd" type="date" value="${today()}" style="max-width:170px">
+    <input id="bq" placeholder="Bill number, customer name or mobile" style="max-width:300px">
+    <select id="bp" style="max-width:160px">${PERIODS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}<option value="day">Pick a date…</option></select>
+    <input id="bd" type="date" value="${today()}" style="max-width:170px" hidden>
     ${can('reports') ? `<select id="bc" style="max-width:170px"><option value="">All counters</option>${App.counters.map((c) => `<option>${esc(c)}</option>`).join('')}</select>` : ''}
-  </div><div id="blist"></div>`;
+  </div><div id="bsum" class="muted small"></div><div id="blist"></div>`;
   const load = async () => {
-    const qs = new URLSearchParams({ q: $('#bq').value, date: $('#bd').value, counter: can('reports') ? $('#bc').value : myCounter() });
+    const period = $('#bp').value;
+    $('#bd').hidden = period !== 'day';
+    const qs = new URLSearchParams({ q: $('#bq').value, ...(period === 'day' ? { date: $('#bd').value } : { period }),
+      counter: can('reports') ? $('#bc').value : myCounter() });
     const { bills } = await api(`/bills?${qs}`);
-    $('#blist').innerHTML = bills.length ? `<table><tr><th>Bill</th><th>Time</th><th class="hide-sm">Counter</th><th class="hide-sm">Cashier</th>
+    const sum = bills.reduce((a, b) => a + Money.paise(b.total), 0);
+    $('#bsum').textContent = bills.length ? `${bills.length} bills · ${inr(sum)}${bills.length >= 500 ? ' (latest 500 shown)' : ''}` : '';
+    $('#blist').innerHTML = bills.length ? `<div class="tablewrap"><table><tr><th>Bill</th><th>Date & time</th><th class="hide-sm">Counter</th><th class="hide-sm">Cashier</th>
       <th>Customer</th><th>Paid by</th><th class="r">Total</th></tr>${bills.map((b) => `<tr class="click" data-id="${b.id}">
-      <td>${esc(b.bill_no)}</td><td>${esc(b.created_at.slice(11, 16))}</td><td class="hide-sm">${esc(b.counter)}</td><td class="hide-sm">${esc(b.cashier)}</td>
-      <td>${esc(b.customer || '')}</td><td>${esc((b.methods || '').toUpperCase())}</td><td class="r">${inr(b.total)}</td></tr>`).join('')}</table>`
+      <td>${esc(b.bill_no)}</td><td>${esc(b.created_at.slice(0, 16))}</td><td class="hide-sm">${esc(b.counter)}</td><td class="hide-sm">${esc(b.cashier)}</td>
+      <td>${esc(b.customer || '')}</td><td>${esc((b.methods || '').toUpperCase())}</td><td class="r">${inr(b.total)}</td></tr>`).join('')}</table></div>`
       : '<p class="muted">No bills.</p>';
     $$('#blist tr[data-id]').forEach((tr) => tr.addEventListener('click', () => showBill(tr.dataset.id)));
   };
   let t;
   $('#bq').addEventListener('input', () => { clearTimeout(t); t = setTimeout(load, 300); });
+  $('#bp').addEventListener('change', load);
   $('#bd').addEventListener('change', load);
   if ($('#bc')) $('#bc').addEventListener('change', load);
   await load();
 };
 async function showBill(id) {
   const { bill } = await api(`/bills/${id}`);
-  const d = modal(`<div style="display:flex;justify-content:center;background:#f7f9fc;border-radius:10px">${receiptHtml(bill)}</div>
+  if (typeof billPreview === 'function') { billPreview(bill, { reprint: true }); return; }
+  const d = modal(`<div class="preview">${receiptHtml(bill)}</div>
     <div class="actions"><button data-close>Close</button><button class="primary" id="rp">Print again</button></div>`);
   $('#rp', d).addEventListener('click', () => { d.close(); printBill(bill, true); });
 }
@@ -397,7 +430,7 @@ App.views.cash = async (main) => {
       <div class="card stat"><div class="l">Sales this shift</div><div class="v">${inr(summary.sales_total)}</div></div>
       <div class="card stat"><div class="l">Cash expected in drawer</div><div class="v">${inr(summary.expected)}</div></div></div>
       <div class="grid2"><div class="card"><h2 style="margin-top:0">Shift of ${esc(shift.cashier)} · opened ${esc(shift.opened_at.slice(0, 16))}</h2>
-        <table>${row('Opening cash', summary.float)}${row('+ Cash sales', summary.cash_sales)}${row('+ Cash in', summary.cash_in)}
+        <table>${row('Opening cash (checked at opening)', summary.float)}${row('+ Cash sales', summary.cash_sales)}${row('+ Cash in', summary.cash_in)}
         ${Number(summary.udhaar_received) ? row('&nbsp;&nbsp;(of which credit paid back)', summary.udhaar_received, 'muted') : ''}
         ${row('− Cash out', summary.cash_out)}${Number(summary.refunds) ? row('&nbsp;&nbsp;(of which refunds)', summary.refunds, 'muted') : ''}
         ${Number(summary.supplier_paid) ? row('&nbsp;&nbsp;(of which paid to suppliers)', summary.supplier_paid, 'muted') : ''}<tr><td><b>Cash expected</b></td><td class="r"><b>${inr(summary.expected)}</b></td></tr>
@@ -409,7 +442,7 @@ App.views.cash = async (main) => {
           <input name="reason" placeholder="Reason" style="flex:1" required><button>Save</button></form></div>
       <div class="card"><h2 style="margin-top:0">Close shift</h2><form id="close">
         <label>Cash counted in the drawer now (₹)</label><input name="counted" inputmode="decimal" required>
-        <label>Cash left in the drawer for the next shift (₹, empty = all of it)</label><input name="retained" inputmode="decimal">
+        <p class="small muted">The counted cash becomes the opening balance of the next shift on ${esc(counter)}; it is checked when the next shift opens.</p>
         <label>Note</label><input name="note" maxlength="200">
         <button class="primary big" style="margin-top:12px">Close shift</button></form><div id="closed"></div></div></div>`;
   }
@@ -435,7 +468,7 @@ App.views.cash = async (main) => {
       <tr><td>Cash expected</td><td class="r">${inr(result.expected)}</td></tr><tr><td>Cash counted</td><td class="r">${inr(result.counted)}</td></tr>
       <tr><td><b>${v === 0 ? 'Matches' : v > 0 ? 'Extra cash' : 'Short'}</b></td><td class="r ${v === 0 ? 'ok' : 'bad'}"><b>${inr(result.variance)}</b></td></tr>
       <tr><td>UPI</td><td class="r">${inr(result.upi)}</td></tr><tr><td>Card</td><td class="r">${inr(result.card)}</td></tr>
-      <tr><td>Left in drawer</td><td class="r">${inr(result.retained)}</td></tr></table>
+      <tr><td>Opening balance for the next shift</td><td class="r">${inr(result.counted)}</td></tr></table>
       <div class="row" style="margin-top:12px"><button class="primary" id="again">Open next shift</button></div></div>`;
     $('#again').addEventListener('click', route);
   }); });
@@ -453,7 +486,7 @@ App.views.cash = async (main) => {
 App.views.products = async (main) => {
   main.innerHTML = `<h1>Products & stock</h1>
     <div class="row" style="margin-bottom:10px">
-      <input id="pq" placeholder="Search name, Tamil name, barcode, SKU or PLU" style="max-width:360px" autofocus>
+      <input id="pq" placeholder="Scan a barcode or type name / code – Enter opens it" style="max-width:380px" autofocus>
       <select id="ps" style="max-width:200px"><option value="all">All products</option><option value="active">Selling now</option>
         <option value="inactive">Not selling (no price)</option><option value="low">Low stock</option></select>
       ${can('products') ? '<button class="primary" id="padd">+ Add product</button><button id="pimp">Import CSV</button>' : ''}
@@ -479,6 +512,18 @@ App.views.products = async (main) => {
   $('#pq').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => load(), 300); });
   $('#ps').addEventListener('change', () => load());
   if ($('#padd')) $('#padd').addEventListener('click', () => productDialog(null, () => load()));
+  // Scan or type + Enter: open the product; a new barcode opens "Add product" with the barcode filled in
+  $('#pq').addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const v = $('#pq').value.trim();
+    if (!v) return;
+    const { items } = await api(`/products?q=${encodeURIComponent(v)}`);
+    const exact = items.find((i) => i.codes.includes(v) || i.sku === v || i.plu === v) || (items.length === 1 ? items[0] : null);
+    if (exact) { productDialog(exact.id, () => load()); return; }
+    if (/^\d{6,14}$/.test(v) && can('products')) { productDialog(null, () => load(), { barcode: v }); return; }
+    load();
+  });
   if ($('#pimp')) $('#pimp').addEventListener('click', () => importDialog(() => load()));
   await load();
 };
@@ -503,24 +548,53 @@ async function productDialog(id, onSaved, preset = {}) {
       <div class="grid3"><div><label>Category</label><input name="cat" value="${esc(item.cat)}" list="catlist"></div>
         <div><label>PLU (loose items)</label><input name="plu" inputmode="numeric" value="${esc(item.plu)}"></div>
         <div><label>Reorder when stock ≤</label><input name="reorder_level" inputmode="decimal" value="${esc(item.reorder_level)}"></div></div>
-      <label>Barcodes (comma between)</label><input name="codes" value="${esc(item.codes.join(', '))}">
+      <label>Barcodes – click here and scan (each scan is added)</label>
+      <div class="row"><input id="bcscan" placeholder="Scan the barcode here" autocomplete="off" style="flex:1"><button type="button" id="bcadd">Add</button></div>
+      <div id="bclist" class="chips-list"></div><input type="hidden" name="codes" value="${esc(item.codes.join(','))}">
       ${id ? '' : `<div class="grid2"><div><label>Stock now (opening)</label><input name="opening_qty" inputmode="decimal" placeholder="0"></div>
         <div><label>Purchase cost ₹ (per piece / kg)</label><input name="cost" inputmode="decimal"></div></div>`}
       <label class="row" style="font-weight:400"><input type="checkbox" name="active" style="width:auto" ${item.active ? 'checked' : ''}> Selling (shows at the counter)</label>
       ${id ? `<p>Stock now: <b>${esc(item.on_hand)} ${esc(item.unit)}</b> · SKU ${esc(item.sku)}</p>` : ''}
       <div class="actions">
-        ${id && can('receive') ? '<button type="button" id="sin">+ Stock in</button>' : ''}
+        ${id && can('receive') ? '<button type="button" id="sin">Stock (add / count)</button>' : ''}
         ${id && can('products') ? '<button type="button" class="danger" id="woff">Write off</button>' : ''}
         <button type="button" data-close>Close</button>${editable ? '<button class="primary">Save</button>' : ''}</div>
     </form>
     ${moves.length ? `<h3 style="margin-top:14px">Stock history</h3><div style="max-height:200px;overflow:auto"><table>${moves.map((m) => `<tr><td class="small">${esc(m.at.slice(0, 16))}</td>
       <td>${esc(m.kind)}</td><td class="r">${esc(Number(m.qty))}</td><td class="small">${esc(m.ref)} ${esc(m.reason)}</td><td class="small">${esc(m.who || '')}</td></tr>`).join('')}</table></div>` : ''}`);
   if (!editable) $$('input, select', $('#pf', d)).forEach((el) => { el.disabled = true; });
+  let codes = [...item.codes];
+  const drawCodes = () => {
+    $('#bclist', d).innerHTML = codes.map((c, i) => `<span class="chip">${esc(c)} <button type="button" data-x="${i}" title="Remove">×</button></span>`).join('') ||
+      '<span class="small muted">No barcode yet.</span>';
+    $('[name=codes]', d).value = codes.join(',');
+    $$('[data-x]', d).forEach((b) => b.addEventListener('click', () => { codes.splice(Number(b.dataset.x), 1); drawCodes(); }));
+  };
+  const addCode = async () => {
+    const v = $('#bcscan', d).value.trim();
+    if (!v) return;
+    $('#bcscan', d).value = '';
+    if (codes.includes(v)) { toast('Already added.'); return; }
+    const { items } = await api(`/products?q=${encodeURIComponent(v)}`);
+    const other = items.find((i) => i.codes.includes(v) && i.id !== id);
+    if (other) {
+      if (confirm(`Barcode ${v} already belongs to "${other.name}". Open that product instead?`)) { d.close(); productDialog(other.id, onSaved); }
+      return;
+    }
+    codes.push(v);
+    drawCodes();
+    toast(`Barcode ${v} added.`);
+  };
+  $('#bcscan', d).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addCode(); } });
+  $('#bcadd', d).addEventListener('click', addCode);
+  drawCodes();
   $('#pf', d).addEventListener('submit', (e) => {
     e.preventDefault();
     submitting($('button.primary', d), async () => {
       const f = formData(e.target);
-      f.codes = f.codes.split(',').map((c) => c.trim()).filter(Boolean);
+      const pending = $('#bcscan', d).value.trim();
+      if (pending && !codes.includes(pending)) codes.push(pending);
+      f.codes = codes;
       if (id) f.id = id;
       if (preset.approval) f.approval = preset.approval;
       const r = await api('/products', { method: 'POST', body: f });
@@ -534,24 +608,43 @@ async function productDialog(id, onSaved, preset = {}) {
 }
 
 function stockDialog(item, mode, onDone) {
-  const d = modal(`<h3>${mode === 'in' ? 'Stock in' : 'Write off'}: ${esc(item.name)}</h3>
-    <p class="muted">Stock now: ${esc(item.on_hand)} ${esc(item.unit)}</p>
-    <form>${mode === 'in' ? `<div class="grid2"><div><label>Quantity received (${esc(item.unit)})</label><input name="qty" inputmode="decimal" required autofocus></div>
-      <div><label>Cost per ${item.unit === 'kg' ? 'kg' : 'piece'} ₹</label><input name="cost" inputmode="decimal" value="${esc(Number(item.cost) ? item.cost : '')}"></div></div>
-      <div class="grid2"><div><label>Expiry date (if any)</label><input name="expiry" type="date"></div><div><label>Supplier bill no. / note</label><input name="ref"></div></div>`
-    : `<label>Quantity to remove (${esc(item.unit)})</label><input name="qty" inputmode="decimal" required autofocus>
-      <label>Reason</label><select name="reason"><option>Damaged</option><option>Expired</option><option>Spoiled / rotten</option><option>Theft / missing</option><option>Own use</option></select>`}
+  const now = Money.milli(String(item.on_hand)) || 0;
+  const d = modal(mode === 'in' ? `<h3>Stock: ${esc(item.name)}</h3>
+    <div class="cards"><div class="card stat"><div class="l">Available now</div><div class="v">${esc(item.on_hand)} <span class="small">${esc(item.unit)}</span></div></div>
+      <div class="card stat"><div class="l">After saving</div><div class="v" id="after">${esc(item.on_hand)}</div></div></div>
+    <div class="cats"><button type="button" class="on" data-m="add">Add stock</button><button type="button" data-m="count">Correct the count</button></div>
+    <form id="sadd"><div class="grid2"><div><label>Add quantity (${esc(item.unit)})</label><input name="qty" inputmode="decimal" required autofocus></div>
+      <div><label>Cost per ${item.unit === 'kg' ? 'kg' : 'piece'} ₹</label><input name="cost" inputmode="decimal" value="${esc(Number(item.cost) ? Number(item.cost).toFixed(2) : '')}"></div></div>
+      <div class="grid2"><div><label>Expiry date (if any)</label><input name="expiry" type="date"></div><div><label>Supplier bill no. / note</label><input name="ref"></div></div>
+      <div class="actions"><button type="button" data-close>Cancel</button><button class="primary">Add to stock</button></div></form>
+    <form id="scount" hidden><label>Quantity counted on the shelf now (${esc(item.unit)})</label><input name="count" inputmode="decimal" required>
+      <p class="small muted">The stock is set to this number; the difference is recorded as "stock count".</p>
+      <div class="actions"><button type="button" data-close>Cancel</button><button class="primary">Set stock</button></div></form>`
+    : `<h3>Write off: ${esc(item.name)}</h3><p class="muted">Stock now: ${esc(item.on_hand)} ${esc(item.unit)}</p>
+    <form><label>Quantity to remove (${esc(item.unit)})</label><input name="qty" inputmode="decimal" required autofocus>
+      <label>Reason</label><select name="reason"><option>Damaged</option><option>Expired</option><option>Spoiled / rotten</option><option>Theft / missing</option><option>Own use</option></select>
     <div class="actions"><button type="button" data-close>Cancel</button><button class="primary">Save</button></div></form>`);
-  $('form', d).addEventListener('submit', (e) => {
-    e.preventDefault();
-    submitting($('button.primary', d), async () => {
-      const f = { ...formData(e.target), item_id: item.id };
-      await api(mode === 'in' ? '/stock/receive' : '/stock/writeoff', { method: 'POST', body: f });
-      toast('Stock updated.');
-      d.close('ok');
-      if (onDone) onDone();
-    });
-  });
+  const done = () => { toast('Stock updated.'); d.close('ok'); if (onDone) onDone(); };
+  if (mode !== 'in') {
+    $('form', d).addEventListener('submit', (e) => { e.preventDefault(); submitting($('button.primary', d), async () => {
+      await api('/stock/writeoff', { method: 'POST', body: { ...formData(e.target), item_id: item.id } }); done();
+    }); });
+    return;
+  }
+  const after = (v) => { $('#after', d).textContent = v; };
+  $('#sadd [name=qty]', d).addEventListener('input', (e) => { const q = Money.milli(e.target.value); after(q ? Money.qty(now + q) : item.on_hand); });
+  $('#scount [name=count]', d).addEventListener('input', (e) => { const q = Money.milli(e.target.value); after(q !== null ? Money.qty(q) : item.on_hand); });
+  $$('[data-m]', d).forEach((b) => b.addEventListener('click', () => {
+    $$('[data-m]', d).forEach((x) => x.classList.toggle('on', x === b));
+    $('#sadd', d).hidden = b.dataset.m !== 'add'; $('#scount', d).hidden = b.dataset.m !== 'count';
+    after(item.on_hand); $(`#${b.dataset.m === 'add' ? 'sadd' : 'scount'} input`, d).focus();
+  }));
+  $('#sadd', d).addEventListener('submit', (e) => { e.preventDefault(); submitting($('#sadd button.primary', d), async () => {
+    await api('/stock/receive', { method: 'POST', body: { ...formData(e.target), item_id: item.id } }); done();
+  }); });
+  $('#scount', d).addEventListener('submit', (e) => { e.preventDefault(); submitting($('#scount button.primary', d), async () => {
+    await api('/stock/count', { method: 'POST', body: { count: e.target.count.value, item_id: item.id } }); done();
+  }); });
 }
 
 function importDialog(onDone) {
@@ -573,34 +666,43 @@ function importDialog(onDone) {
 
 // ================================================================== Owner dashboard (works on the phone)
 App.views.dashboard = async (main) => {
-  const date = (location.hash.match(/date=(\d{4}-\d{2}-\d{2})/) || [])[1] || today();
-  const d = await api(`/dashboard?date=${date}`);
-  const max = Math.max(1, ...d.week.map((w) => Number(w.total)));
+  const period = (location.hash.match(/period=(\w+)/) || [])[1] || 'today';
+  const d = await api(`/dashboard?period=${period}`);
   const m = Object.fromEntries(d.methods.map((x) => [x.method, x.amount]));
-  main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Owner dashboard</h1>
-    <input type="date" id="dd" value="${date}" style="max-width:170px"></div>
+  const ch = Object.fromEntries(d.channels.map((x) => [x.channel, x]));
+  const max = Math.max(1, ...d.trend.map((w) => Number(w.total)));
+  const label = PERIODS.find((p) => p[0] === period)[1];
+  const bar = (lab, v, n) => `<div class="barrow"><span class="bl">${esc(lab)}</span><span class="bb"><span style="width:${Math.round(Number(v) / max * 100)}%"></span></span>
+    <span class="bv">${inr(v)}<span class="small muted"> · ${n}</span></span></div>`;
+  main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Dashboard · ${esc(label)}</h1><span class="muted small">${esc(d.from)}${d.from !== d.to ? ` to ${esc(d.to)}` : ''}</span></div>
+    ${periodChips(period, 'dashboard')}
     <div class="cards">
-      <div class="card stat"><div class="l">Sales</div><div class="v">${inr(d.total)}</div></div>
-      <div class="card stat"><div class="l">Bills</div><div class="v">${d.bills}</div><div class="l">Average ${inr(d.average)}</div></div>
-      <div class="card stat"><div class="l">Gross profit</div><div class="v">${inr(d.profit)}</div><div class="l">from purchase cost</div></div>
-      <div class="card stat"><div class="l">Cash · UPI · Card</div><div class="small" style="margin-top:6px">${inr(m.cash || 0)} · ${inr(m.upi || 0)} · ${inr(m.card || 0)}</div>
-        <div class="l">Discounts ${inr(d.discount)}</div></div>
-      <div class="card stat"><div class="l">Low stock</div><div class="v ${d.low_stock ? 'warn' : ''}">${d.low_stock}</div><a href="#/products" class="small">See products</a></div>
+      <div class="card stat big1"><div class="l">Sales (after returns)</div><div class="v">${inr(d.net)}</div><div class="l">${d.bills} bills · average ${inr(d.average)}</div></div>
+      <div class="card stat"><div class="l">Profit</div><div class="v ok">${inr(d.profit)}</div><div class="l">${d.margin_pct}% of sales</div></div>
+      <div class="card stat"><div class="l">In the shop · Online</div><div class="small" style="margin-top:6px"><b>${inr((ch.store || {}).total || 0)}</b> (${(ch.store || {}).bills || 0})
+        · <b>${inr((ch.online || {}).total || 0)}</b> (${(ch.online || {}).bills || 0})</div><div class="l">${d.orders.total} online orders · ${d.orders.open} open</div></div>
+      <div class="card stat"><div class="l">Cash · UPI · Card · Credit</div><div class="small" style="margin-top:6px">${inr(m.cash || 0)} · ${inr(m.upi || 0)} · ${inr(m.card || 0)} · ${inr(m.credit || 0)}</div>
+        <div class="l">Returns ${inr(d.returns)} · Discounts ${inr(d.discount)}</div></div>
+      <div class="card stat"><div class="l">Needs attention</div><div class="small" style="margin-top:6px">
+        <a href="#/products">${d.low_stock} low stock</a> · <a href="#/reports?r=expiry">${d.expiring} expiring in 7 days</a></div></div>
     </div>
     <div class="grid2">
-      <div class="card"><h2 style="margin-top:0">Counters</h2><table>${d.counters.map((c) => `<tr><td>${esc(c.counter)}</td><td class="r">${c.bills} bills</td><td class="r">${inr(c.total)}</td></tr>`).join('') || '<tr><td class="muted">No bills</td></tr>'}</table>
-        <h2>Shifts</h2><table>${d.shifts.map((s) => `<tr><td>${esc(s.counter)}</td><td>${esc(s.cashier)}</td><td>${s.status === 'open' ? '<span class="pill">open</span>' :
-          `<span class="${Number(s.variance) ? 'bad' : 'ok'}">${inr(s.variance || 0)}</span>`}</td></tr>`).join('') || '<tr><td class="muted">None</td></tr>'}</table></div>
-      <div class="card"><h2 style="margin-top:0">Last 7 days</h2>${d.week.map((w) => `<div class="row small" style="flex-wrap:nowrap"><span style="width:80px">${esc(w.d.slice(5))}</span>
-        <span style="flex:1;background:var(--soft);border-radius:6px;height:16px"><span style="display:block;height:16px;border-radius:6px;background:var(--brand-2);width:${Math.round(Number(w.total) / max * 100)}%"></span></span>
-        <span style="width:100px" class="r">${inr(w.total)}</span></div>`).join('') || '<p class="muted">No sales yet</p>'}
-        <h2>Top products</h2><table>${d.top.map((t) => `<tr><td>${esc(t.name)}</td><td class="r">${esc(t.qty)} ${esc(t.unit)}</td><td class="r">${inr(t.amount)}</td></tr>`).join('') || '<tr><td class="muted">No sales</td></tr>'}</table></div>
+      <div class="card"><h2 style="margin-top:0">${d.trend_kind === 'hour' ? 'Sales by hour' : 'Sales by day'}</h2>
+        ${d.trend.map((w) => bar(d.trend_kind === 'hour' ? `${w.label}:00` : String(w.label).slice(5), w.total, w.bills)).join('') || '<p class="muted">No sales.</p>'}
+        <h2>Counters</h2>${d.counters.map((c) => bar(c.counter, c.total, `${c.bills} bills`)).join('') || '<p class="muted">No bills.</p>'}</div>
+      <div class="card"><h2 style="margin-top:0">Top 10 products</h2><div class="tablewrap"><table><tr><th>#</th><th>Product</th><th class="r">Qty</th><th class="r">Sales</th><th class="r">Profit</th></tr>
+        ${d.top.map((t, i) => `<tr><td>${i + 1}</td><td>${esc(t.name)}</td><td class="r">${esc(t.qty)} ${esc(t.unit)}</td><td class="r">${inr(t.amount)}</td><td class="r ok">${inr(t.profit)}</td></tr>`).join('')
+          || '<tr><td colspan="5" class="muted">No sales</td></tr>'}</table></div></div>
     </div>
-    <h2>Watch list: price changes, discounts, reprints, cash out, write-offs</h2>
-    <div class="card" style="padding:0;overflow:auto">${d.risky.length ? `<table>${d.risky.map((a) => `<tr><td class="small">${esc(a.at.slice(11, 16))}</td><td>${esc(a.action.replace('_', ' '))}</td>
-      <td>${esc(a.summary)}</td><td class="small">${esc(a.who || '')}${a.approver ? ` (OK: ${esc(a.approver)})` : ''}</td></tr>`).join('')}</table>` : '<p class="muted" style="padding:12px">Nothing unusual.</p>'}</div>`;
-  $('#dd').addEventListener('change', (e) => { location.hash = `#/dashboard?date=${e.target.value}`; });
-  const timer = setInterval(() => { if (document.visibilityState === 'visible' && !$('dialog')) route(); }, 60000);
+    <h2>Counter cash (opening · expected · counted)</h2>
+    <div class="card" style="padding:0"><div class="tablewrap"><table><tr><th>Counter</th><th>Cashier</th><th>Opened</th><th class="r">Opening</th><th class="r">Expected</th><th class="r">Counted</th><th class="r">Difference</th></tr>
+      ${d.shifts.map((s) => `<tr><td>${esc(s.counter)}</td><td>${esc(s.cashier)}</td><td class="small">${esc(String(s.opened_at).slice(0, 16))}</td><td class="r">${inr(s.opening_float)}</td>
+        <td class="r">${s.expected ? inr(s.expected) : '<span class="pill">open</span>'}</td><td class="r">${s.counted ? inr(s.counted) : ''}</td>
+        <td class="r ${Number(s.variance) ? 'bad' : 'ok'}">${s.variance !== null ? inr(s.variance) : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No shifts.</td></tr>'}</table></div></div>
+    <h2>Watch list</h2>
+    <div class="card" style="padding:0"><div class="tablewrap">${d.risky.length ? `<table>${d.risky.map((a) => `<tr><td class="small">${esc(String(a.at).slice(5, 16))}</td><td>${esc(a.action.replace(/_/g, ' '))}</td>
+      <td>${esc(a.summary)}</td><td class="small">${esc(a.who || '')}${a.approver ? ` (OK: ${esc(a.approver)})` : ''}</td></tr>`).join('')}</table>` : '<p class="muted" style="padding:12px">Nothing unusual.</p>'}</div></div>`;
+  const timer = setInterval(() => { if (document.visibilityState === 'visible' && !$('dialog[open]')) route(); }, 60000);
   App.leave = () => clearInterval(timer);
 };
 
@@ -645,15 +747,14 @@ App.views.settings = async (main) => {
       <div class="grid3">${f('gstin', 'GSTIN')}${f('fssai', 'FSSAI licence')}${f('invoice_prefix', 'Bill number prefix', 'maxlength="6"')}</div>
       <div class="grid2">${f('bill_footer', 'Bill footer')}<div><label>Bill paper width</label><select name="receipt_width">
         <option value="80">80 mm</option><option value="58" ${s.receipt_width === '58' ? 'selected' : ''}>58 mm</option></select></div></div>
-      <h2>Counters</h2>${f('counters', 'Counter names (comma between)')}
+      <h2>Counters</h2>${f('counters', 'Counter names (comma between) – add more here or from the counter button in Billing')}
       <label class="row" style="font-weight:400"><input type="checkbox" name="require_tax_setup" style="width:auto" ${s.require_tax_setup === '1' ? 'checked' : ''}>
         Stop billing products whose GST type is "Not set yet" (turn on after the accountant checks the GST data)</label>
-      <label class="row" style="font-weight:400"><input type="checkbox" name="allow_negative_stock" style="width:auto" ${s.allow_negative_stock === '1' ? 'checked' : ''}>
-        <b>Allow billing when stock is not entered yet</b> (use while starting; stock entered later is set off against what was sold)</label>
       <h2>WhatsApp and UPI</h2>
       <div class="grid3"><div><label>Open WhatsApp in</label><select name="whatsapp_open"><option value="app">WhatsApp program (PC / phone)</option>
         <option value="web" ${s.whatsapp_open === 'web' ? 'selected' : ''}>WhatsApp Web (browser)</option></select></div>
         ${f('upi_id', 'Shop UPI ID (shown to online customers)', 'placeholder="shopname@okaxis"')}
+        ${f('owner_whatsapp', "Owner's WhatsApp number (daily summary)", 'inputmode="tel" placeholder="98xxxxxxxx"')}
         <div><label>&nbsp;</label><label class="row" style="font-weight:400"><input type="checkbox" name="whatsapp_bill" style="width:auto" ${s.whatsapp_bill === '1' ? 'checked' : ''}>
         Offer "WhatsApp bill" after each sale</label></div></div>
       <p class="small muted">WhatsApp bills are free: they open in the shop's own WhatsApp with the message ready; press Send. The paper bill always prints.</p>
@@ -676,7 +777,8 @@ App.views.settings = async (main) => {
     <div class="grid2" style="margin-top:14px">
       <div class="card"><h2 style="margin-top:0">Backup</h2><p class="small">Download a copy of everything (products, stock, bills, cash, staff) to this PC.
         Do it every evening and keep the files in Google Drive or a pen drive. Hostinger also keeps its own daily backups.</p>
-        ${can('backup') ? '<a class="btn primary" href="/api/backup">⬇ Download backup to this PC</a> <button id="bknow">Save a backup on the server now</button>' : ''}
+        ${can('backup') ? `<a class="btn big ${backupDoneToday() ? 'okbtn' : 'badbtn'}" id="bkdl" href="/api/backup">${backupDoneToday() ? '✓ Today\'s backup downloaded' : '⬇ Download today\'s backup'}</a>
+          <button id="bknow">Save a backup on the server now</button>` : ''}
         <div id="bklist" class="small" style="margin-top:10px"></div>
         <p class="small muted">To restore: Hostinger hPanel → Databases → phpMyAdmin → choose the database → Import → the backup file.</p></div>
       <div class="card"><h2 style="margin-top:0">Bring data from the shop PC</h2><p class="small">On the shop PC double-click <b>Export_For_Cloud.bat</b>.
@@ -701,6 +803,10 @@ App.views.settings = async (main) => {
       ${b.cron_url ? `<details style="margin-top:6px"><summary>Extra safety: Hostinger cron job</summary>hPanel → Advanced → Cron Jobs → Custom → every day 21:30 →
         command: <code style="word-break:break-all">curl -s "${esc(b.cron_url)}"</code></details>` : ''}`;
   };
+  if ($('#bkdl')) $('#bkdl').addEventListener('click', () => {
+    localStorage.setItem('mpc_backup_day', today());
+    setTimeout(() => { const b = $('#bkdl'); if (b) { b.className = 'btn big okbtn'; b.textContent = '✓ Today\'s backup downloaded'; } markBackup(); }, 800);
+  });
   if ($('#bklist')) {
     loadBackups().catch((e) => { $('#bklist').textContent = e.message; });
     $('#bknow').addEventListener('click', () => submitting($('#bknow'), async () => { await api('/backups', { method: 'POST', body: {} }); toast('Backup saved.'); loadBackups(); }));

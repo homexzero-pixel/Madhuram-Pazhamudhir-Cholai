@@ -94,6 +94,19 @@ r.post('/products/import', need('products'), express.text({ type: ['text/csv', '
 }));
 
 r.post('/stock/receive', need('receive'), wrap(async (req, res) => ok(res, { on_hand: await catalog.receive(req.body, req.user) })));
+r.get('/stock/now', need('bill'), wrap(async (req, res) => ok(res, { stock: await catalog.stockNow() })));
+r.post('/stock/count', need('receive'), wrap(async (req, res) => ok(res, { on_hand: await catalog.setCount(req.body, req.user) })));
+// add or remove counters (owner / manager)
+r.post('/counters', need('reopen_shift'), wrap(async (req, res) => {
+  const list = [...new Set((Array.isArray(req.body.counters) ? req.body.counters : []).map((c) => String(c).trim().slice(0, 20)).filter(Boolean))];
+  if (!list.length) throw new UserError('Keep at least one counter.');
+  if (list.some((c) => c.includes(','))) throw new UserError('A counter name cannot contain a comma.');
+  const open = (await db.query("SELECT counter FROM shifts WHERE status='open'")).map((r) => r.counter).filter((c) => !list.includes(c));
+  if (open.length) throw new UserError(`${open.join(', ')} still has an open shift. Close it before removing the counter.`);
+  await settings.save({ counters: list.join(',') });
+  await auth.audit({ user_id: req.user.id, action: 'settings', summary: `Counters: ${list.join(', ')}` });
+  ok(res, { counters: list });
+}));
 r.post('/stock/writeoff', need('products'), wrap(async (req, res) => { await catalog.writeOff(req.body, req.user); ok(res); }));
 
 // ------------------------------------------------------------------ billing
@@ -103,7 +116,8 @@ r.post('/checkout', need('bill'), wrap(async (req, res) => ok(res, { bill: await
 
 r.get('/bills', need('bill'), wrap(async (req, res) => {
   const mine = !auth.can(req.user, 'reports');       // cashiers see only their counter's bills
-  ok(res, { bills: await billing.recentBills({ q: String(req.query.q || '').slice(0, 30), date: req.query.date,
+  const [from, to] = req.query.period ? require('../money').periodRange(req.query.period) : ['', ''];
+  ok(res, { bills: await billing.recentBills({ q: String(req.query.q || '').slice(0, 30), date: req.query.period ? '' : req.query.date, from, to,
     counter: mine ? String(req.query.counter || '') || '-' : String(req.query.counter || '') }) });
 }));
 r.get('/bills/:id', need('bill'), wrap(async (req, res) => ok(res, { bill: await billing.receipt(req.params.id) })));
@@ -116,7 +130,7 @@ r.post('/bills/:id/printed', need('bill'), wrap(async (req, res) => {
 r.get('/shift', need('bill'), wrap(async (req, res) => {
   const counter = billing.cleanCounter(req.query.counter);
   const shift = await billing.openShift(counter);
-  ok(res, { shift, summary: shift ? await billing.cashSummary(shift.id) : null });
+  ok(res, { shift, summary: shift ? await billing.cashSummary(shift.id) : null, last_closed: shift ? null : await billing.lastClosed(counter) });
 }));
 r.post('/shift/open', need('cash'), wrap(async (req, res) => ok(res, { id: await billing.startShift(req.user, req.body.counter, req.body.float) })));
 r.post('/shift/close', need('cash'), wrap(async (req, res) => {
@@ -133,7 +147,10 @@ r.get('/shifts', need('reports'), wrap(async (req, res) => {
 }));
 
 // ------------------------------------------------------------------ owner
-r.get('/dashboard', need('reports'), wrap(async (req, res) => ok(res, await admin.dashboard(req.query.date))));
+r.get('/dashboard', need('reports'), wrap(async (req, res) => {
+  const q = req.query.date ? { from: req.query.date, to: req.query.date } : req.query;
+  ok(res, await admin.dashboard(q));
+}));
 r.get('/audit', need('reports'), wrap(async (req, res) => ok(res, { rows: await admin.auditLog(req.query) })));
 
 r.get('/settings', need('settings'), wrap(async (req, res) => ok(res, { settings: await settings.publicSettings() })));

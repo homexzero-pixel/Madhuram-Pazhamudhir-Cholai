@@ -62,27 +62,47 @@ async function saveUser(data, actor) {
 }
 
 // ------------------------------------------------------------------ owner dashboard
-async function dashboard(date) {
-  date = /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? date : todayIST();
-  const t = await db.one('SELECT COUNT(*) n, SUM(total) total, SUM(discount) disc FROM sales WHERE business_date=?', [date]);
-  const profit = await db.one('SELECT SUM(l.net - l.cost) p FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE x.business_date=?', [date]);
-  const methods = await db.query(`SELECT p.method, SUM(p.amount) amount FROM payments p JOIN sales x ON x.id=p.sale_id
-    WHERE x.business_date=? GROUP BY p.method`, [date]);
-  const counters = await db.query(`SELECT counter, COUNT(*) bills, SUM(total) total FROM sales WHERE business_date=? GROUP BY counter ORDER BY counter`, [date]);
-  const top = await db.query(`SELECT l.name, l.unit, SUM(l.qty) qty, SUM(l.net) amount FROM sale_lines l JOIN sales x ON x.id=l.sale_id
-    WHERE x.business_date=? AND l.sku <> 'DELIVERY' GROUP BY l.item_id, l.name, l.unit ORDER BY amount DESC LIMIT 10`, [date]);
-  const week = await db.query(`SELECT business_date d, COUNT(*) bills, SUM(total) total FROM sales WHERE business_date > DATE_SUB(?, INTERVAL 7 DAY)
-    AND business_date <= ? GROUP BY business_date ORDER BY business_date`, [date, date]);
-  const shifts = await db.query(`SELECT s.id, s.counter, s.status, s.opened_at, s.variance, u.name cashier FROM shifts s JOIN users u ON u.id=s.cashier_id
-    WHERE s.status='open' OR s.business_date=? ORDER BY s.status DESC, s.counter`, [date]);
-  const low = await db.one('SELECT COUNT(*) n FROM items WHERE active=1 AND on_hand <= reorder_level');
+// Owner dashboard for any period: totals, profit, cash/UPI/card/credit, store vs online, counters, trend, top 10, shifts, alerts.
+async function dashboard(query) {
+  const { periodRange } = require('./money');
+  if (typeof query === 'string') query = { from: query, to: query };
+  const ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+  const [from, to] = ok(query.from) && ok(query.to) ? [query.from, query.to] : periodRange(query.period || 'today');
+  const W = 'x.business_date BETWEEN ? AND ?';
+  const R = [from, to];
+  const t = await db.one(`SELECT COUNT(*) n, COALESCE(SUM(total),0) total, COALESCE(SUM(discount),0) disc FROM sales x WHERE ${W}`, R);
+  const profit = await db.one(`SELECT COALESCE(SUM(l.net - l.cost),0) p FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE ${W}`, R);
+  const ret = await db.one('SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sale_returns WHERE business_date BETWEEN ? AND ?', R);
+  const methods = await db.query(`SELECT p.method, SUM(p.amount) amount FROM payments p JOIN sales x ON x.id=p.sale_id WHERE ${W} GROUP BY p.method`, R);
+  const channels = await db.query(`SELECT IF(x.order_id IS NULL, 'store', 'online') channel, COUNT(*) bills, SUM(x.total) total
+    FROM sales x WHERE ${W} GROUP BY channel`, R);
+  const counters = await db.query(`SELECT counter, COUNT(*) bills, SUM(total) total FROM sales x WHERE ${W} GROUP BY counter ORDER BY counter`, R);
+  const top = await db.query(`SELECT l.name, l.unit, SUM(l.qty) qty, SUM(l.net) amount, SUM(l.net - l.cost) profit FROM sale_lines l
+    JOIN sales x ON x.id=l.sale_id WHERE ${W} AND l.sku <> 'DELIVERY' GROUP BY l.item_id, l.name, l.unit ORDER BY amount DESC LIMIT 10`, R);
+  const oneDay = from === to;
+  const trend = oneDay
+    ? await db.query(`SELECT LPAD(HOUR(created_at),2,'0') label, COUNT(*) bills, SUM(total) total FROM sales x WHERE ${W} GROUP BY HOUR(created_at) ORDER BY label`, R)
+    : await db.query(`SELECT business_date label, COUNT(*) bills, SUM(total) total FROM sales x WHERE ${W} GROUP BY business_date ORDER BY business_date`, R);
+  const shifts = await db.query(`SELECT s.id, s.counter, s.status, s.opened_at, s.closed_at, s.opening_float, s.expected, s.counted, s.variance,
+    u.name cashier FROM shifts s JOIN users u ON u.id=s.cashier_id WHERE s.status='open' OR s.business_date BETWEEN ? AND ?
+    ORDER BY s.status DESC, s.id DESC LIMIT 40`, R);
+  const low = await db.one('SELECT COUNT(*) n FROM items WHERE active=1 AND reorder_level > 0 AND on_hand <= reorder_level');
+  const expiring = await db.one(`SELECT COUNT(*) n FROM lots WHERE qty > 0 AND status='sellable' AND expiry IS NOT NULL AND expiry <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)`);
+  const orders = await db.one(`SELECT COUNT(*) n, SUM(status='done') done, SUM(status='cancelled') cancelled,
+    SUM(status IN ('new','accepted','ready','out')) open FROM online_orders WHERE DATE(created_at) BETWEEN ? AND ?`, R);
   const risky = await db.query(`SELECT a.at, a.action, a.summary, a.value, u.name who, ap.name approver FROM audit a LEFT JOIN users u ON u.id=a.user_id
     LEFT JOIN users ap ON ap.id=a.approver_id WHERE a.at >= ? AND a.at < DATE_ADD(?, INTERVAL 1 DAY)
-    AND a.action IN ('price_override','discount','reprint','shift_close','write_off','cash_out','price_change') ORDER BY a.id DESC LIMIT 30`, [date, date]);
+    AND a.action IN ('price_override','discount','reprint','shift_close','write_off','cash_out','price_change','bill_cancel','refund','float_mismatch','credit_sale')
+    ORDER BY a.id DESC LIMIT 40`, R);
+  const net = paise(t.total) - paise(ret.t);
   return {
-    date, bills: Number(t.n), total: t.total || '0.00', discount: t.disc || '0.00', profit: profit.p || '0.00',
+    from, to, bills: Number(t.n), total: t.total, discount: t.disc, returns: ret.t, returns_n: Number(ret.n), net: rs(net), profit: profit.p,
+    margin_pct: net ? (paise(profit.p) * 100 / net).toFixed(1) : '0.0',
     average: t.n ? rs(Math.round(paise(t.total) / Number(t.n))) : '0.00',
-    methods, counters, top: top.map((r) => ({ ...r, qty: qtyStr(milli(r.qty)) })), week, shifts, low_stock: Number(low.n), risky,
+    methods, channels, counters, top: top.map((r) => ({ ...r, qty: qtyStr(milli(r.qty)) })), trend, trend_kind: oneDay ? 'hour' : 'day', shifts,
+    low_stock: Number(low.n), expiring: Number(expiring.n),
+    orders: { total: Number(orders.n), done: Number(orders.done || 0), cancelled: Number(orders.cancelled || 0), open: Number(orders.open || 0) },
+    risky,
   };
 }
 

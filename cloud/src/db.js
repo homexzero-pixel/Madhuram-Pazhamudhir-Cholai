@@ -58,6 +58,9 @@ const COLUMNS = [
   ['customers', 'credit_limit', 'DECIMAL(12,2) NOT NULL DEFAULT 0'],
   ['sale_lines', 'returned_qty', 'DECIMAL(12,3) NOT NULL DEFAULT 0'],
   ['sales', 'order_id', 'INT NULL'],
+  ['online_order_lines', 'ordered_qty', 'DECIMAL(12,3) NULL'],
+  ['online_order_lines', 'note', "VARCHAR(120) NOT NULL DEFAULT ''"],
+  ['online_orders', 'accepted_at', 'DATETIME NULL'],
 ];
 
 async function migrate() {

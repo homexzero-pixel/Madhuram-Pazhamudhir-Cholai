@@ -14,7 +14,8 @@ const DEFAULTS = {
   bill_footer: 'Thank you! Visit again. நன்றி, மீண்டும் வருக!',
   receipt_width: '80',
   require_tax_setup: '0',
-  counters: 'Counter 1,Counter 2,Counter 3,Counter 4,Counter 5,Counter 6',
+  counters: 'Counter 1,Counter 2,Counter 3',
+  owner_whatsapp: '',               // daily summary goes to this number
   scale_enabled: '0',
   scale_prefixes: '20,21,22,23,24,25,26,27,28,29',
   scale_item_start: '2',

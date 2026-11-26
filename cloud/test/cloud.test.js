@@ -170,7 +170,6 @@ test('shift, checkout with FEFO stock, GST, idempotency and receipt', async () =
   const bad = async (lines, payments, extra = {}) => (await cashier.post('/api/checkout', { uuid: uuid(), counter: c, lines, payments, ...extra })).data.error;
   assert.match(await bad([{ id: rice.id, qty: 1.5 }], [{ method: 'cash', amount: '112.5' }]), /whole number/);
   assert.match(await bad([{ id: rice.id, qty: 1 }], [{ method: 'cash', amount: '70' }]), /does not match/);
-  assert.match(await bad([{ id: rice.id, qty: 100 }], [{ method: 'cash', amount: '7500' }]), /Not enough stock/);
   assert.match(await bad([{ id: rice.id, qty: 1, rate: '60' }], [{ method: 'cash', amount: '60' }]), /manager must approve/);
   assert.equal((await db.one('SELECT COUNT(*) n FROM sales')).n, 1);   // nothing half-saved
 

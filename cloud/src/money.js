@@ -56,8 +56,29 @@ function nowIST(ms = Date.now()) {
 }
 const todayIST = () => nowIST().slice(0, 10);
 
+// Date range for a named period, in shop dates. Quarters and years follow the Indian financial year (April–March).
+function periodRange(name, today = todayIST()) {
+  const d = new Date(`${today}T00:00:00Z`);
+  const ymd = (x) => x.toISOString().slice(0, 10);
+  const add = (x, days) => new Date(x.getTime() + days * 86400000);
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const fyStart = m >= 3 ? y : y - 1;
+  switch (name) {
+    case 'yesterday': return [ymd(add(d, -1)), ymd(add(d, -1))];
+    case 'week': return [ymd(add(d, -((d.getUTCDay() + 6) % 7))), today];                // Monday to today
+    case 'last7': return [ymd(add(d, -6)), today];
+    case 'month': return [`${today.slice(0, 8)}01`, today];
+    case 'lastmonth': { const s = new Date(Date.UTC(y, m - 1, 1)); return [ymd(s), ymd(add(new Date(Date.UTC(y, m, 1)), -1))]; }
+    case 'quarter': { const qm = Math.floor(((m + 9) % 12) / 3) * 3; const sm = (qm + 3) % 12; const sy = sm > m ? y - 1 : y;
+      return [ymd(new Date(Date.UTC(sy, sm, 1))), today]; }
+    case 'year': return [`${fyStart}-04-01`, today];
+    default: return [today, today];
+  }
+}
+
 class UserError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; this.expose = true; }
 }
 
-module.exports = { divRound, paise, milli, rateBp, rs, qtyStr, qtyDb, lineAmount, splitTax, financialYear, nowIST, todayIST, UserError };
+module.exports = { periodRange, divRound, paise, milli, rateBp, rs, qtyStr, qtyDb, lineAmount, splitTax, financialYear, nowIST, todayIST, UserError };

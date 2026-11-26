@@ -18,7 +18,7 @@ async function priceList({ cat = '', q = '' } = {}) {
   const where = ["i.sku <> 'DELIVERY'"];
   const args = [];
   if (cat) { where.push('c.name=?'); args.push(cat); } else if (!q) where.push("i.unit='kg'");
-  if (q) { where.push('(i.name LIKE ? OR i.name_ta LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
+  if (q) { where.push('(i.name LIKE ? OR i.name_ta LIKE ? OR i.sku=? OR i.id IN (SELECT item_id FROM barcodes WHERE code=?))'); args.push(`%${q}%`, `%${q}%`, q, q); }
   const items = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, i.price, i.mrp, i.cost, i.on_hand, i.active, c.name cat
     FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE ${where.join(' AND ')} ORDER BY c.name, i.name LIMIT 300`, args);
   const cats = await db.query(`SELECT DISTINCT c.name FROM categories c JOIN items i ON i.category_id=c.id WHERE i.active=1 ORDER BY c.name`);
@@ -141,23 +141,37 @@ async function lossWatch(query) {
 }
 
 // ------------------------------------------------------------------ the day on one WhatsApp message
-async function dayText(day) {
-  day = /^\d{4}-\d{2}-\d{2}$/.test(day || '') ? day : todayIST();
+const PERIOD_NAMES = { today: 'Today', yesterday: 'Yesterday', week: 'This week', last7: 'Last 7 days', month: 'This month', lastmonth: 'Last month',
+  quarter: 'This quarter', year: 'This financial year' };
+
+async function dayText(query = {}) {
+  if (typeof query === 'string') query = { date: query };
+  const { periodRange } = require('./money');
+  const ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+  const [from, day] = ok(query.date) ? [query.date, query.date] : periodRange(query.period || 'today');
+  const single = from === day;
   const s = await settings.load();
-  const t = await reports.summary(day, day);
+  const t = await reports.summary(from, day);
   const m = await reports.summary(`${day.slice(0, 8)}01`, day);
-  const shifts = await db.query("SELECT counter, variance FROM shifts WHERE business_date=? AND status='closed'", [day]);
+  const shifts = await db.query("SELECT counter, variance FROM shifts WHERE business_date BETWEEN ? AND ? AND status='closed'", [from, day]);
+  const store = await db.one('SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE order_id IS NULL AND business_date BETWEEN ? AND ?', [from, day]);
+  const online = await db.one('SELECT COUNT(*) n, COALESCE(SUM(total),0) t FROM sales WHERE order_id IS NOT NULL AND business_date BETWEEN ? AND ?', [from, day]);
+  const counters = await db.query('SELECT counter, COUNT(*) n, SUM(total) t FROM sales WHERE business_date BETWEEN ? AND ? GROUP BY counter ORDER BY counter', [from, day]);
   const open = await db.query("SELECT counter FROM shifts WHERE status='open'");
-  const top = await db.query(`SELECT l.name, SUM(l.net) v FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE x.business_date=? AND l.sku <> 'DELIVERY'
-    GROUP BY l.name ORDER BY v DESC LIMIT 5`, [day]);
+  const top = await db.query(`SELECT l.name, SUM(l.net) v FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE x.business_date BETWEEN ? AND ? AND l.sku <> 'DELIVERY'
+    GROUP BY l.name ORDER BY v DESC LIMIT ${single ? 5 : 10}`, [from, day]);
   const low = Number((await db.one("SELECT COUNT(*) n FROM items WHERE active=1 AND reorder_level > 0 AND on_hand <= reorder_level")).n);
   const exp = Number((await db.one(`SELECT COUNT(*) n FROM lots WHERE qty > 0 AND status='sellable' AND expiry BETWEEN ? AND DATE_ADD(?, INTERVAL ? DAY)`,
     [day, day, Number(s.near_expiry_days) || 7])).n);
   const orders = Number((await db.one("SELECT COUNT(*) n FROM online_orders WHERE status IN ('new','accepted','ready','out')")).n);
-  const flags = (await lossWatch({ from: day, to: day })).rows.flatMap((r) => r.flags.map((f) => `${r.name}: ${f}`));
+  const flags = (await lossWatch({ from, to: day })).rows.flatMap((r) => r.flags.map((f) => `${r.name}: ${f}`));
   const variance = shifts.reduce((a, x) => a + paise(x.variance || '0'), 0);
-  const date = new Date(`${day}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+  const fmt = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const date = single ? new Date(`${day}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
+    : `${PERIOD_NAMES[query.period] || 'Period'} (${fmt(from)} to ${fmt(day)})`;
   const L = [`*${s.name} – ${date}*`, '', `Net sales: *${inr(paise(t.net))}* (${t.bills} bills, avg ${inr(paise(t.avg_bill))})`];
+  if (Number(online.n)) L.push(`Store ${inr(paise(store.t))} (${store.n}) · Online ${inr(paise(online.t))} (${online.n})`);
+  if (counters.length > 1) L.push(counters.map((c) => `${c.counter} ${inr(paise(c.t))}`).join(' · '));
   if (paise(t.returns)) L.push(`Returns: -${inr(paise(t.returns))}`);
   L.push(`Cash ${inr(paise(t.cash))} · UPI ${inr(paise(t.upi))} · Card ${inr(paise(t.card))}${paise(t.credit) ? ` · Credit ${inr(paise(t.credit))}` : ''}`);
   L.push(`Gross margin: ${inr(paise(t.margin))} (${t.margin_pct}%)`);
@@ -165,9 +179,9 @@ async function dayText(day) {
   if (paise(t.purchases)) L.push(`Purchases received: ${inr(paise(t.purchases))}`);
   L.push(shifts.length ? `Cash closing: ${shifts.length} counter(s), difference ${inr(variance)} ${variance === 0 ? '✅' : '⚠️'}` : 'Cash closing: no counter closed yet ⚠️');
   if (top.length) L.push('', 'Top sellers:', ...top.map((x) => `• ${x.name} ${inr(paise(x.v))}`));
-  L.push('', `This month so far: ${inr(paise(m.net))} net, margin ${inr(paise(m.margin))}`);
+  if (single) L.push('', `This month so far: ${inr(paise(m.net))} net, margin ${inr(paise(m.margin))}`);
   const alerts = [];
-  if (open.length && day === todayIST()) alerts.push(`still open: ${open.map((o) => o.counter).join(', ')}`);
+  if (open.length && day === todayIST() && single) alerts.push(`still open: ${open.map((o) => o.counter).join(', ')}`);
   if (low) alerts.push(`${low} products at or below reorder level (see Buy list)`);
   if (exp) alerts.push(`${exp} stock lots expire within ${s.near_expiry_days || 7} days`);
   if (orders) alerts.push(`${orders} online orders not completed`);

@@ -4,6 +4,7 @@ const db = require('./db');
 const { paise, milli, rs, qtyStr, todayIST, UserError } = require('./money');
 
 function range(q) {
+  if (q.period && !q.from) return require('./money').periodRange(q.period);
   const ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
   const to = ok(q.to) ? q.to : todayIST();
   const from = ok(q.from) ? q.from : `${to.slice(0, 8)}01`;

@@ -53,11 +53,12 @@ App.afterFrame.push(() => {
 // ================================================================== Online orders (staff)
 App.views.orders = async (main) => {
   const tab = hashParam('tab') || 'open';
+  if (tab === 'perf') return ordersPerformance(main);
   const { orders } = await api(`/orders?tab=${tab}`);
   main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Online orders</h1>
       <div class="row"><a class="btn" href="/shop/" target="_blank">Open customer page</a><button id="poster">QR poster for customers</button></div></div>
     ${App.settings.online_enabled !== '1' ? `<div class="notice">Online orders are switched off. Turn on in ${can('settings') ? '<a href="#/settings">Settings</a>' : 'Settings'} → Online orders.</div>` : ''}
-    ${tabs([['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All']], tab, 'orders')}
+    ${tabs([['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', '📈 Online performance']], tab, 'orders')}
     ${orders.length ? `<table><tr><th>Order</th><th>Slot</th><th>Customer</th><th class="hide-sm">Type</th><th>Status</th><th class="r">Approx.</th></tr>
       ${orders.map((o) => `<tr class="click" data-id="${o.id}"><td><b>${esc(o.number)}</b><div class="small muted">${o.items} items</div></td>
       <td>${esc(o.slot_label)}</td><td>${esc(o.name)}<div class="small muted">${esc(o.phone)}</div></td>
@@ -66,9 +67,25 @@ App.views.orders = async (main) => {
       <td class="r">${inr(Money.paise(o.est_items) + Money.paise(o.delivery_charge))}</td></tr>`).join('')}</table>` : '<p class="muted">No orders here.</p>'}`;
   $$('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => orderDialog(Number(tr.dataset.id))));
   $('#poster').addEventListener('click', posterPrint);
-  const t = setInterval(() => { if (!$('dialog') && document.visibilityState === 'visible') route(); }, 30000);
+  const t = setInterval(() => { if (!$('dialog[open]') && document.visibilityState === 'visible') route(); }, 30000);
   App.leave = () => clearInterval(t);
 };
+
+async function ordersPerformance(main) {
+  const period = hashParam('period') || 'month';
+  const p = await api(`/orders-stats?period=${period}`);
+  main.innerHTML = `<h1>Online orders</h1>${tabs([['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', '📈 Online performance']], 'perf', 'orders')}
+    ${periodChips(period, 'orders?tab=perf')}
+    <div class="cards">
+      <div class="card stat"><div class="l">Orders</div><div class="v">${p.orders}</div><div class="l">${p.delivery} delivery · ${p.pickup} takeaway</div></div>
+      <div class="card stat"><div class="l">Completed · billed</div><div class="v ok">${p.done}</div><div class="l">${inr(p.sales)} from ${p.billed} bills</div></div>
+      <div class="card stat"><div class="l">Cancelled</div><div class="v ${p.cancelled ? 'bad' : ''}">${p.cancelled}</div><div class="l">${p.open} still open</div></div>
+      <div class="card stat"><div class="l">Time to accept</div><div class="v">${p.accept_minutes === null ? '–' : `${p.accept_minutes} min`}</div><div class="l">average</div></div>
+      <div class="card stat"><div class="l">Items not available</div><div class="v ${p.removed_items ? 'warn' : ''}">${p.removed_items}</div><div class="l">${inr(p.removed_value)} not charged</div></div></div>
+    <div class="grid2"><div class="card"><h2 style="margin-top:0">Most ordered online</h2><table>${p.top.map((t) => `<tr><td>${esc(t.name)}</td><td class="r">${t.orders} orders</td><td class="r">${esc(t.qty)} ${esc(t.unit)}</td></tr>`).join('') || '<tr><td class="muted">No orders</td></tr>'}</table></div>
+      <div class="card"><h2 style="margin-top:0">Why orders were cancelled</h2><table>${p.cancel_reasons.map((c) => `<tr><td>${esc(c.reason || '(no reason)')}</td><td class="r">${c.n}</td></tr>`).join('') || '<tr><td class="muted">None</td></tr>'}</table></div></div>`;
+  return undefined;
+}
 
 async function orderDialog(id) {
   const { order: o, whatsapp } = await api(`/orders/${id}`);
@@ -77,8 +94,11 @@ async function orderDialog(id) {
     <p><b>${esc(o.name)}</b> · ${esc(o.phone)} · ${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}<br>${esc(o.slot_label)}
     ${o.address ? `<br>📍 ${esc(o.address)}` : ''}${o.notes ? `<br>Note: ${esc(o.notes)}` : ''}<br>Pays by ${o.pay_pref.toUpperCase()}
     ${o.bill_no ? `<br>Bill <b>${esc(o.bill_no)}</b> ${inr(o.bill_total)}` : ''}${o.status_note ? `<br><i>${esc(o.status_note)}</i>` : ''}</p>
-    <table>${o.lines.map((l) => `<tr><td>${esc(l.name)}<div class="small ta muted">${esc(l.name_ta)}</div></td><td class="r">${esc(l.qty)} ${esc(l.unit)}</td>
-      <td class="r">${inr(Money.line(Money.paise(l.price), Money.milli(l.qty)))}</td></tr>`).join('')}
+    <table>${o.lines.map((l) => `<tr class="${Number(l.qty) ? '' : 'struck'}"><td>${esc(l.name)}<div class="small ta muted">${esc(l.name_ta)}</div>
+      ${l.note ? `<div class="small warn">${esc(l.note)}${l.ordered_qty !== null ? ` (ordered ${esc(Number(l.ordered_qty))})` : ''}</div>` : ''}</td>
+      <td class="r">${esc(l.qty)} ${esc(l.unit)}</td><td class="r">${inr(Money.line(Money.paise(l.price), Money.milli(l.qty)))}</td>
+      <td class="r">${open && !o.sale_id ? `<button class="small" data-less="${l.id}" title="Less is available">Less</button>
+        ${Number(l.qty) ? `<button class="small danger" data-na="${l.id}" title="Not available – remove">Not available</button>` : ''}` : ''}</td></tr>`).join('')}
       ${Number(o.delivery_charge) ? `<tr><td>Delivery charge</td><td></td><td class="r">${inr(o.delivery_charge)}</td></tr>` : ''}
       <tr><td><b>Approx. total</b></td><td></td><td class="r"><b>${inr(o.est_total)}</b></td></tr></table>
     <div class="actions" style="justify-content:flex-start">
@@ -90,6 +110,19 @@ async function orderDialog(id) {
       <button id="opack">Print packing list</button>
       ${open ? '<button class="danger" data-s="cancelled">Cancel order</button>' : ''}
       <button data-close>Close</button></div>`);
+  const lineChange = async (lineId, qty) => {
+    const r = await api(`/orders/${id}/line`, { method: 'POST', body: { line_id: lineId, qty } });
+    d.close();
+    toast('Order changed. The customer is not charged for it – send them the WhatsApp update.');
+    window.open(waLink(r.whatsapp.phone, r.whatsapp.text), '_blank', 'noopener');
+    orderDialog(id);
+  };
+  $$('[data-na]', d).forEach((b) => b.addEventListener('click', () => submitting(b, () => lineChange(Number(b.dataset.na), '0'))));
+  $$('[data-less]', d).forEach((b) => b.addEventListener('click', () => submitting(b, async () => {
+    const q = prompt('How much is available? (0 = none)');
+    if (q === null) return;
+    await lineChange(Number(b.dataset.less), q.trim() || '0');
+  })));
   $$('[data-s]', d).forEach((b) => b.addEventListener('click', () => submitting(b, async () => {
     let note = '';
     if (b.dataset.s === 'cancelled') { note = prompt('Why is the order cancelled? (the customer sees this)') || ''; if (!note.trim()) return; }
@@ -102,7 +135,7 @@ async function orderDialog(id) {
   $('#opack', d).addEventListener('click', () => {
     $('#print-area').innerHTML = `<div class="receipt"><h2>${esc(o.number)} – packing list</h2><div>${esc(o.name)} ${esc(o.phone)}</div>
       <div>${esc(o.slot_label)} · ${o.mode === 'delivery' ? 'DELIVERY' : 'TAKEAWAY'}</div>${o.address ? `<div>${esc(o.address)}</div>` : ''}<hr>
-      <table>${o.lines.map((l) => `<tr><td>☐ ${esc(l.name)}<br><span class="ta">${esc(l.name_ta)}</span></td><td class="r">${esc(l.qty)} ${esc(l.unit)}</td></tr>`).join('')}</table>
+      <table>${o.lines.filter((l) => Number(l.qty)).map((l) => `<tr><td>☐ ${esc(l.name)}<br><span class="ta">${esc(l.name_ta)}</span></td><td class="r">${esc(l.qty)} ${esc(l.unit)}</td></tr>`).join('')}</table>
       <hr>${o.notes ? `<div>Note: ${esc(o.notes)}</div>` : ''}</div>`;
     setTimeout(() => window.print(), 50);
   });
@@ -339,13 +372,22 @@ function supplierList(body, suppliers) {
 
 // ================================================================== Reports
 App.views.reports = async (main) => {
-  const from = hashParam('from') || `${today().slice(0, 8)}01`;
-  const to = hashParam('to') || today();
+  const period = hashParam('period');
   const name = hashParam('r') || '';
+  let from = hashParam('from');
+  let to = hashParam('to');
+  if (!from || period) {
+    const r0 = await api(`/reports?period=${period || 'month'}`);
+    from = r0.summary.from; to = r0.summary.to;
+  }
   const { list, summary: s } = await api(`/reports?from=${from}&to=${to}`);
   main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Reports</h1><form id="rr" class="row">
       <input type="date" name="from" value="${from}" style="width:160px"> to <input type="date" name="to" value="${to}" style="width:160px">
-      <button class="primary">Show</button><button type="button" id="rtoday">Today</button><button type="button" id="rmonth">This month</button></form></div>
+      <button class="primary">Show</button></form></div>
+    ${periodChips(period || '', `reports${name ? `?r=${name}` : ''}`)}
+    <div class="card plain" style="margin-bottom:12px">From <b>${esc(from)}</b> to <b>${esc(to)}</b> the shop sold <b>${inr(s.sales)}</b> in <b>${s.bills}</b> bills
+      (on average <b>${inr(s.avg_bill)}</b> per bill). After returns of ${inr(s.returns)} the sales are <b>${inr(s.net)}</b>.
+      The goods sold cost ${inr(s.cost)}, so the profit before expenses is <b class="ok">${inr(s.margin)}</b> (${s.margin_pct}%).</div>
     <div class="cards">
       <div class="card stat"><div class="l">Net sales (after returns)</div><div class="v">${inr(s.net)}</div><div class="l">${s.bills} bills · avg ${inr(s.avg_bill)}</div></div>
       <div class="card stat"><div class="l">Gross margin</div><div class="v">${inr(s.margin)}</div><div class="l">${s.margin_pct}% of sales</div></div>
@@ -356,8 +398,6 @@ App.views.reports = async (main) => {
     <div id="rout" style="margin-top:12px"></div>`;
   const go = (f, t) => { location.hash = `#/reports?from=${f}&to=${t}${name ? `&r=${name}` : ''}`; };
   $('#rr').addEventListener('submit', (e) => { e.preventDefault(); go(e.target.from.value, e.target.to.value); });
-  $('#rtoday').addEventListener('click', () => go(today(), today()));
-  $('#rmonth').addEventListener('click', () => go(`${today().slice(0, 8)}01`, today()));
   if (!name) return;
   const r = await api(`/reports/${name}?from=${from}&to=${to}`);
   const cols = r.rows.length ? Object.keys(r.rows[0]) : [];
@@ -372,47 +412,90 @@ App.views.reports = async (main) => {
 // ================================================================== Owner tools
 App.views.owner = async (main) => {
   const tab = hashParam('tab') || 'day';
-  main.innerHTML = `<h1>Owner tools</h1>${tabs([['day', 'Day summary on WhatsApp'], ['prices', "Today's prices"], ['buy', 'Buy list'], ['loss', 'Loss watch']], tab, 'owner')}<div id="obody"></div>`;
+  const T = [['day', 'Summary on WhatsApp'], ['prices', "Today's prices"], ['board', 'Price board'], ['buy', 'Buy list']];
+  if (can('reports')) T.push(['loss', 'Loss watch']);
+  main.innerHTML = `<h1>Daily tools</h1>${tabs(T, tab, 'owner')}<div id="obody"></div>`;
   const body = $('#obody');
   if (tab === 'day') {
-    const date = hashParam('date') || today();
-    const { text } = await api(`/owner/day?date=${date}`);
-    body.innerHTML = `<div class="card" style="max-width:640px"><div class="row"><input type="date" id="dd" value="${date}" style="width:170px">
-      <input id="dph" placeholder="Send to mobile (yours or a partner's)" value="${esc(localStorage.getItem('mpc_owner_phone') || '')}" style="flex:1"></div>
+    const period = hashParam('period') || 'today';
+    const { text, owner_whatsapp: ownerNo } = await api(`/owner/day?period=${period}`);
+    body.innerHTML = `<div class="card" style="max-width:680px">${periodChips(period, 'owner?tab=day')}
+      <label>Send to (owner's WhatsApp)</label><input id="dph" inputmode="tel" value="${esc(ownerNo || localStorage.getItem('mpc_owner_phone') || '')}">
       <pre style="white-space:pre-wrap;font-family:inherit;background:#f7f9fc;padding:12px;border-radius:10px">${esc(text)}</pre>
-      <div class="row"><a class="btn primary" id="dwa" target="_blank" rel="noopener">Send on WhatsApp</a><button id="dcopy">Copy text</button></div></div>`;
+      <div class="row"><a class="btn primary big" id="dwa" target="_blank" rel="noopener">Send on WhatsApp</a><button id="dcopy">Copy text</button></div></div>`;
     const upd = () => { localStorage.setItem('mpc_owner_phone', $('#dph').value); $('#dwa').href = waLink($('#dph').value, text); };
     $('#dph').addEventListener('input', upd); upd();
-    $('#dd').addEventListener('change', (e) => { location.hash = `#/owner?tab=day&date=${e.target.value}`; });
     $('#dcopy').addEventListener('click', async () => { await navigator.clipboard.writeText(text); toast('Copied.'); });
   }
   if (tab === 'prices') {
     const cat = decodeURIComponent(hashParam('cat') || '');
-    const { items, cats } = await api(`/owner/prices?cat=${encodeURIComponent(cat)}`);
-    body.innerHTML = `<div class="row" style="margin-bottom:10px"><select id="pcat" style="max-width:260px"><option value="">Loose items (sold by kg)</option>
-      ${cats.map((c) => `<option ${c === cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
-      <button class="primary" id="psave">Save changed prices</button><button id="pboard">Print price board</button></div>
-      <p class="small muted">Type the new rate and press Enter to go to the next. Only changed prices are saved; each change is recorded.</p>
-      <table><tr><th>Product</th><th class="r hide-sm">Cost</th><th class="r hide-sm">Stock</th><th>Price ₹</th></tr>${items.map((i) => `<tr><td>${esc(i.name)}<div class="small ta muted">${esc(i.name_ta)}</div></td>
+    const q = decodeURIComponent(hashParam('q') || '');
+    const { items, cats } = await api(`/owner/prices?cat=${encodeURIComponent(cat)}&q=${encodeURIComponent(q)}`);
+    body.innerHTML = `<div class="row" style="margin-bottom:10px">
+      <input id="pfind" placeholder="Scan barcode or type a name, Enter" value="${esc(q)}" style="max-width:280px">
+      <select id="pcat" style="max-width:240px"><option value="">Loose items (sold by kg)</option>${cats.map((c) => `<option ${c === cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+      ${can('products') ? '<button id="padd2">+ Add product</button>' : ''}
+      <button class="primary" id="psave">Save changes</button></div>
+      <p class="small muted">Type the new rate and press Enter for the next. A changed price turns <b class="bad">red</b> until you press Save; saved prices turn <b class="ok">green</b>.</p>
+      <div class="tablewrap"><table><tr><th>Product</th><th class="r hide-sm">Cost</th><th class="r hide-sm">Stock</th><th>Price ₹</th></tr>${items.map((i) => `<tr><td>${esc(i.name)}<div class="small ta muted">${esc(i.name_ta)}</div></td>
       <td class="r hide-sm">${Number(i.cost) ? inr(Money.paise(Number(i.cost).toFixed(2))) : ''}</td><td class="r hide-sm">${esc(i.on_hand)} ${esc(i.unit)}</td>
-      <td><input data-id="${i.id}" data-old="${esc(i.price ?? '')}" value="${esc(i.price ?? '')}" inputmode="decimal" style="width:110px"> ${i.unit === 'kg' ? '/kg' : ''}</td></tr>`).join('')}</table>`;
+      <td><input class="price-in" data-id="${i.id}" data-old="${esc(i.price ?? '')}" value="${esc(i.price ?? '')}" inputmode="decimal" style="width:110px"> ${i.unit === 'kg' ? '/kg' : ''}</td></tr>`).join('')
+        || '<tr><td class="muted">Nothing found.</td></tr>'}</table></div>`;
     $('#pcat').addEventListener('change', (e) => { location.hash = `#/owner?tab=prices&cat=${encodeURIComponent(e.target.value)}`; });
+    $('#pfind').addEventListener('keydown', (e) => { if (e.key === 'Enter') location.hash = `#/owner?tab=prices&q=${encodeURIComponent(e.target.value.trim())}`; });
+    if ($('#padd2')) $('#padd2').addEventListener('click', () => productDialog(null, () => route()));
     const inputs = $$('input[data-id]', body);
-    inputs.forEach((inp, i) => inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); (inputs[i + 1] || $('#psave')).focus(); } }));
+    const mark = (inp) => { inp.classList.toggle('changed', inp.value !== inp.dataset.old); inp.classList.remove('saved'); };
+    inputs.forEach((inp, i) => {
+      inp.addEventListener('input', () => mark(inp));
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); (inputs[i + 1] || $('#psave')).focus(); } });
+    });
     $('#psave').addEventListener('click', () => submitting($('#psave'), async () => {
-      const changes = inputs.filter((i) => i.value !== i.dataset.old).map((i) => ({ id: Number(i.dataset.id), price: i.value }));
-      if (!changes.length) throw new Error('No price was changed.');
-      const r = await api('/owner/prices', { method: 'POST', body: { changes } });
-      toast(`${r.changed} prices saved. Counters pick them up within 5 minutes (or press F5 on the counter).`);
-      route();
+      const changed = inputs.filter((i) => i.value !== i.dataset.old);
+      if (!changed.length) throw new Error('No price was changed.');
+      const r = await api('/owner/prices', { method: 'POST', body: { changes: changed.map((i) => ({ id: Number(i.dataset.id), price: i.value })) } });
+      changed.forEach((i) => { i.dataset.old = i.value; i.classList.remove('changed'); i.classList.add('saved'); });
+      toast(`${r.changed} prices saved. Counters get them within 5 minutes.`);
     }));
-    $('#pboard').addEventListener('click', () => {
-      $('#print-area').innerHTML = `<div style="width:190mm;padding:10mm;font-family:'Segoe UI','Nirmala UI',sans-serif"><h1 style="text-align:center;margin:0">${esc(App.settings.name)}</h1>
-        <h2 style="text-align:center;margin:2mm 0 6mm">Today's prices · இன்றைய விலை · ${new Date().toLocaleDateString('en-IN')}</h2>
-        <table style="width:100%;font-size:20px">${items.filter((i) => i.price).map((i) => `<tr><td style="border-bottom:1px solid #999;padding:6px">${esc(i.name)}<br><span class="ta" style="font-size:17px">${esc(i.name_ta)}</span></td>
-        <td style="border-bottom:1px solid #999;text-align:right;font-weight:800;font-size:26px">₹${esc(Number(i.price).toFixed(0))}${i.unit === 'kg' ? '<span style="font-size:15px">/kg</span>' : ''}</td></tr>`).join('')}</table></div>`;
+  }
+  if (tab === 'board') {
+    // Price board: every product as a big card; tick the ones to print; they print one after another on the bill printer.
+    const cat = decodeURIComponent(hashParam('cat') || '');
+    const q = decodeURIComponent(hashParam('q') || '');
+    const { items, cats } = await api(`/owner/prices?cat=${encodeURIComponent(cat)}&q=${encodeURIComponent(q)}`);
+    const picked = new Set(JSON.parse(sessionStorage.getItem('mpc_board') || '[]'));
+    body.innerHTML = `<div class="row" style="margin-bottom:10px">
+      <input id="bfind" placeholder="Scan barcode or type a name, Enter" value="${esc(q)}" style="max-width:260px">
+      <select id="bcat" style="max-width:220px"><option value="">Loose items (sold by kg)</option>${cats.map((c) => `<option ${c === cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+      <button id="ball">Select all shown</button><button id="bnone">Clear</button>
+      <button class="primary big" id="bprint">🖨 Print selected (<span id="bn">0</span>)</button></div>
+      <div class="boards">${items.filter((i) => i.price).map((i) => `<button class="board ${picked.has(i.id) ? 'on' : ''}" data-id="${i.id}">
+        <span class="bn">${esc(i.name)}</span><span class="bt ta">${esc(i.name_ta)}</span>
+        <span class="bp">₹${esc(Number(i.price) % 1 ? Number(i.price).toFixed(2) : Number(i.price).toFixed(0))}<small>${i.unit === 'kg' ? '/kg' : ''}</small></span></button>`).join('') || '<p class="muted">Nothing found.</p>'}</div>`;
+    const count = () => { $('#bn').textContent = picked.size; sessionStorage.setItem('mpc_board', JSON.stringify([...picked])); };
+    $$('.board', body).forEach((b) => b.addEventListener('click', () => {
+      const id = Number(b.dataset.id);
+      if (picked.has(id)) picked.delete(id); else picked.add(id);
+      b.classList.toggle('on'); count();
+    }));
+    $('#ball').addEventListener('click', () => { $$('.board', body).forEach((b) => { picked.add(Number(b.dataset.id)); b.classList.add('on'); }); count(); });
+    $('#bnone').addEventListener('click', () => { picked.clear(); $$('.board', body).forEach((b) => b.classList.remove('on')); count(); });
+    $('#bcat').addEventListener('change', (e) => { location.hash = `#/owner?tab=board&cat=${encodeURIComponent(e.target.value)}`; });
+    $('#bfind').addEventListener('keydown', (e) => { if (e.key === 'Enter') location.hash = `#/owner?tab=board&q=${encodeURIComponent(e.target.value.trim())}`; });
+    $('#bprint').addEventListener('click', async () => {
+      if (!picked.size) { toast('Tap the products to print first.', true); return; }
+      const all = new Map(items.map((i) => [i.id, i]));
+      const missing = [...picked].filter((id) => !all.has(id));
+      for (const id of missing) { try { const r = await api(`/products/${id}`); all.set(id, r.item); } catch (_) { /* gone */ } }
+      const date = new Date().toLocaleDateString('en-IN');
+      $('#print-area').innerHTML = [...picked].map((id) => all.get(id)).filter(Boolean).map((i) => `<div class="pricelabel">
+        <div class="pl-shop">${esc(App.settings.name)}</div><div class="pl-name">${esc(i.name)}</div><div class="pl-ta ta">${esc(i.name_ta)}</div>
+        <div class="pl-price">₹${esc(Number(i.price) % 1 ? Number(i.price).toFixed(2) : Number(i.price).toFixed(0))}${i.unit === 'kg' ? '<span>/kg</span>' : ''}</div>
+        ${i.mrp && Number(i.mrp) > Number(i.price) ? `<div class="pl-mrp">MRP ₹${esc(Number(i.mrp).toFixed(0))} · Save ₹${esc((Number(i.mrp) - Number(i.price)).toFixed(0))}</div>` : ''}
+        <div class="pl-date">${esc(date)}</div></div>`).join('');
       setTimeout(() => window.print(), 50);
     });
+    count();
   }
   if (tab === 'buy') {
     const days = hashParam('days') || '7';

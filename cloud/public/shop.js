@@ -181,12 +181,15 @@ let trackTimer;
 async function trackView(token) {
   const { order: o } = await get(`/track/${token}`);
   const steps = ['new', 'accepted', o.mode === 'pickup' ? 'ready' : 'out', 'done'];
-  const names = { new: 'Received', accepted: 'Packing', ready: 'Ready', out: 'On the way', done: 'Completed' };
+  const names = { new: 'Received', accepted: 'Processing', ready: 'Ready to collect', out: 'Delivery person coming', done: 'Completed' };
   const at = steps.indexOf(o.status);
   $('#shop').innerHTML = `<div class="box"><h2 style="margin:0">Order ${esc(o.number)}</h2><p>${esc(o.name)} · ${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}<br>${esc(o.slot_label)}</p>
-    ${o.status === 'cancelled' ? `<div class="err">Cancelled: ${esc(o.note)}</div>` : `<div class="steps">${steps.map((s, i) => `<div class="${i <= at ? 'done' : ''}">${names[s]}</div>`).join('')}</div>`}
+    ${o.status === 'cancelled' ? `<div class="err">Cancelled: ${esc(o.note)}</div>` : `<div class="steps">${steps.map((s, i) => `<div class="${i <= at ? 'done' : ''}">${names[s]}</div>`).join('')}</div>
+      <p style="font-size:1.1rem"><b>${esc(o.status_label)}</b></p>`}
+    ${o.lines.some((l) => l.note) ? '<div class="notice">Some items were not available. You are <b>not charged</b> for them; if you already paid, the shop refunds the difference.</div>' : ''}
     ${o.bill_no ? `<p class="ok">Bill ${esc(o.bill_no)} · ${rs(paise(o.bill_total))}. Thank you!</p>` : ''}
-    ${o.lines.map((l) => `<div class="line"><span>${esc(l.name)} <span class="small muted">${esc(l.qty)} ${l.unit === 'kg' ? 'kg' : ''}</span></span><b>${rs(Math.round(paise(l.price) * Number(l.qty)))}</b></div>`).join('')}
+    ${o.lines.map((l) => `<div class="line" ${l.note && !Number(l.qty) ? 'style="text-decoration:line-through;color:#6b7689"' : ''}><span>${esc(l.name)} <span class="small muted">${esc(l.qty)} ${l.unit === 'kg' ? 'kg' : ''}</span>
+      ${l.note ? `<br><span class="small bad">${esc(l.note)}${l.ordered ? ` (you ordered ${esc(l.ordered)})` : ''}</span>` : ''}</span><b>${rs(Math.round(paise(l.price) * Number(l.qty)))}</b></div>`).join('')}
     ${Number(o.delivery_charge) ? `<div class="line"><span>Delivery</span><b>${rs(paise(o.delivery_charge))}</b></div>` : ''}
     <div class="line"><b>Approx. total</b><b>${rs(paise(o.est_total))}</b></div>
     <p class="small muted">This page updates by itself. Questions? ${o.shop.phone ? `Call <a href="tel:${esc(o.shop.phone)}">${esc(o.shop.phone)}</a>` : 'Call the shop'}.</p>

@@ -69,15 +69,15 @@ r.get('/reports/:name', need('reports'), wrap(async (req, res) => {
 }));
 
 // ------------------------------------------------------------------ owner tools
-r.get('/owner/prices', need('products'), wrap(async (req, res) => ok(res, await owner.priceList(req.query))));
+r.get('/owner/prices', need('daily'), wrap(async (req, res) => ok(res, await owner.priceList(req.query))));
 r.post('/owner/prices', need('products'), wrap(async (req, res) => ok(res, { changed: await owner.savePrices(req.body.changes, req.user) })));
-r.get('/owner/buylist', need('reports'), wrap(async (req, res) => {
+r.get('/owner/buylist', need('daily'), wrap(async (req, res) => {
   const out = await owner.buyList(req.query);
   for (const g of out.groups) g.message = await owner.orderMessage(g);
   ok(res, out);
 }));
 r.get('/owner/losswatch', need('reports'), wrap(async (req, res) => ok(res, await owner.lossWatch(req.query))));
-r.get('/owner/day', need('reports'), wrap(async (req, res) => ok(res, { text: await owner.dayText(req.query.date) })));
+r.get('/owner/day', need('daily'), wrap(async (req, res) => ok(res, { text: await owner.dayText(req.query), owner_whatsapp: (await settings.load()).owner_whatsapp })));
 
 // ------------------------------------------------------------------ online orders: staff side
 r.get('/orders', need('orders'), wrap(async (req, res) => ok(res, { orders: await shop.staffList(req.query.tab) })));
@@ -88,6 +88,14 @@ r.get('/orders/:id', need('orders'), wrap(async (req, res) => {
 r.post('/orders/:id/status', need('orders'), wrap(async (req, res) => {
   await shop.setStatus(req.params.id, req.body.status, req.user, req.body.note || '');
   ok(res, { whatsapp: await shop.statusMessage(req.params.id, baseUrl(req)) });
+}));
+r.post('/orders/:id/line', need('orders'), wrap(async (req, res) => {
+  await shop.changeLine(req.params.id, req.body.line_id, req.body.qty, req.user);
+  ok(res, { order: await shop.order('o.id=?', [req.params.id]), whatsapp: await shop.statusMessage(req.params.id, baseUrl(req)) });
+}));
+r.get('/orders-stats', need('orders'), wrap(async (req, res) => {
+  const [from, to] = reports.range(req.query.period || req.query.from ? req.query : { period: 'month' });
+  ok(res, await shop.stats(from, to));
 }));
 r.post('/orders/:id/bill', need('bill'), wrap(async (req, res) => ok(res, { bill: await shop.forCounter(req.params.id) })));
 r.get('/orders-poster.svg', need('orders'), wrap(async (req, res) => {
