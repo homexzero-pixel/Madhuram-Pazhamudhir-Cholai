@@ -30,7 +30,7 @@ const CAT_KEYS = ['q', 'cat', 'code', 'ids', 'sort', 'limit', 'exclude', 'only',
 async function catalogue(params = {}) {
   const p = {};
   for (const k of CAT_KEYS) if (params[k] !== undefined && params[k] !== '') p[k] = String(params[k]).slice(0, 400);
-  return cache.cached(`cat:${JSON.stringify(p)}`, () => loadCatalogue(p));
+  return (await cache.cached(`cat:${JSON.stringify(p)}`, () => loadCatalogue(p))).slice();   // a copy: callers may sort it
 }
 async function loadCatalogue({ q = '', cat = '', code = '', ids = '', sort = '', limit = 150, exclude = '', only = '', offset = 0,
   sec = '', max_price: maxPrice = '', min_price: minPrice = '', fresh = '' }) {

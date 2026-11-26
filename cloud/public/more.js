@@ -582,6 +582,7 @@ App.views.reports = async (main) => {
       <div class="card stat"><div class="l">Net sales (after returns)</div><div class="v">${inr(s.net)}</div><div class="l">${s.bills} bills · avg ${inr(s.avg_bill)}</div></div>
       <div class="card stat"><div class="l">Gross margin</div><div class="v">${inr(s.margin)}</div><div class="l">${s.margin_pct}% of sales</div></div>
       <div class="card stat"><div class="l">Cash · UPI · Card · Credit</div><div class="small">${inr(s.cash)} · ${inr(s.upi)} · ${inr(s.card)} · ${inr(s.credit)}</div>
+        ${Number(s.cod) ? `<div class="small muted">Online orders, cash on delivery: ${inr(s.cod)}</div>` : ''}
         <div class="l">Returns ${inr(s.returns)} · Discounts ${inr(s.discount)}</div></div>
       <div class="card stat"><div class="l">Purchases · Written off</div><div class="small">${inr(s.purchases)} · ${inr(s.wastage)}</div></div></div>
     <div class="cats">${list.map((x) => `<a class="btn ${x.name === name ? 'primary' : ''}" href="#/reports?from=${from}&to=${to}&r=${x.name}">${esc(x.title)}</a>`).join('')}</div>

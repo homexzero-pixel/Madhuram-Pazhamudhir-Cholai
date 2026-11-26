@@ -123,8 +123,9 @@ async function answer(question, customer, ip) {
     orders: orders.map(({ token, ...o }) => o),
     shop: { name: cfg.name, phone: cfg.phone ? 'available' : '' },
   };
-  const r = await gateway.ask({ site: 'shop', system: SYSTEM(cfg.name), schema: SCHEMA,
-    text: `<question>${q}</question>\n<shop_data>${JSON.stringify(shopData)}</shop_data>` });
+  // the customer's words are masked; shop_data is the shop's own data (products in stock, this customer's order summaries)
+  const r = await gateway.ask({ site: 'shop', system: SYSTEM(cfg.name), schema: SCHEMA, maskText: false,
+    text: `<question>${guard.mask(q)}</question>\n<shop_data>${JSON.stringify(shopData)}</shop_data>` });
   meta = { outcome: r.outcome === 'ok' ? 'ok' : r.outcome, reason: r.reason || '', model: r.model, tokens_in: r.tokens_in, tokens_out: r.tokens_out, ms: r.ms };
   if (r.outcome === 'ok') {
     const d = r.data;

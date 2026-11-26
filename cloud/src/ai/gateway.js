@@ -53,7 +53,8 @@ function forApi(schema) {
 }
 
 // One structured call. Returns { outcome: 'ok', data, tokens_in, tokens_out, ms } or { outcome: off|limit|refused|error, reason }.
-async function ask({ site, system, text, schema, maxTokens = 1500 }) {
+// `text` is masked here, unless the caller already masked the person's words and the rest is the shop's own data (maskText false).
+async function ask({ site, system, text, schema, maxTokens = 2000, maskText = true }) {
   const st = await status(site);
   if (!st.on) return { outcome: 'off', reason: !st.keyed ? 'no API key' : st.hard_off ? 'switched off on the server' : 'switched off in Settings' };
   const cap = Number((await settings.load()).ai_daily_tokens) || 300000;
@@ -69,7 +70,7 @@ async function ask({ site, system, text, schema, maxTokens = 1500 }) {
       fallbacks: 'default',
       output_config: { effort: 'low', format: { type: 'json_schema', schema: forApi(schema) } },
       system,
-      messages: [{ role: 'user', content: guard.mask(text) }],
+      messages: [{ role: 'user', content: maskText ? guard.mask(text) : String(text) }],
     });
   } catch (err) {
     const name = err && err.constructor ? err.constructor.name : 'Error';

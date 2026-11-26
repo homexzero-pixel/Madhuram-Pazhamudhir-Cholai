@@ -32,7 +32,7 @@ async function summary(from, to) {
     expenses: rs(expenses), net_profit: rs(margin - expenses),
     from, to, bills: Number(s.n), sales: rs(sales), discount: s.disc, returns: rs(returns), net: rs(net), cost: rs(cost - paise(ret.cost)),
     margin: rs(margin), margin_pct: net ? (margin * 100 / net).toFixed(1) : '0.0', avg_bill: s.n ? rs(Math.round(sales / Number(s.n))) : '0.00',
-    cash: tend.cash || '0.00', upi: tend.upi || '0.00', card: tend.card || '0.00', credit: tend.credit || '0.00',
+    cash: tend.cash || '0.00', upi: tend.upi || '0.00', card: tend.card || '0.00', credit: tend.credit || '0.00', cod: tend.cod || '0.00',
     purchases: rs(purchases), wastage: rs(Math.round(waste)),
   };
 }

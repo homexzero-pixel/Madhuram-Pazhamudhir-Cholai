@@ -15,9 +15,13 @@ Tamil, customer, price change and discount with manager PIN, hold, cancel), cash
   Manager PIN, credit-note number (MCN/…), printed return slip.
 - **Customers & credit (udhaar):** credit sale with manager approval, what each customer owes, payment received (cash goes into the
   drawer), WhatsApp reminder in English and Tamil.
-- **Online orders:** customers open `your-address/shop/` (or scan the QR poster), see what is in stock with prices, search or scan a
-  barcode with the phone camera, choose takeaway or home delivery and a time slot, and track the order. Ordered stock is held.
-  Staff get a red count and a chime, accept, print the packing list, WhatsApp the customer, and **Bill this order at this counter**.
+- **Online orders:** customers open the customers' site (or scan the QR poster), see only what is available with prices, search or
+  scan a barcode with the phone camera, choose takeaway or home delivery and a time slot, and track the order. Ordered stock is
+  reserved at once, so two customers can never buy the last piece. Staff get a chime and a red count at once, then:
+  **Accept → Bill & pack** (GST invoice at the counter, "Cash on delivery" or UPI) **→ Out for delivery** (delivery person's name,
+  phone, tracking) or **Ready for pickup → Process completed** (stock leaves, cash on delivery goes into the drawer, the customer can
+  download the invoice). Cancel before billing frees the stock; after billing a manager approves a credit note.
+  See [ARCHITECTURE.md](ARCHITECTURE.md) for the whole design.
 - **WhatsApp bills (free):** after a sale with a customer's mobile, a "WhatsApp bill" button opens the shop's WhatsApp with the bill
   ready. The paper bill still always prints.
 - **Reports:** sales by day / product / category / hour / cashier, GST summary and HSN summary for the accountant, bill register,
@@ -91,6 +95,46 @@ Owner phone: open the address in Chrome → ⋮ → **Install app** / Add to Hom
   see the QR and your UPI ID after ordering, and type the UPI transaction number; the Online orders screen shows it so you can
   check it in your UPI app before packing. (Card / netbanking through a payment gateway such as Cashfree needs their App ID
   and Secret Key; ask for it to be connected.)
+
+## Two websites: billing and customers (mpccustomer.zeravista.com)
+
+The staff keep the current address. Customers get their own address, `mpccustomer.zeravista.com`, served by the same code and the same
+database. The staff screens and staff API do not exist on the customers' address, and the customers' API does not exist on the
+billing address.
+
+**Recommended: a second Web App for the customers' address (same GitHub repository, same database).**
+
+1. Billing app (the one you have) → **Environment variables**, add:
+   `SITE_ROLE` = `billing`, `SHOP_URL` = `https://mpccustomer.zeravista.com`, `EVENTS_SECRET` = a long random password you make up
+   (at least 16 characters; use a password generator; never send it to anyone) → **Redeploy**.
+2. hPanel → **Websites → Add website → Node.js app** → domain `mpccustomer.zeravista.com` (if zeravista.com's DNS is not at Hostinger,
+   hPanel shows the DNS record to add where the domain is managed). Same repository and root folder, entry file `server.js`,
+   Node 20 or newer. **Environment variables:** the same `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` as the billing app,
+   plus `SITE_ROLE` = `shop`, `BILLING_URL` = `https://<your billing address>`, `EVENTS_SECRET` = the same password as step 1.
+   Deploy, then turn on **SSL** for the new address.
+3. Print a new QR poster: **Online orders → QR poster** now points to `https://mpccustomer.zeravista.com/`. Old `/shop/` links on the
+   billing address forward there.
+
+*If your panel lets one Node.js app answer two addresses instead,* set `SHOP_HOST` = `mpccustomer.zeravista.com` and
+`BILLING_HOST` = `<your billing address>` on that one app (no `SITE_ROLE`); every other address is refused.
+
+| Setting | Where | Meaning |
+|---|---|---|
+| `SITE_ROLE` | each app | `billing` or `shop` (two apps) |
+| `SHOP_HOST`, `BILLING_HOST` | one app | the two addresses (one app answering both) |
+| `SHOP_URL` | billing app | the customers' address, for QR posters, WhatsApp tracking links and redirects |
+| `BILLING_URL`, `EVENTS_SECRET` | shop app (secret on both) | the shop app wakes the billing app at once after an order (signed); without them the billing app still sees new orders within a second |
+| `EVENTS_WEBHOOK_URL` | billing app, optional | every order event is also sent there, signed (for an automation) |
+| `ANTHROPIC_API_KEY` | optional, either app | turns on the AI in "Ask the shop" (shop app) and the AI summary on Checks & AI (billing app). Without it everything works and "Ask the shop" answers from the shop's own search. Put the key only in hPanel. |
+| `AI_SHOP=off`, `AI_BILLING=off`, `AI_ALL=off` | optional | stop the AI at once on that site |
+| `CORS_ALLOW` | optional | other web addresses allowed to call the API from a browser (normally none) |
+
+**Important: products need stock to appear online.** The customers' site shows a product only while
+*stock − stock held for open orders* is above 0. Products whose stock was never entered (0) are not shown. Enter stock with
+Purchases, Products → Stock in, or a stock count. Billing at the counter is still never blocked by stock.
+
+**Checks & AI** (Online orders → Checks & AI): products with more held than in stock, orders waiting too long, cash on delivery not
+handed in, a **Correct held stock** button, the AI switches and the AI log (personal details masked).
 
 ## Updates
 

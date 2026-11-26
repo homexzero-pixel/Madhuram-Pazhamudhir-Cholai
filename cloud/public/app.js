@@ -462,10 +462,11 @@ App.views.cash = async (main) => {
       <div class="grid2"><div class="card"><h2 style="margin-top:0">Shift of ${esc(shift.cashier)} · opened ${esc(shift.opened_at.slice(0, 16))}</h2>
         <table>${row('Opening cash (checked at opening)', summary.float)}${row('+ Cash sales', summary.cash_sales)}${row('+ Cash in', summary.cash_in)}
         ${Number(summary.udhaar_received) ? row('&nbsp;&nbsp;(of which credit paid back)', summary.udhaar_received, 'muted') : ''}
+        ${Number(summary.cod_cash) ? row('&nbsp;&nbsp;(of which cash on delivery of online orders)', summary.cod_cash, 'muted') : ''}
         ${row('− Cash out', summary.cash_out)}${Number(summary.refunds) ? row('&nbsp;&nbsp;(of which refunds)', summary.refunds, 'muted') : ''}
         ${Number(summary.supplier_paid) ? row('&nbsp;&nbsp;(of which paid to suppliers)', summary.supplier_paid, 'muted') : ''}
         ${Number(summary.expenses) ? row('&nbsp;&nbsp;(of which expenses)', summary.expenses, 'muted') : ''}<tr><td><b>Cash expected</b></td><td class="r"><b>${inr(summary.expected)}</b></td></tr>
-        ${row('UPI (not in drawer)', summary.upi, 'muted')}${row('Card (not in drawer)', summary.card, 'muted')}
+        ${row('UPI (not in drawer)', summary.upi, 'muted')}${Number(summary.cod_upi) ? row('Online orders paid by UPI on delivery (not in drawer)', summary.cod_upi, 'muted') : ''}${row('Card (not in drawer)', summary.card, 'muted')}
         ${Number(summary.credit) ? row('Credit / udhaar given', summary.credit, 'muted') : ''}</table>
         <h2>Cash in / out</h2><form id="move" class="row"><select name="kind" style="max-width:150px"><option value="out">Cash out</option>
           <option value="in">Cash in</option><option value="deposit">To owner / bank</option></select>

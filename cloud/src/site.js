@@ -97,12 +97,14 @@ function sameOrigin(req, res, next) {
 
 // ---------------------------------------------------------------- rate limits (per visitor address, per minute)
 // Token buckets in memory: enough for one shop's traffic; each copy of the app counts its own requests.
+// Mobile networks often put many customers behind one address, so the customers' limits are per address but generous;
+// logins also have their own per-account lockout.
 const LIMITS = {
   login: [10, 60],          // staff login, manager PIN, first setup
-  account: [12, 60],        // customers: sign up, log in, codes, password reset
-  order: [8, 60],           // placing orders, payment numbers
-  ai: [8, 60],              // shop assistant questions
-  shop: [240, 60],          // everything else on the customers' site
+  account: [20, 60],        // customers: sign up, log in, codes, password reset
+  order: [10, 60],          // placing orders, payment numbers
+  ai: [10, 60],             // shop assistant questions
+  shop: [600, 60],          // everything else on the customers' site
   api: [900, 60],           // everything else on the billing site (several counters share one address)
 };
 const buckets = new Map();
