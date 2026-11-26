@@ -144,7 +144,12 @@ const SEC_ART = { veg: 'leafy-green', fruits: 'red-apple', exotics: 'avocado', d
   fragrance: 'lotion-bottle', shaving: 'razor', baby: 'baby-bottle', pharma: 'pill', cleaning: 'sponge', laundry: 'bubbles', fresheners: 'bubbles',
   pooja: 'diya-lamp', disposables: 'roll-of-paper', kids: 'teddy-bear' };
 const has = (kind, key) => !!(S.info && S.info.photos && (S.info.photos[kind] || []).includes(key));
-const secImg = (key) => (has('s', key) ? `<img class="ph" src="/photos/s/${key}.webp" alt="" loading="lazy">` : `<img class="art" src="${FE(SEC_ART[key] || 'shopping-bags')}" alt="" loading="lazy">`);
+function secImg(key) {
+  if (has('s', key)) return `<img class="ph" src="/photos/s/${key}.webp" alt="" loading="lazy">`;
+  const sec = S.info && S.info.sections.find((x) => x.key === key);
+  if (sec && sec.img) return `<img class="ph prod" src="${esc(sec.img)}" alt="" loading="lazy">`;
+  return `<img class="art" src="${FE(SEC_ART[key] || 'shopping-bags')}" alt="" loading="lazy">`;
+}
 function pic(it, cls = '') {
   if (it.image) return `<img class="ph ${cls}" src="${esc(it.image)}" alt="" loading="lazy">`;
   const art = artFor(it.name, it.cat);
@@ -376,25 +381,34 @@ function banners() {
   const count = (k) => (S.info.sections.find((x) => x.key === k) || {}).count || 0;
   const per = Number(s.loyalty_points_per_100) || 0;
   const list = [];
-  list.push({ fest: true, photo: f.photo || ph(`fest_${f.style}`) || ph('fest_generic'), tone: 'dark', badge: o.count ? `Up to ${o.pct}% OFF` : 'Festival offers',
-    b: f.name, d: f.line || (f.to ? `Till ${fmtDate(f.to)}` : ''), href: '#offers', go: 'Shop Now' });
-  for (const b of S.info.banners || []) list.push({ photo: b.img, tone: 'light', k: b.kicker, b: b.title, d: b.sub, href: b.link ? `#${b.link}` : '', go: b.link ? 'Shop Now' : '' });
-  if (count('veg')) list.push({ photo: ph('veg'), tone: 'dark', k: 'Picked fresh every morning', b: 'Farm Fresh Vegetables', d: from ? `${S.mode === 'delivery' ? 'Delivered' : 'Ready'} from ${from}` : '', href: '#sec=veg', go: 'Order Now' });
-  if (count('fruits')) list.push({ photo: ph('fruits'), tone: 'dark', k: 'Sweet and juicy', b: 'Fresh Fruits', d: 'Bananas, mangoes, apples and more', href: '#sec=fruits', go: 'Shop Fruits' });
+  list.push({ fest: true, theme: 'fest', deco: 'gift', photo: f.photo || ph(`fest_${f.style}`) || ph('fest_generic'), pics: 'offers',
+    badge: o.count ? `Up to ${o.pct}% OFF` : 'Festival offers', b: f.name, d: f.line || (f.to ? `Till ${fmtDate(f.to)}` : ''), href: '#offers', go: 'Shop Now' });
+  for (const b of S.info.banners || []) list.push({ theme: 'owner', photo: b.img, tone: 'light', k: b.kicker, b: b.title, d: b.sub, href: b.link ? `#${b.link}` : '', go: b.link ? 'Shop Now' : '' });
+  if (count('veg')) list.push({ theme: 'veg', deco: 'veg', photo: ph('veg'), pics: 'veg', k: 'Picked fresh every morning', b: 'Farm Fresh Vegetables', d: from ? `${S.mode === 'delivery' ? 'Delivered' : 'Ready'} from ${from}` : '', href: '#sec=veg', go: 'Order Now' });
+  if (count('fruits')) list.push({ theme: 'fruits', deco: 'fruit', photo: ph('fruits'), pics: 'fruits', k: 'Sweet and juicy', b: 'Fresh Fruits', d: 'Bananas, mangoes, apples and more', href: '#sec=fruits', go: 'Shop Fruits' });
   if (s.online_delivery === '1' && paise(s.online_free_delivery_above)) {
-    list.push({ photo: ph('delivery'), tone: 'dark', k: s.online_area ? `Home delivery ${s.online_area}` : 'Home delivery', b: 'FREE Delivery', d: `On orders above ${rs(paise(s.online_free_delivery_above))}`, href: '#cats', go: 'Start Shopping' });
+    list.push({ theme: 'delivery', deco: 'scooter', photo: ph('delivery'), k: s.online_area ? `Home delivery ${s.online_area}` : 'Home delivery', b: 'FREE Delivery', d: `On orders above ${rs(paise(s.online_free_delivery_above))}`, href: '#cats', go: 'Start Shopping' });
   }
-  if (count('exotics')) list.push({ photo: ph('exotics'), tone: 'dark', k: 'Try something new', b: 'Exotic Picks', d: 'Kiwi, avocado, dragon fruit', href: '#sec=exotics', go: 'Explore' });
-  if (count('staples')) list.push({ photo: ph('grocery'), tone: 'dark', k: 'Monthly shopping', b: 'Atta, Rice, Dals & Masala', d: '', href: '#sec=staples', go: 'Shop Now' });
+  if (count('exotics')) list.push({ theme: 'exotic', deco: 'star', photo: ph('exotics'), pics: 'exotics', k: 'Try something new', b: 'Exotic Picks', d: 'Kiwi, avocado, dragon fruit', href: '#sec=exotics', go: 'Explore' });
+  if (count('staples')) list.push({ theme: 'grocery', deco: 'staples', photo: ph('grocery'), pics: 'staples', k: 'Monthly shopping', b: 'Atta, Rice, Dals & Masala', d: '', href: '#sec=staples', go: 'Shop Now' });
   if (s.loyalty_enabled === '1' && per) {
-    list.push({ photo: ph('snacks') || ph('dairy'), tone: 'dark', k: 'Loyalty points', b: `Earn ${per} point${per === 1 ? '' : 's'}`, d: 'On every ₹100 you spend', href: S.me ? '#account' : '#signup', go: S.me ? 'My Points' : 'Join Now' });
+    list.push({ theme: 'loyalty', deco: 'star', photo: ph('snacks') || ph('dairy'), k: 'Loyalty points', b: `Earn ${per} point${per === 1 ? '' : 's'}`, d: 'On every ₹100 you spend', href: S.me ? '#account' : '#signup', go: S.me ? 'My Points' : 'Join Now' });
   }
-  return list.filter((b) => b.photo).slice(0, 7);
+  return list.slice(0, 7);
 }
-const bnrHtml = (b) => `<a class="bnr photo ${b.tone === 'light' ? 'light' : 'dark'}${b.fest ? ' fest' : ''}" ${b.href ? `href="${b.href}"` : ''}>
-  <img class="bnr-img" src="${esc(b.photo)}" alt="">
+// a banner on a photo, or a colour design that gets real product photos once they load
+const bnrHtml = (b) => `<a class="bnr ${b.photo ? `photo ${b.tone === 'light' ? 'light' : 'dark'}` : `type t-${b.theme}`}${b.fest ? ' fest' : ''}" ${b.href ? `href="${b.href}"` : ''} ${b.pics ? `data-pics="${b.pics}"` : ''}>
+  ${b.photo ? `<img class="bnr-img" src="${esc(b.photo)}" alt="">` : `<div class="bnr-deco">${ico(b.deco || 'bag')}</div><div class="bnr-pics"></div>`}
   <div class="bnr-t">${b.badge ? `<span class="badge">${esc(b.badge)}</span>` : ''}${b.k ? `<span class="k">${esc(b.k)}</span>` : ''}${b.b ? `<b>${esc(b.b)}</b>` : ''}
     ${b.d ? `<span class="d">${esc(b.d)}</span>` : ''}${b.go ? `<span class="go">${esc(b.go)} ${ico('right')}</span>` : ''}</div></a>`;
+// real product photos for a colour banner (packaged goods photographed by the shop or found by barcode)
+function bannerPics(key, items) {
+  const el = $(`.bnr.type[data-pics="${key}"]`);
+  const pics = items.filter((i) => i.image).slice(0, 3);
+  if (!el || pics.length < 2) return;
+  $('.bnr-pics', el).innerHTML = pics.map((i) => `<img src="${esc(i.image)}" alt="">`).join('');
+  el.classList.add('has-pics');
+}
 function carousel() {
   const el = $('#bnrs');
   clearInterval(S.bnrTimer);
@@ -471,11 +485,13 @@ async function homeView() {
   carousel();
   rotateHint();
   drawBars();
+  const PICS = { secVeg: 'veg', secFruits: 'fruits', secExotic: 'exotics', secFest: 'offers' };
   const fillRail = (id, items) => {
     const sec = live() && $(`#${id}`);
     if (!sec || !items.length) return;
     sec.hidden = false;
     $('.rail', sec).innerHTML = remember(items).map(card).join('');
+    if (PICS[id]) bannerPics(PICS[id], items);
   };
   const rail = (id, qs) => get(`/items?${qs}`).then(({ items }) => fillRail(id, items)).catch(() => {});
   const jobs = [
@@ -484,6 +500,7 @@ async function homeView() {
     rail('secNew', 'fresh=1&sort=new&limit=12'),
     rail('secExotic', 'sec=exotics&sort=popular&limit=12'),
     rail('secFest', 'only=offers&sort=offers&limit=12'),
+    get('/items?sec=staples&sort=popular&limit=12').then(({ items }) => { if (live()) bannerPics('staples', remember(items)); }).catch(() => {}),
     get('/account/suggest').then(({ items }) => fillRail('secSuggest', items)).catch(() => {}),
   ];
   if (S.me) jobs.push(get('/account/again').then(({ items }) => fillRail('secAgain', items)).catch(() => {}));
@@ -733,8 +750,9 @@ async function cartView() {
   if (S.dayIdx >= days.length) S.dayIdx = 0;
   const per = Number(s.loyalty_points_per_100) || 0;
   const earn = s.loyalty_enabled === '1' ? Math.floor(Math.floor(c.total / 10000) * per) : 0;
-  const placeLabel = S.me ? 'Place Order' : 'Log in to order';
-  const closed = s.online_enabled !== '1';
+  const short = S.me && S.mode === 'delivery' && c.total < minOrder ? minOrder - c.total : 0;   // below the delivery minimum
+  const placeLabel = !S.me ? 'Log in to order' : short ? `Add ${rs(short)} more for delivery` : 'Place Order';
+  const closed = s.online_enabled !== '1' || !!short;
   const free = paise(s.online_free_delivery_above);
   view().innerHTML = `${appbar('My Basket', `<button class="ab-btn" id="clearB" aria-label="Empty the basket">${ico('trash')}</button>`)}${closedNote()}
     <div class="page"><div class="cart-cols"><div class="main-col">
@@ -780,7 +798,7 @@ async function cartView() {
       ${c.saved > 0 ? `<div class="save-strip">You save ${rs(c.saved)} on this order</div>` : ''}
       ${earn > 0 ? `<p class="small okc" style="margin:10px 0 0">You earn about ${earn} loyalty point${earn === 1 ? '' : 's'}${S.me && Number(S.me.points) ? ` (you have ${Number(S.me.points)})` : ''}.</p>` : ''}
       ${S.mode === 'delivery' && c.total < minOrder ? `<div class="err">Minimum order for delivery is ${rs(minOrder)}. Add ${rs(minOrder - c.total)} more, or choose takeaway.</div>` : ''}
-      <div class="place" style="margin-top:14px"><button class="btn-g wide" data-place ${closed ? 'disabled' : ''}>${placeLabel} - ${rs(c.total + dc)}</button></div></div>
+      <div class="place" style="margin-top:14px"><button class="btn-g wide" data-place ${closed ? 'disabled' : ''}>${short ? placeLabel : `${placeLabel} - ${rs(c.total + dc)}`}</button></div></div>
     </div></div></div>
     <div class="cart-bar"><div class="tot"><span>To pay</span><b>${rs(c.total + dc)}</b></div><button class="btn-g" data-place ${closed ? 'disabled' : ''}>${placeLabel}</button></div>`;
   $$('[data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));

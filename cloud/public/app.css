@@ -309,3 +309,5 @@ kbd { border-radius: 3px; }
 .sb-img img { width: 100%; height: 100%; object-fit: cover; }
 .sb-f { flex: 1; min-width: 0; }
 @media (max-width: 900px) { .sb-row { flex-direction: column; } .sb-img { width: 100%; height: 120px; } }
+
+[hidden] { display: none !important; }

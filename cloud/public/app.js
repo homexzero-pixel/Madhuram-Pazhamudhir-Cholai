@@ -569,6 +569,8 @@ async function productDialog(id, onSaved, preset = {}) {
     cat: '', codes: preset.barcode ? [preset.barcode] : [], active: true, on_hand: '0' };
   let moves = [];
   if (id) ({ item, moves } = await api(`/products/${id}`));
+  if (!App.shopSections && can('products')) App.shopSections = (await api('/shop-sections').catch(() => ({ sections: [] }))).sections;
+  const secs = App.shopSections || [];
   const editable = can('products') || preset.approval;
   const d = modal(`<h3>${id ? 'Product' : 'Add product'}</h3>
     <form id="pf">
@@ -587,6 +589,8 @@ async function productDialog(id, onSaved, preset = {}) {
       <div class="grid3"><div><label>Category</label><input name="cat" value="${esc(item.cat)}" list="catlist"></div>
         <div><label>PLU (loose items)</label><input name="plu" inputmode="numeric" value="${esc(item.plu)}"></div>
         <div><label>Reorder when stock ≤</label><input name="reorder_level" inputmode="decimal" value="${esc(item.reorder_level)}"></div></div>
+      ${secs.length ? `<label>Section in the online shop</label><select name="shop_section"><option value="">Automatic (from the name)</option>
+        ${secs.map((x) => `<option value="${x.key}" ${item.shop_section === x.key ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : ''}
       <label>Barcodes (click and scan)</label>
       <div class="row"><input id="bcscan" placeholder="Scan the barcode here" autocomplete="off" style="flex:1"><button type="button" id="bcadd">Add</button></div>
       <div id="bclist" class="chips-list"></div><input type="hidden" name="codes" value="${esc(item.codes.join(','))}">
@@ -908,6 +912,24 @@ App.views.settings = async (main) => {
       <p class="small muted" style="margin:0 0 8px">Optional. Take a wide photo of your fresh stock or a festival offer; it shows first, with your words on the left.
         Without photos the shop shows its own banners for offers, fresh produce, delivery and loyalty points.</p>
       <input type="hidden" name="shop_banners" id="sbJson" value="${esc(s.shop_banners || '[]')}"><div id="sbRows"></div>
+      <h3 style="margin:18px 0 4px">Customer help, payments and referrals</h3>
+      <div class="grid3">${f('support_whatsapp', 'WhatsApp number for customer help', 'inputmode="tel" placeholder="98xxxxxxxx (empty = shop phone)"')}
+        ${f('referral_points', 'Points when a referred friend shops (0 = none)', 'inputmode="numeric"')}
+        ${f('price_stores', 'Price stores in the shop (₹, with commas)', 'placeholder="9,19,29,49,99,119"')}</div>
+      <label>UPI QR code (screenshot of your GPay / PhonePe QR): customers who choose "Pay online" scan it</label>
+      <div class="row"><div class="sb-img" style="width:120px;height:120px" id="qrPrev">${s.upi_qr ? `<img src="/img/p/${esc(s.upi_qr)}" alt="" style="object-fit:contain;background:#fff">` : '<span class="small muted">No QR yet</span>'}</div>
+        <label class="btn" style="margin:0">${ico('camera')} Choose QR photo<input type="file" accept="image/*" id="qrFile" hidden></label>
+        <button type="button" class="danger" id="qrDel" ${s.upi_qr ? '' : 'hidden'}>Remove</button></div>
+      <input type="hidden" name="upi_qr" id="qrName" value="${esc(s.upi_qr || '')}">
+      <h3 style="margin:18px 0 4px">Festival banner</h3>
+      <p class="small muted" style="margin:0 0 8px">Leave the name empty to show the next festival from the calendar (New Year, Pongal, Tamil New Year, Christmas).
+        For a festival discount, use Daily tools → Offers → "Offer on a whole category" with the same dates.</p>
+      <div class="grid3">${f('festival_name', 'Festival name', 'placeholder="Deepavali Specials"')}${f('festival_line', 'Small line under the name', 'placeholder="Sweets, dry fruits and gift packs"')}
+        <div><label>From – to</label><div class="row" style="flex-wrap:nowrap"><input type="date" name="festival_from" value="${esc(s.festival_from || '')}"><input type="date" name="festival_to" value="${esc(s.festival_to || '')}"></div></div></div>
+      <div class="row" style="margin-top:6px"><div class="sb-img" id="festPrev">${s.festival_banner ? `<img src="/img/p/${esc(s.festival_banner)}" alt="">` : '<span class="small muted">No festival photo</span>'}</div>
+        <label class="btn" style="margin:0">${ico('camera')} Choose festival photo<input type="file" accept="image/*" id="festFile" hidden></label>
+        <button type="button" class="danger" id="festDel" ${s.festival_banner ? '' : 'hidden'}>Remove</button></div>
+      <input type="hidden" name="festival_banner" id="festName" value="${esc(s.festival_banner || '')}">
       <h2>Weighing scale labels</h2>
       <label class="row" style="font-weight:400"><input type="checkbox" name="scale_enabled" style="width:auto" ${s.scale_enabled === '1' ? 'checked' : ''}> The shop uses barcode labels printed by the weighing scale</label>
       <div class="grid3">${f('scale_prefixes', 'Label starts with')}${f('scale_item_start', 'Item code starts at (0 = first digit)')}${f('scale_item_length', 'Item code digits')}</div>
@@ -976,6 +998,22 @@ App.views.settings = async (main) => {
     }));
   };
   drawBanners();
+  // one photo kept in a setting: the UPI QR code, the festival banner
+  const photoSetting = (file, del, prev, name, max, empty) => {
+    $(file).addEventListener('change', () => submitting(null, async () => {
+      const f = $(file).files[0];
+      if (!f) return;
+      const blob = await shrinkPhoto(f, max);
+      const r = await api('/shop-banners/image', { method: 'POST', raw: blob, type: blob.type });
+      $(name).value = r.name;
+      $(prev).innerHTML = `<img src="/img/p/${esc(r.name)}" alt="">`;
+      $(del).hidden = false;
+      toast('Photo added. Press Save to use it.');
+    }));
+    $(del).addEventListener('click', () => { $(name).value = ''; $(prev).innerHTML = `<span class="small muted">${empty}</span>`; $(del).hidden = true; });
+  };
+  photoSetting('#qrFile', '#qrDel', '#qrPrev', '#qrName', 900, 'No QR yet');
+  photoSetting('#festFile', '#festDel', '#festPrev', '#festName', 1400, 'No festival photo');
   $('#sf').addEventListener('submit', (e) => { e.preventDefault(); submitting($('button.primary', e.target), async () => {
     const v = formData(e.target);
     for (const el of e.target.elements) if (el.type === 'checkbox') v[el.name] = el.checked ? '1' : '0';

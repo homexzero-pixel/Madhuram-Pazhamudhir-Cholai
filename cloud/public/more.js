@@ -92,7 +92,7 @@ async function orderDialog(id) {
   const open = ['new', 'accepted', 'ready', 'out'].includes(o.status);
   const d = modal(`<h3>${esc(o.number)} · ${esc(o.status_label)}</h3>
     <p><b>${esc(o.name)}</b> · ${esc(o.phone)} ${o.phone_verified ? '<span class="pill">Phone verified</span>' : '<span class="pill off">phone not verified</span>'} · ${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}<br>${esc(o.slot_label)}
-    ${o.address ? `<br>${ico('pin')} ${esc(o.address)}` : ''}${o.notes ? `<br>Note: ${esc(o.notes)}` : ''}<br>Pays by ${o.pay_pref.toUpperCase()}
+    ${o.address ? `<br>${ico('pin')} ${esc(o.address)}` : ''}${o.notes ? `<br>Note: ${esc(o.notes)}` : ''}<br>Pays by ${o.pay_pref.toUpperCase()}${o.pay_ref ? ` · <b>UPI ref ${esc(o.pay_ref)}</b> (check it in your UPI app)` : ''}
     ${o.bill_no ? `<br>Bill <b>${esc(o.bill_no)}</b> ${inr(o.bill_total)}` : ''}${o.status_note ? `<br><i>${esc(o.status_note)}</i>` : ''}</p>
     <table>${o.lines.map((l) => `<tr class="${Number(l.qty) ? '' : 'struck'}"><td>${esc(l.name)}<div class="small ta muted">${esc(l.name_ta)}</div>
       ${l.note ? `<div class="small warn">${esc(l.note)}${l.ordered_qty !== null ? ` (ordered ${esc(Number(l.ordered_qty))})` : ''}</div>` : ''}</td>
@@ -247,7 +247,7 @@ async function customerCard(id, onDone) {
       <span class="small muted">(worth ${inr((Number(c.points) * Number(App.settings.loyalty_point_value || 0)).toFixed(2))})</span></h3>
       ${can('settings') ? '<button type="button" id="cpts" class="small">Add / take away points</button>' : ''}
       ${c.points_log && c.points_log.length ? `<div style="max-height:150px;overflow:auto;margin-top:6px"><table>${c.points_log.map((l) => `<tr><td class="small">${esc(l.at.slice(0, 16))}</td>
-        <td>${esc({ earn: 'Earned', redeem: 'Used', return: 'Return', adjust: 'Adjusted' }[l.kind] || l.kind)}</td><td class="small">${esc(l.ref)}</td>
+        <td>${esc({ earn: 'Earned', redeem: 'Used', return: 'Return', adjust: 'Adjusted', refer: 'Friend joined and bought' }[l.kind] || l.kind)}</td><td class="small">${esc(l.ref)}</td>
         <td class="r ${Number(l.points) < 0 ? 'bad' : 'ok'}">${Number(l.points) > 0 ? '+' : ''}${Number(l.points)}</td></tr>`).join('')}</table></div>` : ''}` : ''}
     ${id ? `<h3 style="margin-top:10px">Owes: <span class="${owes ? 'bad' : 'ok'}">${inr(c.balance)}</span></h3>
       ${owes && can('cash') ? `<form id="cpay" class="row"><input name="amount" inputmode="decimal" placeholder="Amount ₹" style="width:120px" required>
@@ -579,8 +579,16 @@ async function pickProduct(input, onPick) {
 }
 
 async function offersTab(body) {
-  const { offers } = await api('/offers');
-  body.innerHTML = `<div class="card" style="margin-bottom:12px"><h2 style="margin-top:0">New offer</h2>
+  const [{ offers }, info] = await Promise.all([api('/offers'), api('/shop/info').catch(() => ({ cats: [] }))]);
+  body.innerHTML = `<div class="card" style="margin-bottom:12px"><h2 style="margin-top:0">Offer on a whole category (festival offer)</h2>
+      <p class="small muted" style="margin-top:0">Every product in the category gets this discount on its selling price for these dates, at the counters and online.
+        The selling price comes back by itself after the last day.</p>
+      <div class="grid3"><div><label>Category</label><select id="bcat"><option value="">All products</option>
+        ${(info.cats || []).map((c) => `<option value="${c.id}">${esc(c.name)} (${c.items})</option>`).join('')}</select></div>
+        <div><label>Discount %</label><input id="bpct" inputmode="decimal" placeholder="e.g. 5"></div>
+        <div><label>From – to</label><div class="row" style="flex-wrap:nowrap"><input id="bfrom" type="date"><input id="bto" type="date"></div></div></div>
+      <div class="row" style="margin-top:10px"><button class="primary" id="bsave">Apply discount</button><button class="danger" id="bclear">Remove offers in this category</button></div></div>
+    <div class="card" style="margin-bottom:12px"><h2 style="margin-top:0">New offer</h2>
       <div class="grid3"><div><label>Product (scan or type, Enter)</label><input id="ofind" placeholder="Barcode or name"></div>
         <div><label>Offer price ₹, or % off</label><div class="row" style="flex-wrap:nowrap"><input id="oprice" inputmode="decimal" placeholder="₹"><input id="opct" inputmode="decimal" placeholder="%" style="width:80px"></div></div>
         <div><label>From – to (empty = no limit)</label><div class="row" style="flex-wrap:nowrap"><input id="ofrom" type="date"><input id="oto" type="date"></div></div></div>
@@ -590,6 +598,21 @@ async function offersTab(body) {
     ${offers.map((o) => `<tr><td>${esc(o.name)}</td><td class="r">${inr(o.price || 0)}</td><td class="r"><b>${inr(o.offer_price)}</b></td>
       <td>${esc(o.offer_from || 'now')}</td><td>${esc(o.offer_to || 'no end')}</td><td><span class="state ${o.state}">${o.state}</span></td>
       <td class="r"><button class="danger" data-off="${o.id}">Stop</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">No offers.</td></tr>'}</table></div>`;
+  $('#bsave').addEventListener('click', () => submitting($('#bsave'), async () => {
+    const cat = $('#bcat');
+    const label = cat.value ? cat.options[cat.selectedIndex].text : 'ALL products';
+    if (!confirm(`Give ${$('#bpct').value || '?'}% off on ${label}?`)) return;
+    const r = await api('/offers/bulk', { method: 'POST', body: { category_id: cat.value, percent: $('#bpct').value, offer_from: $('#bfrom').value, offer_to: $('#bto').value } });
+    toast(`Offer set on ${r.count} products.`);
+    route();
+  }));
+  $('#bclear').addEventListener('click', () => submitting($('#bclear'), async () => {
+    const cat = $('#bcat');
+    if (!confirm(`Remove all offers on ${cat.value ? cat.options[cat.selectedIndex].text : 'ALL products'}?`)) return;
+    const r = await api('/offers/clear', { method: 'POST', body: { category_id: cat.value } });
+    toast(`Offers removed from ${r.count} products.`);
+    route();
+  }));
   let item = null;
   pickProduct($('#ofind'), (it) => { item = it; $('#opick').innerHTML = `<b>${esc(it.name)}</b> · normal price ${inr(it.price || 0)}`; $('#oprice').focus(); });
   $('#osave').addEventListener('click', () => submitting($('#osave'), async () => {

@@ -75,6 +75,22 @@ Owner phone: open the address in Chrome → ⋮ → **Install app** / Add to Hom
   shop shows its own banners (offers, fresh produce, free delivery, loyalty points).
 - Products without a photo show a picture chosen from the name (tomato, onion, banana, soap…). These pictures are Microsoft
   Fluent Emoji, free to use under the MIT licence (`public/fe/LICENSE.txt`). A photo you add for a product always replaces it.
+- **Real photos everywhere:** run *Products & stock → Find photos by barcode* once. Packaged products get their real photos, and
+  the banners and category tiles start using them. For fruits and vegetables, photograph your own stock (Products → photo button,
+  or many at once with file names = barcode / product code).
+- **Sections:** the shop groups products like Grocery & Kitchen, Snacks & Drinks, Beauty & Personal Care, Household Essentials,
+  worked out from the product names. To move a product, open it in Products & stock → *Section in the online shop*.
+- **Festival:** Settings → *Festival banner* (name, dates, photo). Empty name = the next festival from the calendar. For a real
+  festival discount use Daily tools → Offers → *Offer on a whole category*; the counters and the shop both use it on those dates.
+- **Price stores** (₹9, ₹19, ₹29, ₹49, ₹99, ₹119 — change them in Settings), **New launch** (products added after the first
+  import, last 45 days), **Suggested for you** and **Buy again** (from the customer's own bills and orders).
+- **Customers' profile:** orders with items, wishlist, address book with a default address, edit name / mobile / email,
+  help & support (call or WhatsApp: Settings → *WhatsApp number for customer help*), refer a friend (Settings → *Points when a
+  referred friend shops*; needs loyalty points on).
+- **Pay online by UPI:** Settings → *UPI QR code* (a screenshot of your GPay / PhonePe QR). Customers who choose "Pay online"
+  see the QR and your UPI ID after ordering, and type the UPI transaction number; the Online orders screen shows it so you can
+  check it in your UPI app before packing. (Card / netbanking through a payment gateway such as Cashfree needs their App ID
+  and Secret Key; ask for it to be connected.)
 
 ## Updates
 

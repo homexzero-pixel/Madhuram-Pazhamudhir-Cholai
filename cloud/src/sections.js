@@ -89,20 +89,22 @@ function classify(name, cat) {
 }
 
 // ---------------------------------------------------------------- which products are in which section, kept until the products change
-let cache = { v: '', of: new Map(), ids: new Map() };
+let cache = { v: '', of: new Map(), ids: new Map(), img: new Map() };
 async function map() {
   const v = await require('./catalog').version();
   if (v === cache.v) return cache;
-  const rows = await db.query(`SELECT i.id, i.name, i.shop_section, c.name cat FROM items i LEFT JOIN categories c ON c.id=i.category_id
-    WHERE i.active=1 AND i.price IS NOT NULL AND i.price > 0`);
+  const rows = await db.query(`SELECT i.id, i.name, i.shop_section, i.image, i.on_hand > 0 instock, c.name cat FROM items i LEFT JOIN categories c ON c.id=i.category_id
+    WHERE i.active=1 AND i.price IS NOT NULL AND i.price > 0 ORDER BY i.on_hand > 0 DESC, i.id`);
   const of = new Map();
   const ids = new Map(SECTIONS.map((s) => [s[0], []]));
+  const img = new Map();                       // a real product photo for each section's tile and banner
   for (const r of rows) {
     const key = KEYS.has(r.shop_section) ? r.shop_section : classify(r.name, r.cat);
     of.set(r.id, key);
     ids.get(key).push(r.id);
+    if (r.image && !img.has(key)) img.set(key, `/img/p/${r.image}`);
   }
-  cache = { v, of, ids };
+  cache = { v, of, ids, img };
   return cache;
 }
 async function idsOf(key) { return (await map()).ids.get(key) || []; }
@@ -111,7 +113,7 @@ async function sectionOf(id) { return (await map()).of.get(id) || 'packaged'; }
 // Sections with something to sell, for the shop's menus.
 async function list() {
   const m = await map();
-  return SECTIONS.map(([key, name, group]) => ({ key, name, group, count: (m.ids.get(key) || []).length })).filter((s) => s.count);
+  return SECTIONS.map(([key, name, group]) => ({ key, name, group, count: (m.ids.get(key) || []).length, img: m.img.get(key) || null })).filter((s) => s.count);
 }
 
-module.exports = { GROUPS, SECTIONS, KEYS, classify, idsOf, sectionOf, list, map, reset: () => { cache = { v: '', of: new Map(), ids: new Map() }; } };
+module.exports = { GROUPS, SECTIONS, KEYS, classify, idsOf, sectionOf, list, map, reset: () => { cache = { v: '', of: new Map(), ids: new Map(), img: new Map() }; } };
