@@ -243,6 +243,12 @@ async function customerCard(id, onDone) {
       <div class="actions"><button type="button" data-close>Close</button><button class="primary">Save</button></div></form>
     ${id ? `<p class="small">Online shop account: ${c.online ? `<b>yes</b>${c.verified ? ', phone verified' : ''}` : 'none'}
       ${c.phone ? ' · <button type="button" id="cpw" class="small">Set online password</button>' : ''}</p>` : ''}
+    ${id && App.settings.loyalty_enabled === '1' ? `<h3 style="margin-top:10px">Loyalty points: ${Number(c.points)}
+      <span class="small muted">(worth ${inr((Number(c.points) * Number(App.settings.loyalty_point_value || 0)).toFixed(2))})</span></h3>
+      ${can('settings') ? '<button type="button" id="cpts" class="small">Add / take away points</button>' : ''}
+      ${c.points_log && c.points_log.length ? `<div style="max-height:150px;overflow:auto;margin-top:6px"><table>${c.points_log.map((l) => `<tr><td class="small">${esc(l.at.slice(0, 16))}</td>
+        <td>${esc({ earn: 'Earned', redeem: 'Used', return: 'Return', adjust: 'Adjusted' }[l.kind] || l.kind)}</td><td class="small">${esc(l.ref)}</td>
+        <td class="r ${Number(l.points) < 0 ? 'bad' : 'ok'}">${Number(l.points) > 0 ? '+' : ''}${Number(l.points)}</td></tr>`).join('')}</table></div>` : ''}` : ''}
     ${id ? `<h3 style="margin-top:10px">Owes: <span class="${owes ? 'bad' : 'ok'}">${inr(c.balance)}</span></h3>
       ${owes && can('cash') ? `<form id="cpay" class="row"><input name="amount" inputmode="decimal" placeholder="Amount ₹" style="width:120px" required>
         <select name="method" style="width:110px"><option value="cash">Cash</option><option value="upi">UPI</option><option value="card">Card</option></select>
@@ -257,6 +263,14 @@ async function customerCard(id, onDone) {
     await api('/customers', { method: 'POST', body: { ...formData(e.target), id } });
     toast('Saved.'); d.close(); if (onDone) onDone();
   }); });
+  if ($('#cpts', d)) $('#cpts', d).addEventListener('click', () => submitting($('#cpts', d), async () => {
+    const pts = prompt(`Points to add for ${c.name} (use minus to take away, e.g. -20):`);
+    if (!pts) return;
+    const reason = prompt('Reason (e.g. old loyalty card, mistake):');
+    if (!reason) return;
+    await api(`/customers/${id}/points`, { method: 'POST', body: { points: pts, reason } });
+    toast('Points updated.'); d.close(); customerCard(id, onDone);
+  }));
   if ($('#cpw', d)) $('#cpw', d).addEventListener('click', () => submitting($('#cpw', d), async () => {
     const pw = prompt(`New online-shop password for ${c.name} (${c.phone}). At least 6 characters. Tell it to the customer:`);
     if (!pw) return;

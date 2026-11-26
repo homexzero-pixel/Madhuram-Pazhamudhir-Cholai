@@ -343,3 +343,40 @@ test('offers with dates, shop barcodes, expenses and net profit', async () => {
   assert.equal(Number(d.net_profit), Number(d.profit) - 2620);
   assert.match((await owner.get('/api/owner/day')).data.text, /Expenses: ₹2,620.00/);
 });
+
+test('loyalty points: off by default, earned per ₹100, spent as payment, taken back on return', async () => {
+  const it = (await owner.post('/api/products', { name: 'Ghee 500ml', price: '350', opening_qty: '20' })).data.item;
+  const cust = { phone: '9876501234', name: 'Lakshmi' };
+  const buy = (payments, extra = {}) => cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 1', lines: [{ id: it.id, qty: 1 }], payments, ...extra });
+  let r = await buy([{ method: 'upi', amount: '350' }], { customer: cust });
+  assert.equal(r.data.bill.points_earned, '0.00');                       // switched off
+  await owner.post('/api/settings', { loyalty_enabled: '1', loyalty_points_per_100: '2', loyalty_point_value: '0.5', loyalty_min_redeem: '10' });
+  r = await buy([{ method: 'upi', amount: '350' }], { customer: cust });
+  assert.equal(Number(r.data.bill.points_earned), 6);                     // ₹350 → 3 × 2 points
+  assert.equal(Number(r.data.bill.customer.points), 6);
+  const cid = (await owner.get('/api/customers?q=9876501234')).data.customers[0].id;
+  assert.match((await buy([{ method: 'upi', amount: '347' }, { method: 'points', amount: '3' }], { customer: { id: cid } })).data.error, /from 10 points/);
+  await buy([{ method: 'cash', amount: '350' }], { customer: { id: cid } });        // 12 points now
+  assert.match((await buy([{ method: 'upi', amount: '340' }, { method: 'points', amount: '10' }], { customer: { id: cid } })).data.error, /only 12 points/);
+  assert.match((await buy([{ method: 'upi', amount: '349.75' }, { method: 'points', amount: '0.25' }], { customer: { id: cid } })).data.error, /steps of/);
+  assert.match((await buy([{ method: 'upi', amount: '345' }, { method: 'points', amount: '5' }])).data.error, /Choose the customer/);
+  r = await buy([{ method: 'upi', amount: '345' }, { method: 'points', amount: '5' }], { customer: { id: cid } });
+  assert.equal(r.data.ok, true, JSON.stringify(r.data));
+  assert.equal(Number(r.data.bill.points_used), 10);
+  assert.equal(Number(r.data.bill.points_earned), 6);                     // earned on the ₹345 paid
+  assert.equal(Number(r.data.bill.customer.points), 8);                   // 12 − 10 + 6
+  // points are not cash in the drawer
+  assert.equal((await cashier.get('/api/shift?counter=Counter%201')).data.summary.points, '5.00');
+  // returning the bill takes back the points it earned
+  const sale = (await cashier.get(`/api/returns/find?bill=${encodeURIComponent(r.data.bill.bill_no)}`)).data.bill;
+  const ap = (await cashier.post('/api/approve', { username: 'kumar', pin: '2468', perm: 'refund' })).data.token;
+  const ret = await cashier.post('/api/returns', { sale_id: sale.id, counter: 'Counter 1', method: 'cash', reason: 'Bad smell', approval: ap, lines: [{ line_id: sale.lines[0].id, qty: 1 }] });
+  assert.equal(ret.data.ok, true, JSON.stringify(ret.data));
+  const c = (await owner.get(`/api/customers/${cid}`)).data.customer;
+  assert.equal(Number(c.points), 2);
+  assert.deepEqual(c.points_log.map((l) => Number(l.points)), [-6, 6, -10, 6, 6]);
+  // owner correction
+  assert.equal((await owner.post(`/api/customers/${cid}/points`, { points: '50', reason: 'Old loyalty card' })).data.ok, true);
+  assert.equal(Number((await owner.get(`/api/customers/${cid}`)).data.customer.points), 52);
+  await owner.post('/api/settings', { loyalty_enabled: '0' });
+});

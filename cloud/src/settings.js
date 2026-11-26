@@ -14,6 +14,10 @@ const DEFAULTS = {
   bill_footer: 'Thank you! Visit again. நன்றி, மீண்டும் வருக!',
   receipt_width: '80',
   print_copies: '1',               // 2 = customer copy + shop copy
+  loyalty_enabled: '0',            // 1 = customers earn points on store and online bills
+  loyalty_points_per_100: '1',     // points for every ₹100 spent
+  loyalty_point_value: '1',        // ₹ one point is worth when spent
+  loyalty_min_redeem: '50',        // points needed before they can be spent
   require_tax_setup: '0',
   counters: 'Counter 1,Counter 2,Counter 3',
   owner_whatsapp: '',               // daily summary goes to this number
@@ -46,7 +50,8 @@ const DEFAULTS = {
   online_area: '',
 };
 const SHOP_PUBLIC = ['name', 'name_ta', 'tagline', 'address', 'phone', 'upi_id', 'online_enabled', 'online_pickup', 'online_delivery', 'online_open',
-  'online_close', 'online_min_order', 'online_delivery_charge', 'online_free_delivery_above', 'online_area'];
+  'online_close', 'online_min_order', 'online_delivery_charge', 'online_free_delivery_above', 'online_area',
+  'loyalty_enabled', 'loyalty_points_per_100', 'loyalty_point_value', 'loyalty_min_redeem'];
 const PUBLIC = Object.keys(DEFAULTS);       // safe to send to every logged-in screen
 
 let cache = null;

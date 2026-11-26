@@ -5,7 +5,8 @@ const catalog = require('./catalog');
 const { approvedBy, audit, can } = require('./auth');
 const { paise, milli, rateBp, rs, qtyDb, qtyStr, lineAmount, splitTax, financialYear, nowIST, todayIST, UserError } = require('./money');
 
-const METHODS = ['cash', 'upi', 'card', 'credit'];
+const METHODS = ['cash', 'upi', 'card', 'credit', 'points'];
+const loyalty = require('./loyalty');
 const DELIVERY_SKU = 'DELIVERY';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -53,6 +54,7 @@ async function cashSummary(shiftId, q = db.query) {
   const upi = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='upi'`, [shiftId]);
   const card = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='card'`, [shiftId]);
   const credit = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='credit'`, [shiftId]);
+  const pointsPaid = await one(`SELECT SUM(p.amount) s FROM payments p JOIN sales x ON x.id=p.sale_id WHERE x.shift_id=? AND p.method='points'`, [shiftId]);
   const cashIn = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind IN ('in','udhaar')`, [shiftId]);
   const udhaar = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='udhaar'`, [shiftId]);
   const refunds = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='refund'`, [shiftId]);
@@ -63,7 +65,7 @@ async function cashSummary(shiftId, q = db.query) {
   const float = paise(shift.opening_float);
   const expected = float + cashSales + cashIn - cashOut;
   return { float: rs(float), cash_sales: rs(cashSales), upi: rs(upi), card: rs(card), cash_in: rs(cashIn), cash_out: rs(cashOut),
-    credit: rs(credit), udhaar_received: rs(udhaar), refunds: rs(refunds), supplier_paid: rs(supplier), expenses: rs(expenses),
+    credit: rs(credit), points: rs(pointsPaid), udhaar_received: rs(udhaar), refunds: rs(refunds), supplier_paid: rs(supplier), expenses: rs(expenses),
     expected: rs(expected), bills: Number(bills.n), sales_total: rs(paise(bills.t || '0')) };
 }
 
@@ -175,6 +177,9 @@ async function checkout(user, body) {
         if (!order) throw new UserError('Online order not found.');
         if (order.sale_id) throw new UserError(`Online order ${order.number} is already billed.`);
         if (order.status === 'cancelled') throw new UserError(`Online order ${order.number} was cancelled.`);
+        if (!customerId) {                                 // the online customer gets the points for their order
+          customerId = order.customer_id || (await q.one('SELECT id FROM customers WHERE phone=?', [String(order.phone).slice(-10)]))?.id || null;
+        }
       }
 
       const calc = [];
@@ -218,6 +223,21 @@ async function checkout(user, body) {
       const paid = pays.reduce((s, x) => s + x.amount, 0);
       if (paid !== total) throw new UserError(`Payment ₹${rs(paid)} does not match the bill total ₹${rs(total)}.`);
 
+      // loyalty points: spent as a payment, earned on the rest of the bill
+      const lr = loyalty.rules(cfg);
+      const byPoints = pays.filter((x) => x.method === 'points').reduce((s, x) => s + x.amount, 0);
+      let pointsUsed = 0;
+      if (byPoints) {
+        if (!lr.on) throw new UserError('Loyalty points are switched off in Settings.');
+        if (!customerId) throw new UserError('Choose the customer (F7) to pay with points.');
+        pointsUsed = loyalty.pointsToPay(byPoints, lr);
+        if (pointsUsed === null) throw new UserError(`Points pay in steps of ₹${lr.value}.`);
+        const have = Number((await q.one('SELECT points FROM customers WHERE id=? FOR UPDATE', [customerId])).points);
+        if (have < lr.min) throw new UserError(`Points can be used from ${lr.min} points. The customer has ${have}.`);
+        if (pointsUsed > have) throw new UserError(`The customer has only ${have} points (₹${loyalty.worth(have, lr)}).`);
+      }
+      const pointsEarned = customerId ? loyalty.pointsFor(total - byPoints, lr) : 0;
+
       const prefix = cfg.invoice_prefix;
       const fy = financialYear(bdate);
       await q('INSERT INTO sequences (k, last) VALUES (?, LAST_INSERT_ID(1)) ON DUPLICATE KEY UPDATE last=LAST_INSERT_ID(last+1)', [`bill:${prefix}:${fy}`]);
@@ -226,9 +246,12 @@ async function checkout(user, body) {
       if (billNo.length > 20) throw new UserError('Invoice prefix too long.');
 
       const sale = await q(`INSERT INTO sales (bill_no, client_uuid, business_date, created_at, shift_id, counter, cashier_id, customer_id,
-        gross, discount, total, order_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [billNo, uuid, bdate, now, shift.id, counter, user.id, customerId, rs(gross), rs(discount), rs(total), order ? order.id : null]);
+        gross, discount, total, order_id, points_earned, points_used) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [billNo, uuid, bdate, now, shift.id, counter, user.id, customerId, rs(gross), rs(discount), rs(total), order ? order.id : null,
+          pointsEarned, pointsUsed]);
       const id = sale.insertId;
+      if (pointsUsed) await loyalty.post(q, { customerId, kind: 'redeem', points: -pointsUsed, ref: billNo, saleId: id, userId: user.id, at: now });
+      if (pointsEarned) await loyalty.post(q, { customerId, kind: 'earn', points: pointsEarned, ref: billNo, saleId: id, userId: user.id, at: now });
 
       for (const c of calc) {
         const taken = c.item.sku === DELIVERY_SKU ? [] : await catalog.issue(q, c.item, c.p.qty, { kind: 'sale', ref: billNo, user });
@@ -276,7 +299,7 @@ async function checkout(user, body) {
 }
 
 async function receipt(saleId) {
-  const s = await db.one(`SELECT x.*, u.name cashier, c.name customer_name, c.phone customer_phone FROM sales x
+  const s = await db.one(`SELECT x.*, u.name cashier, c.name customer_name, c.phone customer_phone, c.points customer_points FROM sales x
     JOIN users u ON u.id=x.cashier_id LEFT JOIN customers c ON c.id=x.customer_id WHERE x.id=?`, [saleId]);
   if (!s) throw new UserError('Bill not found.', 404);
   const lines = await db.query('SELECT * FROM sale_lines WHERE sale_id=? ORDER BY id', [saleId]);
@@ -289,7 +312,8 @@ async function receipt(saleId) {
   }
   return {
     id: s.id, bill_no: s.bill_no, uuid: s.client_uuid, at: s.created_at, counter: s.counter, cashier: s.cashier,
-    customer: s.customer_id ? { name: s.customer_name, phone: s.customer_phone } : null,
+    customer: s.customer_id ? { name: s.customer_name, phone: s.customer_phone, points: s.customer_points } : null,
+    points_earned: s.points_earned, points_used: s.points_used,
     gross: s.gross, discount: s.discount, total: s.total, print_count: s.print_count, order_id: s.order_id,
     returned: (await db.one('SELECT SUM(total) t FROM sale_returns WHERE sale_id=?', [saleId])).t || null,
     lines: lines.map((l) => ({ id: l.id, returned_qty: qtyStr(milli(l.returned_qty)), name: l.name, name_ta: l.name_ta, unit: l.unit, qty: qtyStr(milli(l.qty)), rate: l.rate, mrp: l.mrp,

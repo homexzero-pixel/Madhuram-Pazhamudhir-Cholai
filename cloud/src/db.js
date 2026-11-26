@@ -69,6 +69,8 @@ const COLUMNS = [
   ['customers', 'verified', 'TINYINT NOT NULL DEFAULT 0'],
   ['customers', 'online_since', 'DATETIME NULL'],
   ['online_orders', 'customer_id', 'INT NULL'],
+  ['sales', 'points_earned', 'DECIMAL(10,2) NOT NULL DEFAULT 0'],
+  ['sales', 'points_used', 'DECIMAL(10,2) NOT NULL DEFAULT 0'],
   ['items', 'image_source', 'VARCHAR(20) NULL'],
 ];
 

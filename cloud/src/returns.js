@@ -84,6 +84,10 @@ async function createReturn(user, body) {
         [shiftId, 'refund', rs(total), `Return ${no} on ${sale.bill_no}`, user.id, now]);
     }
     await q('UPDATE sale_returns SET total=? WHERE id=?', [rs(total), r.insertId]);
+    if (sale.customer_id && Number(sale.points_earned) > 0 && paise(sale.total) > 0) {
+      const back = Math.min(Number(sale.points_earned), Math.ceil(Number(sale.points_earned) * total / paise(sale.total)));
+      await require('./loyalty').post(q, { customerId: sale.customer_id, kind: 'return', points: -back, ref: no, saleId: sale.id, userId: user.id, at: now });
+    }
     await audit({ user_id: user.id, approver_id: approver, action: 'refund', value: rs(total),
       summary: `${no}: ₹${rs(total)} back by ${method} on ${sale.bill_no} – ${reason}` }, q);
     return { id: r.insertId, return_no: no, total: rs(total), method, bill_no: sale.bill_no };

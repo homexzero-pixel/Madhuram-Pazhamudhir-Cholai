@@ -389,6 +389,8 @@ function receiptHtml(b) {
     <tr class="tot"><td>TOTAL</td><td class="r">${inr(b.total)}</td></tr></table>
     <table>${pays}</table>${gst}
     ${saved > 0 ? `<hr><div class="c">You saved ${inr(saved)} on MRP</div>` : ''}
+    ${b.customer && (Number(b.points_earned) || Number(b.points_used)) ? `<hr><div class="c">${Number(b.points_used) ? `Points used: ${Number(b.points_used)} · ` : ''}Points earned: ${Number(b.points_earned)}<br>
+      Points balance: <b>${Number(b.customer.points)}</b></div>` : ''}
     <hr><div class="c">${esc(s.bill_footer)}</div></div>`;
 }
 async function printBill(bill, reprint = false) {
@@ -873,6 +875,13 @@ App.views.settings = async (main) => {
         <option value="80">80 mm</option><option value="58" ${s.receipt_width === '58' ? 'selected' : ''}>58 mm</option></select></div>
         <div><label>Copies of each bill</label><select name="print_copies"><option value="1">1 (customer)</option>
         <option value="2" ${s.print_copies === '2' ? 'selected' : ''}>2 (customer + shop copy)</option></select></div></div>
+      <h2>Loyalty points</h2>
+      <label class="row" style="font-weight:400"><input type="checkbox" name="loyalty_enabled" style="width:auto" ${s.loyalty_enabled === '1' ? 'checked' : ''}>
+        <b>Give loyalty points</b> on store bills and online orders (the customer must be on the bill: F7 at the counter, or their online account)</label>
+      <div class="grid3">${f('loyalty_points_per_100', 'Points for every ₹100 purchase', 'inputmode="decimal"')}
+        ${f('loyalty_point_value', 'Value of 1 point when used (₹)', 'inputmode="decimal"')}
+        ${f('loyalty_min_redeem', 'Points needed before they can be used', 'inputmode="numeric"')}</div>
+      <p class="small muted" id="loyex"></p>
       <h2>Counters</h2>${f('counters', 'Counter names (separate with commas)')}
       <label class="row" style="font-weight:400"><input type="checkbox" name="require_tax_setup" style="width:auto" ${s.require_tax_setup === '1' ? 'checked' : ''}>
         Stop billing products whose GST type is "Not set yet" (turn on after the accountant checks the GST data)</label>
@@ -919,6 +928,13 @@ App.views.settings = async (main) => {
         (they keep their passwords). Choose that file here. Allowed only before the first cloud bill.</p>
         <input type="file" id="impf" accept=".gz,.json"><button id="impgo" style="margin-top:8px">Bring in</button><div id="impres"></div></div>
     </div>`;
+  const loyEx = () => {
+    const sf = $('#sf'); const per = Number(sf.loyalty_points_per_100.value) || 0; const val = Number(sf.loyalty_point_value.value) || 0;
+    const pts = Math.floor(5 * per);
+    $('#loyex').textContent = `Example: a ₹500 bill earns ${pts} points. ${pts} points are worth ₹${(pts * val).toFixed(2)} on a later bill.`;
+  };
+  ['loyalty_points_per_100', 'loyalty_point_value'].forEach((n) => $('#sf')[n].addEventListener('input', loyEx));
+  loyEx();
   $('#sf').addEventListener('submit', (e) => { e.preventDefault(); submitting($('button.primary', e.target), async () => {
     const v = formData(e.target);
     for (const el of e.target.elements) if (el.type === 'checkbox') v[el.name] = el.checked ? '1' : '0';

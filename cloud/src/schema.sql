@@ -369,6 +369,19 @@ CREATE TABLE IF NOT EXISTS otps (
   INDEX (phone, created_at), INDEX (ip, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- loyalty points earned and spent (customers.points holds the balance)
+CREATE TABLE IF NOT EXISTS loyalty_ledger (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  customer_id INT NOT NULL,
+  at DATETIME NOT NULL,
+  kind VARCHAR(10) NOT NULL,                     -- earn / redeem / return / adjust
+  points DECIMAL(10,2) NOT NULL,
+  ref VARCHAR(40) NOT NULL DEFAULT '',
+  sale_id INT NULL,
+  user_id INT NULL,
+  KEY (customer_id, id)
+);
+
 -- shop expenses (rent, power, salary, tea …)
 CREATE TABLE IF NOT EXISTS expenses (
   id INT AUTO_INCREMENT PRIMARY KEY,

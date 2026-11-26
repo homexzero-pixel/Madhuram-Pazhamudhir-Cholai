@@ -293,11 +293,11 @@ function customerDialog() {
     clearTimeout(t);
     t = setTimeout(async () => {
       const { customers } = await api(`/customers?q=${encodeURIComponent(e.target.value)}`);
-      $('#cr', d).innerHTML = customers.map((c) => `<div data-id="${c.id}"><span><b>${esc(c.name)}</b> ${esc(c.phone || '')}</span>${Number(c.balance) > 0 ? `<span class="bad">owes ${inr(c.balance)}</span>` : ''}</div>`).join('') ||
+      $('#cr', d).innerHTML = customers.map((c) => `<div data-id="${c.id}"><span><b>${esc(c.name)}</b> ${esc(c.phone || '')}${loyaltyOn() && Number(c.points) ? ` <span class="pill">${Number(c.points)} pts</span>` : ''}</span>${Number(c.balance) > 0 ? `<span class="bad">owes ${inr(c.balance)}</span>` : ''}</div>`).join('') ||
         '<div class="muted">No match. Add as a new customer below.</div>';
       $$('#cr div[data-id]', d).forEach((row) => row.addEventListener('click', () => {
         const c = customers.find((x) => x.id === Number(row.dataset.id));
-        POS.bill.customer = { id: c.id, name: c.name, phone: c.phone, balance: c.balance };
+        POS.bill.customer = { id: c.id, name: c.name, phone: c.phone, balance: c.balance, points: c.points };
         saveBill(); renderBill(); d.close();
       }));
     }, 250);
@@ -362,9 +362,22 @@ function cancelBill() {
 }
 
 // ------------------------------------------------------------------ payment
+const loyaltyOn = () => App.settings.loyalty_enabled === '1';
+// ₹ the customer's points can pay on this bill (whole points, not more than the bill), or 0
+function pointsCanPay(total) {
+  const c = POS.bill.customer;
+  const val = Number(App.settings.loyalty_point_value) || 0;
+  if (!loyaltyOn() || !c || !c.id || !val) return 0;
+  const have = Math.floor(Number(c.points) || 0);
+  if (have < (Number(App.settings.loyalty_min_redeem) || 0)) return 0;
+  const step = Math.round(val * 100);
+  return Math.min(have * step, Math.floor(total / step) * step);
+}
 function payDialog() {
   if (!POS.bill.lines.length) return;
   const { total } = totals();
+  const ptsMax = pointsCanPay(total);
+  const C = POS.bill.customer;
   const d = modal(`<h3>Payment · <span style="color:var(--brand)">${inr(total)}</span></h3>
     <form><label>Cash given by customer ₹</label>
       <div class="row"><input name="cash" inputmode="decimal" autofocus style="flex:1;font-size:1.3rem">
@@ -374,21 +387,25 @@ function payDialog() {
       <div class="grid3"><div><label>UPI ₹</label><input name="upi" inputmode="decimal"></div>
         <div><label>Card ₹</label><input name="card" inputmode="decimal"></div>
         <div><label>UPI / card ref.</label><input name="ref"></div></div>
+      ${ptsMax ? `<label>Pay with points ₹ (${esc(C.name)} has ${Number(C.points)} points, worth up to ${inr(Money.rs(ptsMax))} on this bill)</label>
+        <div class="row"><input name="points" inputmode="decimal" style="flex:1"><button type="button" id="allpts">Use ${inr(Money.rs(ptsMax))}</button></div>`
+      : loyaltyOn() && C && C.id ? `<p class="small muted">${esc(C.name)} has ${Number(C.points || 0)} points${Number(C.points || 0) < Number(App.settings.loyalty_min_redeem || 0) ? ` (can use from ${Number(App.settings.loyalty_min_redeem)})` : ''}.</p>` : ''}
       ${POS.bill.customer ? `<label>Credit / udhaar ₹ (${esc(POS.bill.customer.name)} pays later${POS.bill.customer.balance && Number(POS.bill.customer.balance) ? `, already owes ${inr(POS.bill.customer.balance)}` : ''})</label>
         <input name="credit" inputmode="decimal">` : '<p class="small muted">For credit (udhaar), choose the customer first (F7).</p>'}
       <div class="actions"><button type="button" data-close>Cancel</button><button class="primary big">Complete sale (Enter)</button></div></form>`);
   const f = $('form', d);
   const val = (n) => (f[n] ? Money.paise(f[n].value || '0') || 0 : 0);
   const calc = () => {
-    const upi = val('upi'); const card = val('card'); const credit = val('credit');
-    const nonCash = upi + card + credit;
+    const upi = val('upi'); const card = val('card'); const credit = val('credit'); const pts = val('points');
+    const nonCash = upi + card + credit + pts;
     const given = f.cash.value ? Money.paise(f.cash.value) ?? 0 : null;
     const cashDue = Math.max(0, total - nonCash);
     const cashUsed = given === null ? cashDue : Math.min(given, cashDue);
     const remaining = total - nonCash - cashUsed;
     const change = given === null ? 0 : Math.max(0, given - cashDue);
     const box = $('#paybox', d);
-    if (nonCash > total) box.innerHTML = '<b class="bad">UPI + card + credit is more than the bill.</b>';
+    if (pts > ptsMax) box.innerHTML = `<b class="bad">Points can pay at most ${inr(Money.rs(ptsMax))}.</b>`;
+    else if (nonCash > total) box.innerHTML = '<b class="bad">UPI + card + credit + points is more than the bill.</b>';
     else if (remaining > 0) {
       box.innerHTML = `<div class="bad" style="font-size:1.4rem;font-weight:800">Remaining ${inr(remaining)}</div>
         <div class="small muted">Cash ${inr(cashUsed)} taken. Take the rest by:</div>
@@ -401,22 +418,26 @@ function payDialog() {
       box.innerHTML = `<div class="row" style="justify-content:space-between"><span>Cash to take <b>${inr(cashDue)}</b></span>
         <span>Change <span class="change">${inr(change)}</span></span></div>`;
     }
-    return { upi, card, credit, cashUsed, given, remaining, nonCash };
+    return { upi, card, credit, pts, cashUsed, given, remaining, nonCash };
   };
-  ['upi', 'card', 'cash', 'credit'].forEach((n) => f[n] && f[n].addEventListener('input', calc));
+  if ($('#allpts', d)) $('#allpts', d).addEventListener('click', () => { f.points.value = Money.rs(ptsMax); calc(); f.cash.focus(); });
+  ['upi', 'card', 'cash', 'credit', 'points'].forEach((n) => f[n] && f[n].addEventListener('input', calc));
   $$('[data-v]', d).forEach((b) => b.addEventListener('click', () => { f.cash.value = b.dataset.v; calc(); f.cash.focus(); }));
-  $('#exact', d).addEventListener('click', () => { f.cash.value = Money.rs(Math.max(0, total - val('upi') - val('card') - val('credit'))); calc(); });
+  $('#exact', d).addEventListener('click', () => { f.cash.value = Money.rs(Math.max(0, total - val('upi') - val('card') - val('credit') - val('points'))); calc(); });
   calc();
   f.addEventListener('submit', async (e) => {
     e.preventDefault();
     const c = calc();
-    if (c.nonCash > total) { toast('UPI + card + credit is more than the bill.', true); return; }
+    if (c.pts > ptsMax) { toast(`Points can pay at most ${inr(Money.rs(ptsMax))}.`, true); return; }
+    if (c.pts && c.pts % Math.round((Number(App.settings.loyalty_point_value) || 1) * 100)) { toast(`Points pay in steps of ₹${App.settings.loyalty_point_value}.`, true); return; }
+    if (c.nonCash > total) { toast('UPI + card + credit + points is more than the bill.', true); return; }
     if (c.remaining > 0) { toast(`Still ${inr(c.remaining)} to take.`, true); return; }
     const pays = [];
     if (c.cashUsed > 0) pays.push({ method: 'cash', amount: Money.rs(c.cashUsed), tendered: Money.rs(c.given === null ? c.cashUsed : c.given) });
     if (c.upi) pays.push({ method: 'upi', amount: Money.rs(c.upi), reference: f.ref.value });
     if (c.card) pays.push({ method: 'card', amount: Money.rs(c.card), reference: f.ref.value });
     if (c.credit) pays.push({ method: 'credit', amount: Money.rs(c.credit) });
+    if (c.pts) pays.push({ method: 'points', amount: Money.rs(c.pts) });
     d.close('ok');
     if (c.credit && !can('credit_sale') && !POS.bill.approval_credit) {
       const tok = await managerApproval('credit_sale', `${inr(c.credit)} on credit for ${POS.bill.customer.name}`);
@@ -550,7 +571,7 @@ function renderBill() {
   $('#total').textContent = inr(t.total);
   $('#count').textContent = `${t.items} item${t.items === 1 ? '' : 's'}${t.saved ? ` · saves ${inr(t.saved)} on MRP` : ''}`;
   $('#cust').innerHTML = (b.order_no ? `<span class="pill">Online order ${esc(b.order_no)}</span> ` : '') +
-    (b.customer ? `Customer: <b>${esc(b.customer.name)}</b> ${esc(b.customer.phone || '')}${Number(b.customer.balance) > 0 ? ` <span class="bad small">owes ${inr(b.customer.balance)}</span>` : ''}`
+    (b.customer ? `Customer: <b>${esc(b.customer.name)}</b> ${esc(b.customer.phone || '')}${loyaltyOn() && b.customer.id ? ` <span class="pill">${Number(b.customer.points || 0)} points</span>` : ''}${Number(b.customer.balance) > 0 ? ` <span class="bad small">owes ${inr(b.customer.balance)}</span>` : ''}`
       : '<span class="muted">No customer (F7)</span>');
 }
 

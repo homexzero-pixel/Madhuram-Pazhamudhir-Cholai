@@ -142,7 +142,7 @@ function readCookie(req) {
 async function current(req) {
   const token = readCookie(req);
   if (!token) return null;
-  return db.one(`SELECT c.id, c.name, c.phone, c.address, c.verified FROM customer_sessions s JOIN customers c ON c.id=s.customer_id
+  return db.one(`SELECT c.id, c.name, c.phone, c.address, c.verified, c.points FROM customer_sessions s JOIN customers c ON c.id=s.customer_id
     WHERE s.id=? AND s.expires_at > ? AND c.pass_hash <> ''`, [sha(token), nowIST()]);
 }
 async function logout(req) {

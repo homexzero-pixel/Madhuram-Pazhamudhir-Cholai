@@ -51,6 +51,14 @@ r.get('/returns', need('bill'), wrap(async (req, res) => ok(res, { returns: awai
 r.get('/customers/list', need('customers'), wrap(async (req, res) => ok(res, { customers: await customers.list({ q: req.query.q, owing: req.query.owing === '1' }) })));
 r.get('/customers/:id', need('customers'), wrap(async (req, res) => ok(res, { customer: await customers.get(req.params.id) })));
 r.post('/customers', need('customers'), wrap(async (req, res) => ok(res, { id: await customers.save(req.body, req.user) })));
+r.post('/customers/:id/points', need('settings'), wrap(async (req, res) => {   // owner corrects points (old loyalty card, mistake)
+  const pts = Math.trunc(Number(req.body.points));
+  const reason = String(req.body.reason || '').trim();
+  if (!pts) throw new UserError('Enter the points to add (or minus to take away).');
+  if (reason.length < 3) throw new UserError('Write the reason.');
+  await db.tx((q) => require('../loyalty').post(q, { customerId: Number(req.params.id), kind: 'adjust', points: pts, ref: reason, userId: req.user.id, at: nowIST() }));
+  ok(res);
+}));
 r.post('/customers/pay', need('cash'), wrap(async (req, res) => ok(res, { balance: await customers.receivePayment(req.body, req.user) })));
 
 // ------------------------------------------------------------------ reports
@@ -119,7 +127,7 @@ r.post('/shop/order', wrap(async (req, res) => ok(res, await shop.placeOrder(req
 
 // ------------------------------------------------------------------ customers' accounts (mobile + password, SMS code when set up)
 const cust = require('../custauth');
-const meOut = (c) => (c ? { id: c.id, name: c.name, phone: c.phone, address: c.address || '', verified: !!c.verified } : null);
+const meOut = (c) => (c ? { id: c.id, name: c.name, phone: c.phone, address: c.address || '', verified: !!c.verified, points: Number(c.points || 0) } : null);
 r.get('/shop/account', wrap(async (req, res) => ok(res, { me: meOut(await cust.current(req)), sms: cust.smsEnabled() })));
 r.post('/shop/account/otp', wrap(async (req, res) => ok(res, await cust.sendOtp(req.body.phone, req.body.purpose, clientIp(req)))));
 r.post('/shop/account/signup', wrap(async (req, res) => {

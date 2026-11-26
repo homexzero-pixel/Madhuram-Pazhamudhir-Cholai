@@ -13,7 +13,7 @@ async function list({ q = '', owing = false } = {}) {
   const args = [];
   if (q) { where.push('(c.name LIKE ? OR c.phone LIKE ?)'); args.push(`%${q}%`, `%${q.replace(/\D/g, '') || q}%`); }
   if (owing) where.push(`${BAL} > 0`);
-  return db.query(`SELECT c.id, c.name, c.phone, c.address, c.credit_limit, ${BAL} balance,
+  return db.query(`SELECT c.id, c.name, c.phone, c.address, c.credit_limit, c.points, ${BAL} balance,
     (SELECT COUNT(*) FROM sales WHERE customer_id=c.id) bills, (SELECT SUM(total) FROM sales WHERE customer_id=c.id) spent,
     (SELECT MAX(created_at) FROM sales WHERE customer_id=c.id) last_visit,
     (SELECT MAX(at) FROM customer_ledger WHERE customer_id=c.id AND kind='payment') last_paid
@@ -22,8 +22,9 @@ async function list({ q = '', owing = false } = {}) {
 
 async function get(id) {
   const c = await db.one(`SELECT c.*, ${BAL} balance, c.pass_hash <> '' online FROM customers c WHERE c.id=?`, [id]);
-  delete c.pass_hash;
   if (!c) throw new UserError('Customer not found.', 404);
+  delete c.pass_hash;
+  c.points_log = await require('./loyalty').history(id);
   c.bills = await db.query('SELECT id, bill_no, created_at, total FROM sales WHERE customer_id=? ORDER BY id DESC LIMIT 50', [id]);
   c.ledger = await db.query(`SELECT l.at, l.kind, l.amount, l.ref, l.method, u.name who FROM customer_ledger l LEFT JOIN users u ON u.id=l.user_id
     WHERE l.customer_id=? ORDER BY l.id DESC LIMIT 100`, [id]);

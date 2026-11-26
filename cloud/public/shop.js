@@ -247,6 +247,7 @@ function cartView() {
       <div class="field"><label>Note for the shop (optional)</label><input name="notes" placeholder="e.g. ripe bananas, call before coming"></div>
       <div class="field"><label>Pay by</label><select name="pay"><option value="cash">Cash</option><option value="upi">UPI${s.upi_id ? ` (${esc(s.upi_id)})` : ''}</option></select></div>
       <input name="website" class="hp" tabindex="-1" autocomplete="off"><div id="oerr"></div>
+      ${s.loyalty_enabled === '1' && Math.floor(Math.floor(c.total / 10000) * Number(s.loyalty_points_per_100)) > 0 ? `<p class="small okc">You earn about ${Math.floor(Math.floor(c.total / 10000) * Number(s.loyalty_points_per_100))} loyalty points on this order${S.me && Number(S.me.points) ? ` (you have ${Number(S.me.points)})` : ''}.</p>` : ''}
       <p class="small mut">You pay when you ${S.mode === 'delivery' ? 'receive the order' : 'collect'}. The shop confirms on WhatsApp. Weighed items are billed at the exact weight.</p></form>
     <div class="place"><button class="btn-g" id="placeBtn" style="width:100%" ${s.online_enabled === '1' ? '' : 'disabled'}>${S.me ? 'Place order' : 'Log in to order'} · ${rs(c.total + dc)} ›</button></div>
     <div class="spacer"></div></div></div></div>`;
@@ -397,6 +398,9 @@ function accountView() {
   const m = S.me;
   view().innerHTML = `<div class="page narrow"><div class="box acct-head"><div class="avatar">${esc(m.name.slice(0, 1).toUpperCase())}</div>
       <div><h1 style="margin:0">${esc(m.name)}</h1><div class="mut">${esc(m.phone)} ${m.verified ? '<span class="pill">Verified</span>' : '<span class="pill grey">not verified yet</span>'}</div></div></div>
+    ${S.info.shop.loyalty_enabled === '1' ? `<div class="box pts-box"><div><div class="mut small">Loyalty points</div><div class="pts-n">${Number(m.points || 0)}</div></div>
+      <div class="small mut">Earn ${Number(S.info.shop.loyalty_points_per_100)} point${Number(S.info.shop.loyalty_points_per_100) === 1 ? '' : 's'} for every ₹100, in the shop and online.
+      1 point = ${rs(Math.round(Number(S.info.shop.loyalty_point_value) * 100))} off a later bill${Number(S.info.shop.loyalty_min_redeem) ? ` (from ${Number(S.info.shop.loyalty_min_redeem)} points)` : ''}. Tell the cashier to use your points.</div></div>` : ''}
     <a class="box order-row" href="#orders"><b>${ico('receipt')} My orders</b>${ico('right')}</a>
     <form class="box" id="pf"><h3>My details</h3>
       <div class="field"><label>Name</label><input name="name" value="${esc(m.name)}" required></div>

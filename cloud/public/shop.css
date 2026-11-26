@@ -244,3 +244,6 @@ video { width: 100%; border-radius: 8px; background: #000; }
   .spacer { display: none; }
 }
 @media (min-width: 1000px) { .where { grid-column: 1 / span 2; } }
+
+.pts-box { display: flex; gap: 16px; align-items: center; }
+.pts-box .pts-n { font-size: 1.8rem; font-weight: 800; color: var(--g); line-height: 1.1; }
