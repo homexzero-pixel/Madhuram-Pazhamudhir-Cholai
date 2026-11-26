@@ -1,4 +1,4 @@
-/* Madhuram cloud – Stage 2 screens: online orders, returns, customers & credit, purchases & suppliers, reports, owner tools. */
+/* Madhuram cloud: online orders, returns, customers & credit, purchases & suppliers, reports, owner tools. */
 'use strict';
 
 // ------------------------------------------------------------------ WhatsApp (free: opens the shop's own WhatsApp with the text ready)
@@ -39,8 +39,8 @@ async function pollOrders() {
   if (!App.me || !can('orders')) return;
   try {
     const b = await api('/orders/badge');
-    const link = $('.nav a[data-r="orders"]');
-    if (link) link.innerHTML = `Online orders${b.new ? ` <span class="pill bad">${b.new}</span>` : ''}`;
+    const link = $('.nav a[data-r="orders"] .badge');
+    if (link) link.innerHTML = b.new ? `<span class="count">${b.new}</span>` : '';
     if (lastOrder !== null && b.last > lastOrder) { chime(); toast('New online order!'); }
     lastOrder = b.last;
   } catch (_) { /* offline: try again later */ }
@@ -58,7 +58,7 @@ App.views.orders = async (main) => {
   main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Online orders</h1>
       <div class="row"><a class="btn" href="/shop/" target="_blank">Open customer page</a><button id="poster">QR poster for customers</button></div></div>
     ${App.settings.online_enabled !== '1' ? `<div class="notice">Online orders are switched off. Turn on in ${can('settings') ? '<a href="#/settings">Settings</a>' : 'Settings'} → Online orders.</div>` : ''}
-    ${tabs([['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', '📈 Online performance']], tab, 'orders')}
+    ${tabs([['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', 'Performance']], tab, 'orders')}
     ${orders.length ? `<table><tr><th>Order</th><th>Slot</th><th>Customer</th><th class="hide-sm">Type</th><th>Status</th><th class="r">Approx.</th></tr>
       ${orders.map((o) => `<tr class="click" data-id="${o.id}"><td><b>${esc(o.number)}</b><div class="small muted">${o.items} items</div></td>
       <td>${esc(o.slot_label)}</td><td>${esc(o.name)}<div class="small muted">${esc(o.phone)}</div></td>
@@ -74,7 +74,7 @@ App.views.orders = async (main) => {
 async function ordersPerformance(main) {
   const period = hashParam('period') || 'month';
   const p = await api(`/orders-stats?period=${period}`);
-  main.innerHTML = `<h1>Online orders</h1>${tabs([['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', '📈 Online performance']], 'perf', 'orders')}
+  main.innerHTML = `<h1>Online orders</h1>${tabs([['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', 'Performance']], 'perf', 'orders')}
     ${periodChips(period, 'orders?tab=perf')}
     <div class="cards">
       <div class="card stat"><div class="l">Orders</div><div class="v">${p.orders}</div><div class="l">${p.delivery} delivery · ${p.pickup} takeaway</div></div>
@@ -91,19 +91,19 @@ async function orderDialog(id) {
   const { order: o, whatsapp } = await api(`/orders/${id}`);
   const open = ['new', 'accepted', 'ready', 'out'].includes(o.status);
   const d = modal(`<h3>${esc(o.number)} · ${esc(o.status_label)}</h3>
-    <p><b>${esc(o.name)}</b> · ${esc(o.phone)} ${o.phone_verified ? '<span class="pill">✓ phone verified</span>' : '<span class="pill off">phone not verified – call to confirm</span>'} · ${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}<br>${esc(o.slot_label)}
-    ${o.address ? `<br>📍 ${esc(o.address)}` : ''}${o.notes ? `<br>Note: ${esc(o.notes)}` : ''}<br>Pays by ${o.pay_pref.toUpperCase()}
+    <p><b>${esc(o.name)}</b> · ${esc(o.phone)} ${o.phone_verified ? '<span class="pill">Phone verified</span>' : '<span class="pill off">phone not verified</span>'} · ${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}<br>${esc(o.slot_label)}
+    ${o.address ? `<br>${ico('pin')} ${esc(o.address)}` : ''}${o.notes ? `<br>Note: ${esc(o.notes)}` : ''}<br>Pays by ${o.pay_pref.toUpperCase()}
     ${o.bill_no ? `<br>Bill <b>${esc(o.bill_no)}</b> ${inr(o.bill_total)}` : ''}${o.status_note ? `<br><i>${esc(o.status_note)}</i>` : ''}</p>
     <table>${o.lines.map((l) => `<tr class="${Number(l.qty) ? '' : 'struck'}"><td>${esc(l.name)}<div class="small ta muted">${esc(l.name_ta)}</div>
       ${l.note ? `<div class="small warn">${esc(l.note)}${l.ordered_qty !== null ? ` (ordered ${esc(Number(l.ordered_qty))})` : ''}</div>` : ''}</td>
       <td class="r">${esc(l.qty)} ${esc(l.unit)}</td><td class="r">${inr(Money.line(Money.paise(l.price), Money.milli(l.qty)))}</td>
       <td class="r">${open && !o.sale_id ? `<button class="small" data-less="${l.id}" title="Less is available">Less</button>
-        ${Number(l.qty) ? `<button class="small danger" data-na="${l.id}" title="Not available – remove">Not available</button>` : ''}` : ''}</td></tr>`).join('')}
+        ${Number(l.qty) ? `<button class="small danger" data-na="${l.id}" title="Remove: not available">Not available</button>` : ''}` : ''}</td></tr>`).join('')}
       ${Number(o.delivery_charge) ? `<tr><td>Delivery charge</td><td></td><td class="r">${inr(o.delivery_charge)}</td></tr>` : ''}
       <tr><td><b>Approx. total</b></td><td></td><td class="r"><b>${inr(o.est_total)}</b></td></tr></table>
     <div class="actions" style="justify-content:flex-start">
-      ${o.status === 'new' ? '<button class="primary" data-s="accepted">Accept – start packing</button>' : ''}
-      ${open && o.mode === 'pickup' && o.status !== 'ready' ? '<button data-s="ready">Packed – ready for pickup</button>' : ''}
+      ${o.status === 'new' ? '<button class="primary" data-s="accepted">Accept</button>' : ''}
+      ${open && o.mode === 'pickup' && o.status !== 'ready' ? '<button data-s="ready">Ready for pickup</button>' : ''}
       ${open && o.mode === 'delivery' && o.status !== 'out' ? '<button data-s="out">Out for delivery</button>' : ''}
       ${open && can('bill') ? '<button class="primary" id="obill">Bill this order at this counter</button>' : ''}
       <a class="btn" target="_blank" rel="noopener" href="${esc(waLink(whatsapp.phone, whatsapp.text))}">WhatsApp the customer</a>
@@ -113,7 +113,7 @@ async function orderDialog(id) {
   const lineChange = async (lineId, qty) => {
     const r = await api(`/orders/${id}/line`, { method: 'POST', body: { line_id: lineId, qty } });
     d.close();
-    toast('Order changed. The customer is not charged for it – send them the WhatsApp update.');
+    toast('Order changed. Send the customer the WhatsApp update.');
     window.open(waLink(r.whatsapp.phone, r.whatsapp.text), '_blank', 'noopener');
     orderDialog(id);
   };
@@ -133,9 +133,9 @@ async function orderDialog(id) {
     route();
   })));
   $('#opack', d).addEventListener('click', () => {
-    $('#print-area').innerHTML = `<div class="receipt"><h2>${esc(o.number)} – packing list</h2><div>${esc(o.name)} ${esc(o.phone)}</div>
+    $('#print-area').innerHTML = `<div class="receipt"><h2>${esc(o.number)} packing list</h2><div>${esc(o.name)} ${esc(o.phone)}</div>
       <div>${esc(o.slot_label)} · ${o.mode === 'delivery' ? 'DELIVERY' : 'TAKEAWAY'}</div>${o.address ? `<div>${esc(o.address)}</div>` : ''}<hr>
-      <table>${o.lines.filter((l) => Number(l.qty)).map((l) => `<tr><td>☐ ${esc(l.name)}<br><span class="ta">${esc(l.name_ta)}</span></td><td class="r">${esc(l.qty)} ${esc(l.unit)}</td></tr>`).join('')}</table>
+      <table>${o.lines.filter((l) => Number(l.qty)).map((l) => `<tr><td>[ ] ${esc(l.name)}<br><span class="ta">${esc(l.name_ta)}</span></td><td class="r">${esc(l.qty)} ${esc(l.unit)}</td></tr>`).join('')}</table>
       <hr>${o.notes ? `<div>Note: ${esc(o.notes)}</div>` : ''}</div>`;
     setTimeout(() => window.print(), 50);
   });
@@ -241,7 +241,7 @@ async function customerCard(id, onDone) {
       <div class="grid2"><div><label>Address</label><input name="address" value="${esc(c.address || '')}"></div>
       <div><label>Credit limit ₹ (0 = no limit set)</label><input name="credit_limit" value="${esc(c.credit_limit)}" inputmode="decimal"></div></div>
       <div class="actions"><button type="button" data-close>Close</button><button class="primary">Save</button></div></form>
-    ${id ? `<p class="small">Online shop account: ${c.online ? `<b>yes</b>${c.verified ? ' · ✓ phone verified' : ''}` : 'none'}
+    ${id ? `<p class="small">Online shop account: ${c.online ? `<b>yes</b>${c.verified ? ', phone verified' : ''}` : 'none'}
       ${c.phone ? ' · <button type="button" id="cpw" class="small">Set online password</button>' : ''}</p>` : ''}
     ${id ? `<h3 style="margin-top:10px">Owes: <span class="${owes ? 'bad' : 'ok'}">${inr(c.balance)}</span></h3>
       ${owes && can('cash') ? `<form id="cpay" class="row"><input name="amount" inputmode="decimal" placeholder="Amount ₹" style="width:120px" required>
@@ -258,7 +258,7 @@ async function customerCard(id, onDone) {
     toast('Saved.'); d.close(); if (onDone) onDone();
   }); });
   if ($('#cpw', d)) $('#cpw', d).addEventListener('click', () => submitting($('#cpw', d), async () => {
-    const pw = prompt(`New online-shop password for ${c.name} (${c.phone}). At least 6 letters or digits – tell it to the customer:`);
+    const pw = prompt(`New online-shop password for ${c.name} (${c.phone}). At least 6 characters. Tell it to the customer:`);
     if (!pw) return;
     await api(`/customers/${id}/online-password`, { method: 'POST', body: { password: pw } });
     toast('Password set. The customer logs in with the mobile number and this password.');
@@ -302,14 +302,14 @@ App.views.purchases = async (main) => {
     <div id="plines" style="margin-top:10px"></div>
     <div class="row" style="justify-content:space-between;margin-top:10px"><span class="muted small">Cost per unit = amount ÷ (qty + free). Free goods lower the cost.</span>
       <b id="ptot">₹0.00</b></div>
-    <button class="primary big" id="psave" style="margin-top:10px">Save – stock goes up</button></div>`;
+    <button class="primary big" id="psave" style="margin-top:10px">Save purchase</button></div>`;
   const draw = () => {
     $('#plines').innerHTML = lines.length ? `<table><tr><th>Product</th><th>Qty</th><th>Free</th><th>Rate ₹</th><th>Amount ₹</th><th>Expiry</th><th>New selling price</th><th></th></tr>
       ${lines.map((l, i) => `<tr data-i="${i}"><td>${esc(l.name)}<div class="small muted">stock ${esc(l.on_hand)} ${esc(l.unit)} · now ₹${esc(l.cur_price || '-')}</div></td>
       <td><input data-k="qty" value="${esc(l.qty)}" inputmode="decimal" style="width:70px"></td><td><input data-k="free_qty" value="${esc(l.free_qty)}" inputmode="decimal" style="width:60px"></td>
       <td><input data-k="rate" value="${esc(l.rate)}" inputmode="decimal" style="width:80px"></td><td><input data-k="amount" value="${esc(l.amount)}" inputmode="decimal" style="width:90px"></td>
       <td><input data-k="expiry" type="date" value="${esc(l.expiry)}" style="width:140px"></td><td><input data-k="price" value="${esc(l.price)}" inputmode="decimal" style="width:80px"></td>
-      <td><button class="danger" data-del="${i}">✕</button></td></tr>`).join('')}</table>` : '<p class="muted">No products added yet.</p>';
+      <td><button class="danger icon-btn" data-del="${i}" title="Remove">${ico('x')}</button></td></tr>`).join('')}</table>` : '<p class="muted">No products added yet.</p>';
     $$('#plines input').forEach((inp) => inp.addEventListener('input', () => {
       const l = lines[Number(inp.closest('tr').dataset.i)];
       l[inp.dataset.k] = inp.value;
@@ -395,7 +395,8 @@ App.views.reports = async (main) => {
     ${periodChips(period || '', `reports${name ? `?r=${name}` : ''}`)}
     <div class="card plain" style="margin-bottom:12px">From <b>${esc(from)}</b> to <b>${esc(to)}</b> the shop sold <b>${inr(s.sales)}</b> in <b>${s.bills}</b> bills
       (on average <b>${inr(s.avg_bill)}</b> per bill). After returns of ${inr(s.returns)} the sales are <b>${inr(s.net)}</b>.
-      The goods sold cost ${inr(s.cost)}, so the profit before expenses is <b class="ok">${inr(s.margin)}</b> (${s.margin_pct}%).</div>
+      The goods sold cost ${inr(s.cost)}, so the gross profit is <b class="ok">${inr(s.margin)}</b> (${s.margin_pct}%).
+      Expenses were ${inr(s.expenses)}, leaving a net profit of <b class="${Number(s.net_profit) < 0 ? 'bad' : 'ok'}">${inr(s.net_profit)}</b>.</div>
     <div class="cards">
       <div class="card stat"><div class="l">Net sales (after returns)</div><div class="v">${inr(s.net)}</div><div class="l">${s.bills} bills · avg ${inr(s.avg_bill)}</div></div>
       <div class="card stat"><div class="l">Gross margin</div><div class="v">${inr(s.margin)}</div><div class="l">${s.margin_pct}% of sales</div></div>
@@ -411,7 +412,7 @@ App.views.reports = async (main) => {
   const cols = r.rows.length ? Object.keys(r.rows[0]) : [];
   const money = (k) => /sales|returns|net|cash|upi|card|credit|margin|taxable|cgst|sgst|total|value|amount|balance|bills$|paid|discount|float|expected|counted|variance|gross|spent/.test(k) && !/^bills$/.test(k);
   $('#rout').innerHTML = `<div class="row" style="justify-content:space-between"><h2>${esc(r.title)} · ${esc(r.from)} to ${esc(r.to)}</h2>
-    <a class="btn" href="/api/reports/${name}?from=${from}&to=${to}&format=csv">⬇ Download for Excel (CSV)</a></div>
+    <a class="btn" href="/api/reports/${name}?from=${from}&to=${to}&format=csv">${ico('download')} Excel (CSV)</a></div>
     ${r.rows.length ? `<div style="overflow:auto"><table><tr>${cols.map((c) => `<th class="${money(c) ? 'r' : ''}">${esc(c.replace(/_/g, ' '))}</th>`).join('')}</tr>
     ${r.rows.map((row) => `<tr>${cols.map((c) => `<td class="${money(c) ? 'r' : ''}">${money(c) && row[c] !== null && /^-?\d+(\.\d+)?$/.test(String(row[c])) ? inr(String(row[c])) : esc(row[c] ?? '')}</td>`).join('')}</tr>`).join('')}</table></div>`
     : '<p class="muted">Nothing in this period.</p>'}`;
@@ -420,7 +421,8 @@ App.views.reports = async (main) => {
 // ================================================================== Owner tools
 App.views.owner = async (main) => {
   const tab = hashParam('tab') || 'day';
-  const T = [['day', 'Summary on WhatsApp'], ['prices', "Today's prices"], ['board', 'Price board'], ['buy', 'Buy list']];
+  const T = [['day', 'Summary on WhatsApp'], ['prices', "Today's prices"], ['offers', 'Offers'], ['expenses', 'Expenses'], ['board', 'Price board'],
+    ['labels', 'Barcode labels'], ['buy', 'Buy list']];
   if (can('reports')) T.push(['loss', 'Loss watch']);
   main.innerHTML = `<h1>Daily tools</h1>${tabs(T, tab, 'owner')}<div id="obody"></div>`;
   const body = $('#obody');
@@ -476,7 +478,7 @@ App.views.owner = async (main) => {
       <input id="bfind" placeholder="Scan barcode or type a name, Enter" value="${esc(q)}" style="max-width:260px">
       <select id="bcat" style="max-width:220px"><option value="">Loose items (sold by kg)</option>${cats.map((c) => `<option ${c === cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
       <button id="ball">Select all shown</button><button id="bnone">Clear</button>
-      <button class="primary big" id="bprint">🖨 Print selected (<span id="bn">0</span>)</button></div>
+      <button class="primary big" id="bprint">${ico('printer')} Print selected (<span id="bn">0</span>)</button></div>
       <div class="boards">${items.filter((i) => i.price).map((i) => `<button class="board ${picked.has(i.id) ? 'on' : ''}" data-id="${i.id}">
         <span class="bn">${esc(i.name)}</span><span class="bt ta">${esc(i.name_ta)}</span>
         <span class="bp">₹${esc(Number(i.price) % 1 ? Number(i.price).toFixed(2) : Number(i.price).toFixed(0))}<small>${i.unit === 'kg' ? '/kg' : ''}</small></span></button>`).join('') || '<p class="muted">Nothing found.</p>'}</div>`;
@@ -505,6 +507,9 @@ App.views.owner = async (main) => {
     });
     count();
   }
+  if (tab === 'offers') await offersTab(body);
+  if (tab === 'expenses') await expensesTab(body);
+  if (tab === 'labels') await labelsTab(body);
   if (tab === 'buy') {
     const days = hashParam('days') || '7';
     const { groups } = await api(`/owner/buylist?days=${days}`);
@@ -530,13 +535,150 @@ App.views.owner = async (main) => {
     const { rows } = await api(`/owner/losswatch?from=${from}&to=${to}`);
     body.innerHTML = `<form id="lf" class="row" style="margin-bottom:10px"><input type="date" name="from" value="${from}" style="width:160px"> to
       <input type="date" name="to" value="${to}" style="width:160px"><button class="primary">Show</button></form>
-      <p class="small muted">Actions that can hide a loss, per person. A flag is not proof – check the bill, the reason and the CCTV time.</p>
+      <p class="small muted">Actions that can hide a loss, per person. A flag is not proof. Check the bill, the reason and the CCTV time.</p>
       ${rows.length ? `<table><tr><th>Staff</th><th class="r">Bills</th><th class="r">Sales</th><th class="r">Cancelled</th><th class="r">Price changes</th><th class="r">Discounts</th>
         <th class="r">Refunds</th><th class="r">Reprints</th><th class="r">Cash diff.</th><th>Needs a look</th></tr>
         ${rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="r">${r.bills}</td><td class="r">${inr(r.sales)}</td><td class="r">${r.bill_cancel}</td>
         <td class="r">${r.overrides}</td><td class="r">${inr(r.discounts_value)}</td><td class="r">${inr(r.refunds_value)}</td><td class="r">${r.reprint}</td>
         <td class="r ${Number(r.variance) < 0 ? 'bad' : ''}">${inr(r.variance)}</td>
-        <td>${r.flags.length ? r.flags.map((f) => `<div class="bad small">⚠ ${esc(f)}</div>`).join('') : '<span class="ok small">OK</span>'}</td></tr>`).join('')}</table>` : '<p class="muted">No activity.</p>'}`;
+        <td>${r.flags.length ? r.flags.map((f) => `<div class="bad small">${esc(f)}</div>`).join('') : '<span class="ok small">OK</span>'}</td></tr>`).join('')}</table>` : '<p class="muted">No activity.</p>'}`;
     $('#lf').addEventListener('submit', (e) => { e.preventDefault(); location.hash = `#/owner?tab=loss&from=${e.target.from.value}&to=${e.target.to.value}`; });
   }
 };
+
+
+// ================================================================== Offers: a special price between two dates
+async function pickProduct(input, onPick) {
+  input.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const v = input.value.trim();
+    if (!v) return;
+    const { items } = await api(`/products?q=${encodeURIComponent(v)}`);
+    const it = items.find((x) => x.codes.includes(v) || x.sku === v) || (items.length === 1 ? items[0] : null);
+    if (it) { input.value = ''; onPick(it); return; }
+    if (!items.length) { toast('Not found.', true); return; }
+    const d = modal(`<h3>Choose the product</h3><div class="results">${items.slice(0, 20).map((x) => `<div data-id="${x.id}"><span>${esc(x.name)}</span><b>${inr(x.price || 0)}</b></div>`).join('')}</div>
+      <div class="actions"><button data-close>Close</button></div>`);
+    $$('[data-id]', d).forEach((row) => row.addEventListener('click', () => { d.close(); input.value = ''; onPick(items.find((x) => x.id === Number(row.dataset.id))); }));
+  });
+}
+
+async function offersTab(body) {
+  const { offers } = await api('/offers');
+  body.innerHTML = `<div class="card" style="margin-bottom:12px"><h2 style="margin-top:0">New offer</h2>
+      <div class="grid3"><div><label>Product (scan or type, Enter)</label><input id="ofind" placeholder="Barcode or name"></div>
+        <div><label>Offer price ₹, or % off</label><div class="row" style="flex-wrap:nowrap"><input id="oprice" inputmode="decimal" placeholder="₹"><input id="opct" inputmode="decimal" placeholder="%" style="width:80px"></div></div>
+        <div><label>From – to (empty = no limit)</label><div class="row" style="flex-wrap:nowrap"><input id="ofrom" type="date"><input id="oto" type="date"></div></div></div>
+      <div id="opick" class="muted small" style="margin-top:8px">Choose a product.</div>
+      <button class="primary" id="osave" style="margin-top:10px">Save offer</button></div>
+    <div class="tablewrap"><table><tr><th>Product</th><th class="r">Normal</th><th class="r">Offer</th><th>From</th><th>To</th><th>Status</th><th></th></tr>
+    ${offers.map((o) => `<tr><td>${esc(o.name)}</td><td class="r">${inr(o.price || 0)}</td><td class="r"><b>${inr(o.offer_price)}</b></td>
+      <td>${esc(o.offer_from || 'now')}</td><td>${esc(o.offer_to || 'no end')}</td><td><span class="state ${o.state}">${o.state}</span></td>
+      <td class="r"><button class="danger" data-off="${o.id}">Stop</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">No offers.</td></tr>'}</table></div>`;
+  let item = null;
+  pickProduct($('#ofind'), (it) => { item = it; $('#opick').innerHTML = `<b>${esc(it.name)}</b> · normal price ${inr(it.price || 0)}`; $('#oprice').focus(); });
+  $('#osave').addEventListener('click', () => submitting($('#osave'), async () => {
+    if (!item) throw new Error('Choose the product first.');
+    await api('/offers', { method: 'POST', body: { item_id: item.id, offer_price: $('#oprice').value, percent: $('#opct').value, offer_from: $('#ofrom').value, offer_to: $('#oto').value } });
+    toast('Offer saved. Counters and the online shop use it on those dates.');
+    route();
+  }));
+  $$('[data-off]').forEach((b) => b.addEventListener('click', () => submitting(b, async () => {
+    await api('/offers', { method: 'POST', body: { item_id: Number(b.dataset.off), offer_price: '' } }); route();
+  })));
+}
+
+// ================================================================== Expenses
+async function expensesTab(body) {
+  const period = hashParam('period') || 'month';
+  const x = await api(`/expenses?period=${period}`);
+  body.innerHTML = `<div class="grid2"><form class="card" id="exf"><h2 style="margin-top:0">Add expense</h2>
+      <div class="grid2"><div><label>Category</label><select name="category">${x.categories.map((c) => `<option>${esc(c)}</option>`).join('')}</select></div>
+        <div><label>Amount ₹</label><input name="amount" inputmode="decimal" required></div></div>
+      <div class="grid2"><div><label>Paid by</label><select name="method"><option value="cash">Cash${myCounter() ? ` from ${esc(myCounter())} drawer` : ''}</option>
+        <option value="upi">UPI</option><option value="bank">Bank / cheque</option></select></div><div><label>Date</label><input name="date" type="date" value="${today()}"></div></div>
+      <label>Note</label><input name="note" placeholder="e.g. EB bill, helper salary">
+      <button class="primary" style="margin-top:10px">Save</button></form>
+    <div class="card"><h2 style="margin-top:0">Total ${inr(x.total)}</h2><p class="small muted">${esc(x.from)} to ${esc(x.to)}</p>
+      ${x.by_category.map((c) => `<div class="row" style="justify-content:space-between"><span>${esc(c.category)}</span><b>${inr(c.total)}</b></div>`).join('') || '<p class="muted">No expenses.</p>'}</div></div>
+    ${periodChips(period, 'owner?tab=expenses')}
+    <div class="tablewrap"><table><tr><th>Date</th><th>Category</th><th>Note</th><th>Paid by</th><th>By</th><th class="r">Amount</th><th></th></tr>
+    ${x.rows.map((e) => `<tr><td>${esc(e.business_date)}</td><td>${esc(e.category)}</td><td>${esc(e.note)}</td><td>${esc(e.method)}${e.shift_id ? ' (drawer)' : ''}</td>
+      <td>${esc(e.who)}</td><td class="r">${inr(e.amount)}</td><td class="r">${can('reports') ? `<button class="icon-btn danger" data-del="${e.id}" title="Delete">${ico('x')}</button>` : ''}</td></tr>`).join('')
+      || '<tr><td colspan="7" class="muted">None.</td></tr>'}</table></div>`;
+  $('#exf').addEventListener('submit', (e) => { e.preventDefault(); submitting($('button.primary', e.target), async () => {
+    const r = await api('/expenses', { method: 'POST', body: { ...formData(e.target), counter: myCounter() } });
+    toast(r.from_drawer ? 'Saved. Taken from the drawer in cash closing.' : 'Saved.');
+    route();
+  }); });
+  $$('[data-del]').forEach((b) => b.addEventListener('click', () => submitting(b, async () => {
+    if (!confirm('Delete this expense?')) return;
+    await api(`/expenses/${b.dataset.del}/delete`, { method: 'POST', body: {} }); route();
+  })));
+}
+
+// ================================================================== Barcode labels (EAN-13 / EAN-8) for shop-packed goods, on the bill printer
+const EAN_L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'];
+const EAN_G = ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111'];
+const EAN_R = EAN_L.map((p) => p.replace(/./g, (c) => (c === '0' ? '1' : '0')));
+const EAN_PARITY = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'];
+function eanBits(code) {
+  if (/^\d{12}$/.test(code)) code = `0${code}`;                    // UPC-A as EAN-13
+  if (/^\d{13}$/.test(code)) {
+    const par = EAN_PARITY[Number(code[0])];
+    let b = '101';
+    for (let i = 1; i <= 6; i++) b += (par[i - 1] === 'L' ? EAN_L : EAN_G)[Number(code[i])];
+    b += '01010';
+    for (let i = 7; i <= 12; i++) b += EAN_R[Number(code[i])];
+    return `${b}101`;
+  }
+  if (/^\d{8}$/.test(code)) {
+    let b = '101';
+    for (let i = 0; i < 4; i++) b += EAN_L[Number(code[i])];
+    b += '01010';
+    for (let i = 4; i < 8; i++) b += EAN_R[Number(code[i])];
+    return `${b}101`;
+  }
+  return null;
+}
+function barcodeSvg(code) {
+  const bits = eanBits(code);
+  if (!bits) return '';
+  const rects = [];
+  for (let i = 0; i < bits.length; i++) if (bits[i] === '1') rects.push(`<rect x="${i + 8}" y="0" width="1" height="50"/>`);
+  return `<svg viewBox="0 0 ${bits.length + 16} 50" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><g fill="#000">${rects.join('')}</g></svg>`;
+}
+
+async function labelsTab(body) {
+  const queue = JSON.parse(sessionStorage.getItem('mpc_labels') || '[]');
+  const save = () => sessionStorage.setItem('mpc_labels', JSON.stringify(queue));
+  const draw = () => {
+    body.innerHTML = `<div class="card" style="margin-bottom:12px"><div class="grid2"><div><label>Product (scan or type, Enter)</label><input id="lfind" placeholder="Barcode or name"></div>
+      <div><label>&nbsp;</label><div class="row"><button class="primary" id="lprint">${ico('printer')} Print labels</button><button id="lclear">Clear list</button></div></div></div>
+      <p class="small muted" style="margin:8px 0 0">50 × 25 mm labels with name, price, MRP and barcode. Products without a barcode get a shop barcode (starts with 29)
+      that scans at the counter. Set the label printer as the default printer, or print on the bill printer.</p></div>
+      <div class="tablewrap"><table><tr><th>Product</th><th>Barcode</th><th class="r">Price</th><th>Copies</th><th></th></tr>
+      ${queue.map((q, i) => `<tr><td>${esc(q.name)}</td><td>${esc(q.code)}</td><td class="r">${inr(q.price || 0)}</td>
+        <td><input data-n="${i}" value="${q.n}" inputmode="numeric" style="width:70px"></td>
+        <td class="r"><button class="icon-btn danger" data-x="${i}">${ico('x')}</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No products added.</td></tr>'}</table></div>`;
+    pickProduct($('#lfind'), (it) => submitting(null, async () => {
+      let code = it.codes.find((c) => eanBits(c));
+      if (!code) code = (await api(`/products/${it.id}/barcode/internal`, { method: 'POST', body: {} })).code;
+      queue.push({ id: it.id, name: it.name, price: it.price, mrp: it.mrp, unit: it.unit, code, n: 1 });
+      save(); draw(); $('#lfind').focus();
+    }));
+    $$('[data-n]').forEach((inp) => inp.addEventListener('change', () => { queue[Number(inp.dataset.n)].n = Math.max(1, Math.min(200, Number(inp.value) || 1)); save(); }));
+    $$('[data-x]').forEach((b) => b.addEventListener('click', () => { queue.splice(Number(b.dataset.x), 1); save(); draw(); }));
+    $('#lclear').addEventListener('click', () => { queue.length = 0; save(); draw(); });
+    $('#lprint').addEventListener('click', () => {
+      if (!queue.length) { toast('Add products first.', true); return; }
+      const html = queue.flatMap((q) => Array.from({ length: q.n }, () => `<div class="blabel"><div class="bl-n">${esc(q.name)}</div>
+        <div class="bl-p"><span>${q.mrp && Number(q.mrp) > Number(q.price) ? `MRP ₹${esc(Number(q.mrp).toFixed(2))}` : esc(App.settings.name).slice(0, 22)}</span>
+        <b>₹${esc(Number(q.price || 0).toFixed(2))}${q.unit === 'kg' ? '/kg' : ''}</b></div>${barcodeSvg(q.code)}<div class="bl-c">${esc(q.code)}</div></div>`)).join('');
+      $('#print-area').innerHTML = `<div class="label-sheet">${html}</div>`;
+      setTimeout(() => window.print(), 80);
+    });
+  };
+  draw();
+}

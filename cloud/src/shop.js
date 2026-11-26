@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const db = require('./db');
 const settings = require('./settings');
 const { audit } = require('./auth');
-const { paise, milli, rs, qtyDb, qtyStr, lineAmount, nowIST, UserError } = require('./money');
+const { PRICE_NOW, paise, milli, rs, qtyDb, qtyStr, lineAmount, nowIST, UserError } = require('./money');
 
 const OPEN = ['new', 'accepted', 'ready', 'out'];
 const STATUS = { new: 'New', accepted: 'Accepted – packing', ready: 'Ready for pickup', out: 'Out for delivery', done: 'Completed', cancelled: 'Cancelled' };
@@ -38,7 +38,7 @@ async function catalogue({ q = '', cat = '', code = '', ids = '', sort = '', lim
     popular: 'i.on_hand > 0 DESC, sold DESC, i.name',
     offers: 'i.on_hand > 0 DESC, (i.mrp - i.price) / i.mrp DESC, i.name',
   }[sort] || (q || code || cat ? 'i.on_hand > 0 DESC, sold DESC, i.name' : 'i.on_hand > 0 DESC, sold DESC, i.name');
-  const rows = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, i.price, i.mrp, i.on_hand, i.category_id, c.name cat, i.image,
+  const rows = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, ${PRICE_NOW(nowIST().slice(0, 10))} price, i.mrp, i.on_hand, i.category_id, c.name cat, i.image,
       (SELECT COUNT(*) FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE l.item_id=i.id AND x.business_date > DATE_SUB(CURDATE(), INTERVAL 30 DAY)) sold
     FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE ${where.join(' AND ')}
     ORDER BY ${order} LIMIT ?`, [...args, Math.min(Math.max(Number(limit) || 150, 1), 150)]);
@@ -125,7 +125,7 @@ async function placeOrder(data, ip, customer) {
       throw new UserError('You already have 3 open orders. Please wait until one is completed, or call the shop.');
     }
     const ids = [...new Set(raw.map((r) => Number(r.id)).filter(Boolean))];
-    const items = new Map((await q(`SELECT * FROM items WHERE id IN (?) AND active=1 AND price IS NOT NULL AND sku <> ? FOR UPDATE`,
+    const items = new Map((await q(`SELECT i.*, ${PRICE_NOW(nowIST().slice(0, 10))} price FROM items i WHERE id IN (?) AND active=1 AND price IS NOT NULL AND sku <> ? FOR UPDATE`,
       [ids.length ? ids : [0], DELIVERY_SKU])).map((i) => [i.id, i]));
     const h = await held(ids);
     const lines = [];

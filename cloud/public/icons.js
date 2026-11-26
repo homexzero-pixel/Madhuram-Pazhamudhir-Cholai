@@ -1,0 +1,78 @@
+/* Line icons used across the store software and the online shop (24×24, drawn with strokes). */
+'use strict';
+const ICONS = {
+  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 8v8M11 8v8M14 8v8M17 8v8"/>',
+  cart: '<path d="M3 4h2l2.4 11.2a1.5 1.5 0 0 0 1.5 1.2h8.7a1.5 1.5 0 0 0 1.5-1.1L21 8H6.2"/><circle cx="9.5" cy="20" r="1.3"/><circle cx="17.5" cy="20" r="1.3"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.6-5.5 6.5-5.5s5.5 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.6.8 2.6 2.6 3 5.2"/>',
+  receipt: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  truck: '<path d="M2 6h11v10H2zM13 9h4l4 4v3h-8z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
+  bag: '<path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  right: '<path d="m9 5 7 7-7 7"/>',
+  left: '<path d="m15 5-7 7 7 7"/>',
+  camera: '<path d="M4 7h3l2-2.5h6L17 7h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.8"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="m21 16-5-5-9 9"/>',
+  printer: '<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="1.5"/><path d="M7 14h10v7H7z"/>',
+  download: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  alert: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/>',
+  phone: '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2z"/>',
+  pin: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  tag: '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+  logout: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  bill: '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M7 20h10M12 16v4M7 9h4M7 12h2M15 9h2"/>',
+  file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  wallet: '<path d="M4 6h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a1 1 0 0 1-1-1z"/><path d="M4 6a2 2 0 0 1 2-2h10v2M16 13h4"/>',
+  box: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="m3 7.5 9 4.5 9-4.5M12 12v9"/>',
+  tools: '<path d="M4 20l7-7M14.5 3.5a4 4 0 0 0-4 5.2L4 15.2V20h4.8l6.5-6.5a4 4 0 0 0 5.2-4L18 12l-3-3z"/>',
+  pie: '<path d="M12 3v9h9a9 9 0 1 1-9-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+  cash: '<rect x="2" y="6" width="20" height="12" rx="1.5"/><circle cx="12" cy="12" r="2.8"/><path d="M6 9v.01M18 15v.01"/>',
+  // product groups (shop categories)
+  fruit: '<path d="M12 7c-4-2-8 1-7 6 1 5 4 8 7 7 3 1 6-2 7-7 1-5-3-8-7-6z"/><path d="M12 7c0-2 1-3.5 3-4"/>',
+  veg: '<path d="M14 4c3 0 6 3 6 6-6 0-9 3-11 10-2-1-5-4-5-6 7-2 10-5 10-10z"/><path d="M9 15l5-5"/>',
+  dairy: '<path d="M8 3h8v3l2 3v12H6V9l2-3z"/><path d="M6 12h12"/>',
+  bakery: '<path d="M4 11a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v1H4z"/><path d="M5 12v8h14v-8M9 9v3M15 9v3"/>',
+  snacks: '<circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="10" r=".9"/><circle cx="14.5" cy="9" r=".9"/><circle cx="13" cy="14.5" r=".9"/><circle cx="8.5" cy="14" r=".9"/>',
+  drink: '<path d="M7 4h10l-1.5 17h-7z"/><path d="M7.5 9h9M14 4l2-2"/>',
+  staples: '<path d="M7 5c0-1 2-2 5-2s5 1 5 2l2 15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M7 5c1 1 3 1.5 5 1.5S16 6 17 5M9 12h6"/>',
+  oil: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
+  clean: '<path d="M8 9h8v12H8z"/><path d="M10 9V5h4l3-2M14 5h-4"/>',
+  care: '<path d="M9 7h6l1 3v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10z"/><path d="M10 7V4h4v3M8 13h8"/>',
+  baby: '<path d="M9 8h6v12a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1z"/><path d="M10 8V6a2 2 0 0 1 4 0v2M9 12h6M9 16h6"/>',
+  pill: '<rect x="3" y="8.5" width="18" height="7" rx="3.5" transform="rotate(-35 12 12)"/><path d="m9.5 8.5 5 7"/>',
+};
+function ico(name, cls = '') {
+  return `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ICONS.box}</svg>`;
+}
+// Fill <i data-ico="name"></i> placeholders in static HTML
+function fillIcons(root = document) {
+  root.querySelectorAll('i[data-ico]').forEach((el) => { el.outerHTML = ico(el.dataset.ico, el.className); });
+}
+// Which picture group a product or category belongs to
+const GROUPS = [
+  [/fruit|apple|banana|mango|grape|orange|papaya|pomegranate|guava|melon|pine ?apple|dates|berry|sapota|chikoo/i, 'fruit'],
+  [/veg|tomato|onion|potato|carrot|beans|brinjal|leaf|keerai|greens|chilli|ginger|garlic|gourd|cabbage|cauli|drumstick|coriander|mint|lemon|cucumber|coconut/i, 'veg'],
+  [/milk|dairy|curd|butter|ghee|cheese|paneer|egg|ice ?cream/i, 'dairy'],
+  [/bread|bakery|bun|cake|rusk/i, 'bakery'],
+  [/biscuit|snack|chips|chocolate|candy|sweet|namkeen|mixture|cookie|choco/i, 'snacks'],
+  [/drink|juice|cola|soda|water|beverage|tea|coffee|horlicks|boost/i, 'drink'],
+  [/oil/i, 'oil'],
+  [/rice|atta|flour|dhal|dal|gram|pulse|sugar|salt|rava|maida|grain|food|staple|masala|spice/i, 'staples'],
+  [/clean|wash|detergent|soap|phenyl|floor|dish|spray|match|fire|agarbatti/i, 'clean'],
+  [/shampoo|cream|paste|brush|face|hair|talc|powder|shav|blade|lotion|deo|perfume|care/i, 'care'],
+  [/baby|diaper|child/i, 'baby'],
+  [/medic|tablet|balm|syrup|health/i, 'pill'],
+];
+const groupOf = (text) => (GROUPS.find(([re]) => re.test(text || '')) || [null, 'box'])[1];

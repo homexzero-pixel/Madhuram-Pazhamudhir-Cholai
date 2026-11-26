@@ -56,6 +56,9 @@ function nowIST(ms = Date.now()) {
 }
 const todayIST = () => nowIST().slice(0, 10);
 
+// Selling price today: the offer price while an offer runs, else the normal price. Used in SQL (alias i = items).
+const PRICE_NOW = (d) => `IF(i.offer_price IS NOT NULL AND '${d}' BETWEEN COALESCE(i.offer_from, '2000-01-01') AND COALESCE(i.offer_to, '2999-12-31'), i.offer_price, i.price)`;
+
 // Date range for a named period, in shop dates. Quarters and years follow the Indian financial year (April–March).
 function periodRange(name, today = todayIST()) {
   const d = new Date(`${today}T00:00:00Z`);
@@ -81,4 +84,4 @@ class UserError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; this.expose = true; }
 }
 
-module.exports = { periodRange, divRound, paise, milli, rateBp, rs, qtyStr, qtyDb, lineAmount, splitTax, financialYear, nowIST, todayIST, UserError };
+module.exports = { PRICE_NOW, periodRange, divRound, paise, milli, rateBp, rs, qtyStr, qtyDb, lineAmount, splitTax, financialYear, nowIST, todayIST, UserError };

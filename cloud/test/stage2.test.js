@@ -309,3 +309,37 @@ test('counters, opening balance check, dashboard and bills by period, order chan
   const day = (await owner.get('/api/owner/day?period=week')).data.text;
   assert.match(day, /This week/);
 });
+
+test('offers with dates, shop barcodes, expenses and net profit', async () => {
+  const t = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 330 * 60000 + 86400000).toISOString().slice(0, 10);
+  const it = (await owner.post('/api/products', { name: 'Toor dal 1kg', price: '180', mrp: '190', opening_qty: '10' })).data.item;
+  assert.match((await owner.post('/api/offers', { item_id: it.id, offer_price: '200' })).data.error, /below the normal price/);
+  assert.equal((await owner.post('/api/offers', { item_id: it.id, offer_price: '165', offer_from: t, offer_to: t })).data.ok, true);
+  const bill = await cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 1', lines: [{ id: it.id, qty: 1 }], payments: [{ method: 'upi', amount: '165' }] });
+  assert.equal(bill.data.bill.total, '165.00', JSON.stringify(bill.data));
+  assert.ok((await customer.get(`/api/shop/items?ids=${it.id}`)).data.items[0].price === '165.00');
+  // an offer starting tomorrow does not change today's price
+  await owner.post('/api/offers', { item_id: it.id, percent: '10', offer_from: tomorrow });
+  assert.equal((await owner.get('/api/offers')).data.offers.find((o) => o.id === it.id).state, 'upcoming');
+  assert.equal((await cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 1', lines: [{ id: it.id, qty: 1 }], payments: [{ method: 'upi', amount: '180' }] })).data.ok, true);
+  // shop barcode for a product without one: a valid 13-digit code that scans
+  const code = (await owner.post(`/api/products/${it.id}/barcode/internal`)).data.code;
+  assert.match(code, /^29\d{11}$/);
+  assert.equal((await owner.get(`/api/products?q=${code}`)).data.items[0].id, it.id);
+  assert.equal((await owner.post(`/api/products/${it.id}/barcode/internal`)).data.code, code);     // same code again
+  // expenses: cash from the drawer lowers the expected cash; net profit on the dashboard
+  const before = (await cashier.get('/api/shift?counter=Counter%201')).data.summary.expected;
+  assert.match((await owner.post('/api/expenses', { amount: '50', category: 'Other', method: 'cash' })).data.error, /what the expense/);
+  const e = await owner.post('/api/expenses', { amount: '120', category: 'Tea & snacks', method: 'cash', counter: 'Counter 1' });
+  assert.equal(e.data.from_drawer, true, JSON.stringify(e.data));
+  await owner.post('/api/expenses', { amount: '2500', category: 'Electricity', method: 'bank' });
+  const after = (await cashier.get('/api/shift?counter=Counter%201')).data.summary;
+  assert.equal(Number(before) - Number(after.expected), 120);
+  assert.equal(after.expenses, '120.00');
+  const list = (await owner.get('/api/expenses?period=today')).data;
+  assert.equal(list.total, '2620.00');
+  const d = (await owner.get('/api/dashboard?period=today')).data;
+  assert.equal(Number(d.net_profit), Number(d.profit) - 2620);
+  assert.match((await owner.get('/api/owner/day')).data.text, /Expenses: ₹2,620.00/);
+});

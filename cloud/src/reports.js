@@ -27,7 +27,9 @@ async function summary(from, to) {
   const returns = paise(ret.amount);
   const net = sales - returns;
   const margin = net - (cost - paise(ret.cost));
+  const expenses = await require('./expenses').total(from, to);
   return {
+    expenses: rs(expenses), net_profit: rs(margin - expenses),
     from, to, bills: Number(s.n), sales: rs(sales), discount: s.disc, returns: rs(returns), net: rs(net), cost: rs(cost - paise(ret.cost)),
     margin: rs(margin), margin_pct: net ? (margin * 100 / net).toFixed(1) : '0.0', avg_bill: s.n ? rs(Math.round(sales / Number(s.n))) : '0.00',
     cash: tend.cash || '0.00', upi: tend.upi || '0.00', card: tend.card || '0.00', credit: tend.credit || '0.00',
@@ -100,6 +102,10 @@ const REPORTS = {
       (SELECT MAX(x.business_date) FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE l.item_id=i.id) last_sold
       FROM items i WHERE i.on_hand > 0 AND i.sku <> 'DELIVERY' AND NOT EXISTS (SELECT 1 FROM sale_lines l JOIN sales x ON x.id=l.sale_id
       WHERE l.item_id=i.id AND x.business_date > DATE_SUB(?, INTERVAL 30 DAY)) ORDER BY cost_value DESC LIMIT 300`, [todayIST()])],
+  expenses: ['Expenses', (from, to) => db.query(`SELECT e.business_date date, e.category, e.amount, e.method, e.note, u.name who
+      FROM expenses e JOIN users u ON u.id=e.user_id WHERE e.business_date BETWEEN ? AND ? ORDER BY e.business_date, e.id`, [from, to])],
+  offers: ['Offers (running and upcoming)', () => db.query(`SELECT name, price normal_price, offer_price, offer_from, offer_to FROM items
+      WHERE offer_price IS NOT NULL ORDER BY offer_to IS NULL, offer_to`)],
   credit: ['Customer credit (udhaar) outstanding', () => db.query(`SELECT c.name, c.phone, SUM(l.amount) balance, MAX(l.at) last_entry
       FROM customer_ledger l JOIN customers c ON c.id=l.customer_id GROUP BY c.id, c.name, c.phone HAVING balance > 0 ORDER BY balance DESC`)],
   suppliers: ['Supplier balances', () => db.query(`SELECT s.name, s.phone,

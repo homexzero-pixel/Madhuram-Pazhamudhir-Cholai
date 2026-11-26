@@ -57,12 +57,13 @@ async function cashSummary(shiftId, q = db.query) {
   const udhaar = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='udhaar'`, [shiftId]);
   const refunds = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='refund'`, [shiftId]);
   const supplier = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='supplier'`, [shiftId]);
-  const cashOut = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind IN ('out','deposit','refund','supplier')`, [shiftId]);
+  const cashOut = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind IN ('out','deposit','refund','supplier','expense')`, [shiftId]);
+  const expenses = await one(`SELECT SUM(amount) s FROM cash_moves WHERE shift_id=? AND kind='expense'`, [shiftId]);
   const bills = (await q('SELECT COUNT(*) n, SUM(total) t FROM sales WHERE shift_id=?', [shiftId]))[0];
   const float = paise(shift.opening_float);
   const expected = float + cashSales + cashIn - cashOut;
   return { float: rs(float), cash_sales: rs(cashSales), upi: rs(upi), card: rs(card), cash_in: rs(cashIn), cash_out: rs(cashOut),
-    credit: rs(credit), udhaar_received: rs(udhaar), refunds: rs(refunds), supplier_paid: rs(supplier),
+    credit: rs(credit), udhaar_received: rs(udhaar), refunds: rs(refunds), supplier_paid: rs(supplier), expenses: rs(expenses),
     expected: rs(expected), bills: Number(bills.n), sales_total: rs(paise(bills.t || '0')) };
 }
 
@@ -188,7 +189,7 @@ async function checkout(user, body) {
         }
         if (item.unit === 'pcs' && p.qty % 1000) throw new UserError(`${item.name} is sold by the piece: use a whole number.`);
         if (cfg.require_tax_setup === '1' && item.tax_class === 'unset') throw new UserError(`${item.name}: GST treatment not set.`);
-        const list = paise(item.price);
+        const list = paise(item.offer_price !== null && bdate >= (item.offer_from || '2000-01-01') && bdate <= (item.offer_to || '2999-12-31') ? item.offer_price : item.price);
         if (list === null && p.rate === null) throw new UserError(`${item.name} has no selling price.`);
         const rate = p.rate ?? list;
         const g = lineAmount(rate, p.qty);

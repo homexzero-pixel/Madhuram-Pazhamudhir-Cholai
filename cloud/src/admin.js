@@ -95,9 +95,10 @@ async function dashboard(query) {
     AND a.action IN ('price_override','discount','reprint','shift_close','write_off','cash_out','price_change','bill_cancel','refund','float_mismatch','credit_sale')
     ORDER BY a.id DESC LIMIT 40`, R);
   const net = paise(t.total) - paise(ret.t);
+  const exp = await require('./expenses').total(from, to);
   return {
     from, to, bills: Number(t.n), total: t.total, discount: t.disc, returns: ret.t, returns_n: Number(ret.n), net: rs(net), profit: profit.p,
-    margin_pct: net ? (paise(profit.p) * 100 / net).toFixed(1) : '0.0',
+    margin_pct: net ? (paise(profit.p) * 100 / net).toFixed(1) : '0.0', expenses: rs(exp), net_profit: rs(paise(profit.p) - exp),
     average: t.n ? rs(Math.round(paise(t.total) / Number(t.n))) : '0.00',
     methods, channels, counters, top: top.map((r) => ({ ...r, qty: qtyStr(milli(r.qty)) })), trend, trend_kind: oneDay ? 'hour' : 'day', shifts,
     low_stock: Number(low.n), expiring: Number(expiring.n),
@@ -115,7 +116,7 @@ async function auditLog({ limit = 200 }) {
 // It can be loaded back with Hostinger's phpMyAdmin (Import) into an empty database.
 const TABLES = ['settings', 'users', 'categories', 'items', 'barcodes', 'lots', 'stock_moves', 'customers', 'shifts', 'cash_moves',
   'sequences', 'sales', 'sale_lines', 'sale_lot_allocs', 'payments', 'audit', 'suppliers', 'purchases', 'purchase_lines', 'supplier_payments',
-  'sale_returns', 'return_lines', 'customer_ledger', 'online_orders', 'online_order_lines'];
+  'sale_returns', 'return_lines', 'customer_ledger', 'online_orders', 'online_order_lines', 'expenses'];
 
 // Write the whole database as gzip SQL to `out` (an HTTP response or a file). Resolves when everything is written.
 async function dumpTo(out) {

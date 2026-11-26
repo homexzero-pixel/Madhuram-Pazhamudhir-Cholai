@@ -13,6 +13,7 @@ const DEFAULTS = {
   invoice_prefix: 'MPC',
   bill_footer: 'Thank you! Visit again. நன்றி, மீண்டும் வருக!',
   receipt_width: '80',
+  print_copies: '1',               // 2 = customer copy + shop copy
   require_tax_setup: '0',
   counters: 'Counter 1,Counter 2,Counter 3',
   owner_whatsapp: '',               // daily summary goes to this number

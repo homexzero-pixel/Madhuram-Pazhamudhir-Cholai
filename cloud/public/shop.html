@@ -17,41 +17,42 @@
         <a href="#" class="brand"><img src="/img/logo.webp" alt="" class="logo"><span class="brand-name" id="brandName"></span></a>
         <div class="where">
           <div class="mode" id="mode" role="tablist">
-            <button data-m="delivery" role="tab">🛵 Delivery</button>
-            <button data-m="pickup" role="tab">🛍️ Takeaway</button>
+            <button data-m="delivery" role="tab"><i data-ico="truck"></i>Delivery</button>
+            <button data-m="pickup" role="tab"><i data-ico="bag"></i>Takeaway</button>
           </div>
           <div class="where-line" id="whereLine">…</div>
         </div>
-        <a href="#account" class="round" id="acctBtn" aria-label="My account">👤</a>
+        <a href="#account" class="round" id="acctBtn" aria-label="My account"><i data-ico="user"></i></a>
       </div>
       <label class="search" for="q">
-        <span class="s-ico">🔍</span>
-        <input id="q" type="search" placeholder="Search “tomato”, “அரிசி”, “milk”…" autocomplete="off">
-        <button id="scanBtn" class="s-scan" type="button" aria-label="Scan a barcode">▦</button>
+        <i data-ico="search" class="s-ico"></i>
+        <input id="q" type="search" placeholder="Search products" autocomplete="off">
+        <button id="scanBtn" class="s-scan" type="button" aria-label="Scan a barcode"><i data-ico="scan"></i></button>
       </label>
       <nav class="top-links">
-        <a href="#cats">🗂️ Categories</a>
-        <a href="#orders">🧾 My orders</a>
-        <a href="#account" id="acctLink">👤 Login</a>
-        <a href="#cart" class="top-cart" id="topCart">🛒 <span id="topCartText">Cart</span></a>
+        <a href="#cats"><i data-ico="grid"></i>Categories</a>
+        <a href="#orders"><i data-ico="receipt"></i>My orders</a>
+        <a href="#account" id="acctLink"><i data-ico="user"></i>Login</a>
+        <a href="#cart" class="top-cart" id="topCart"><i data-ico="cart"></i><span id="topCartText">Cart</span></a>
       </nav>
     </div>
   </header>
   <main id="view"><div class="loading">Loading…</div></main>
   <div id="cartbar" hidden>
-    <span class="cb-left"><span class="cb-ico">🛒</span><span><b id="cbItems"></b><br><span id="cbTotal"></span></span></span>
+    <span class="cb-left"><span class="cb-ico"><i data-ico="cart"></i></span><span><b id="cbItems"></b><br><span id="cbTotal"></span></span></span>
     <a href="#cart" class="cb-go">View cart ›</a>
   </div>
   <nav class="bottom" id="bottom">
-    <a href="#" data-nav="home"><span>🏠</span>Home</a>
-    <a href="#cats" data-nav="cats"><span>🗂️</span>Categories</a>
-    <button type="button" id="navScan" class="nav-scan" aria-label="Scan a barcode"><span>▦</span></button>
-    <a href="#cart" data-nav="cart"><span>🛒<i id="navCount" hidden></i></span>Cart</a>
-    <a href="#account" data-nav="account"><span>👤</span>Account</a>
+    <a href="#" data-nav="home"><span><i data-ico="home"></i></span>Home</a>
+    <a href="#cats" data-nav="cats"><span><i data-ico="grid"></i></span>Categories</a>
+    <button type="button" id="navScan" class="nav-scan" aria-label="Scan a barcode"><i data-ico="scan"></i></button>
+    <a href="#cart" data-nav="cart"><span><i data-ico="cart"></i><b id="navCount" hidden></b></span>Cart</a>
+    <a href="#account" data-nav="account"><span><i data-ico="user"></i></span>Account</a>
   </nav>
 </div>
 <div id="sheet" class="sheet" hidden><div class="sheet-bg" data-close></div><div class="sheet-card" id="sheetCard"></div></div>
 <div id="toast"></div>
+<script src="/icons.js"></script>
 <script src="/shop.js"></script>
 </body>
 </html>

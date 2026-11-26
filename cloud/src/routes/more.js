@@ -155,6 +155,19 @@ r.post('/customers/:id/online-password', need('customers'), wrap(async (req, res
 }));
 r.get('/shop/track/:token', wrap(async (req, res) => ok(res, { order: await shop.publicOrder(req.params.token) })));
 
+// ------------------------------------------------------------------ offers, shop barcodes, expenses
+const expenses = require('../expenses');
+const catalog = require('../catalog');
+r.get('/offers', need('stock_view'), wrap(async (req, res) => ok(res, { offers: await catalog.offers() })));
+r.post('/offers', need('products'), wrap(async (req, res) => { await catalog.setOffer(req.body || {}, req.user); ok(res); }));
+r.post('/products/:id/barcode/internal', need('products'), wrap(async (req, res) => ok(res, { code: await catalog.internalBarcode(req.params.id, req.user) })));
+r.get('/expenses', need('daily'), wrap(async (req, res) => {
+  const [from, to] = reports.range(req.query.period || req.query.from ? req.query : { period: 'month' });
+  ok(res, { ...(await expenses.list(from, to)), from, to, categories: expenses.CATEGORIES });
+}));
+r.post('/expenses', need('daily'), wrap(async (req, res) => ok(res, await expenses.add(req.body || {}, req.user))));
+r.post('/expenses/:id/delete', need('reports'), wrap(async (req, res) => { await expenses.remove(req.params.id, req.user); ok(res); }));
+
 // ------------------------------------------------------------------ product photos
 const images = require('../images');
 r.post('/products/:id/image', need('products'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {

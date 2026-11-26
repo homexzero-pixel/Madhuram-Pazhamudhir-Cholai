@@ -1,6 +1,6 @@
 'use strict';
 const db = require('./db');
-const { paise, milli, rateBp, rs, qtyDb, qtyStr, nowIST, UserError } = require('./money');
+const { paise, milli, rateBp, rs, qtyDb, qtyStr, nowIST, todayIST, UserError } = require('./money');
 const { audit } = require('./auth');
 
 const UNITS = ['pcs', 'kg'];
@@ -11,12 +11,12 @@ const TAX_CLASSES = ['unset', 'taxable', 'exempt', 'nil'];
 async function version() {
   const r = await db.one('SELECT COUNT(*) n, MAX(updated_at) u FROM items WHERE active=1');
   const b = await db.one('SELECT COUNT(*) n FROM barcodes');
-  return `${r.n}-${(r.u || '').replace(/\D/g, '')}-${b.n}`;
+  return `${r.n}-${(r.u || '').replace(/\D/g, '')}-${b.n}-${todayIST()}`;
 }
 
 async function counterCatalogue() {
   const items = await db.query(
-    `SELECT i.id, i.sku, i.plu, i.name, i.name_ta, i.unit, i.price, i.mrp, i.gst_rate, i.tax_class, i.on_hand, c.name cat, i.image
+    `SELECT i.id, i.sku, i.plu, i.name, i.name_ta, i.unit, ${require('./money').PRICE_NOW(todayIST())} price, i.mrp, i.gst_rate, i.tax_class, i.on_hand, c.name cat, i.image
      FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE i.active=1 ORDER BY i.name`);
   const codes = await db.query('SELECT b.code, b.item_id, b.per FROM barcodes b JOIN items i ON i.id=b.item_id WHERE i.active=1');
   const sold = new Map((await db.query(`SELECT l.item_id, COUNT(*) n FROM sale_lines l JOIN sales x ON x.id=l.sale_id
@@ -31,6 +31,41 @@ async function counterCatalogue() {
 }
 
 // Light list of stock for the counters (refreshed every minute): [[id, on_hand], …]
+// Offers: a special price between two dates (both optional). Empty price removes the offer.
+async function setOffer(data, user) {
+  const it = await db.one('SELECT id, name, price, mrp FROM items WHERE id=?', [data.item_id]);
+  if (!it) throw new UserError('Product not found.', 404);
+  const date = (v) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  let price = data.offer_price === '' || data.offer_price === undefined || data.offer_price === null ? null : paise(data.offer_price, 'offer price');
+  if (price === null && data.percent) price = Math.round(paise(it.price) * (100 - Number(data.percent)) / 100);
+  if (price !== null && (price <= 0 || (it.price && price >= paise(it.price)))) throw new UserError('The offer price must be below the normal price.');
+  const from = date(data.offer_from); const to = date(data.offer_to);
+  if (from && to && from > to) throw new UserError('The offer ends before it starts.');
+  await db.query('UPDATE items SET offer_price=?, offer_from=?, offer_to=?, updated_at=? WHERE id=?',
+    [price === null ? null : rs(price), price === null ? null : from, price === null ? null : to, nowIST(), it.id]);
+  await audit({ user_id: user.id, action: 'offer', summary: price === null ? `${it.name}: offer removed` : `${it.name}: offer ₹${rs(price)} (normal ₹${it.price})${from ? ` from ${from}` : ''}${to ? ` to ${to}` : ''}` });
+}
+async function offers() {
+  const t = todayIST();
+  return db.query(`SELECT i.id, i.name, i.unit, i.price, i.mrp, i.offer_price, i.offer_from, i.offer_to,
+      IF('${t}' BETWEEN COALESCE(i.offer_from,'2000-01-01') AND COALESCE(i.offer_to,'2999-12-31'), 'running', IF(i.offer_from > '${t}', 'upcoming', 'ended')) state
+    FROM items i WHERE i.offer_price IS NOT NULL ORDER BY state DESC, i.name`);
+}
+// A barcode for a product that has none (shop-packed goods): 13 digits starting 29, with a valid check digit.
+async function internalBarcode(itemId, user) {
+  const it = await db.one('SELECT id, name FROM items WHERE id=?', [itemId]);
+  if (!it) throw new UserError('Product not found.', 404);
+  const have = await db.one("SELECT code FROM barcodes WHERE item_id=? AND code REGEXP '^[0-9]{8,13}$' ORDER BY LENGTH(code) DESC LIMIT 1", [it.id]);
+  if (have) return have.code;
+  const body = `29${String(it.id).padStart(10, '0')}`;
+  const sum = [...body].reduce((a, d, i) => a + Number(d) * (i % 2 ? 3 : 1), 0);
+  const code = body + ((10 - (sum % 10)) % 10);
+  await db.query('INSERT IGNORE INTO barcodes (code, item_id, per) VALUES (?,?,1)', [code, it.id]);
+  await db.query('UPDATE items SET updated_at=? WHERE id=?', [nowIST(), it.id]);
+  await audit({ user_id: user.id, action: 'barcode', summary: `Shop barcode ${code} for ${it.name}` });
+  return code;
+}
+
 async function stockNow() {
   return (await db.query('SELECT id, on_hand FROM items WHERE active=1')).map((r) => [r.id, qtyStr(milli(r.on_hand))]);
 }
@@ -80,6 +115,7 @@ function itemOut(i) {
     cost: i.cost, gst_rate: i.gst_rate, tax_class: i.tax_class, hsn: i.hsn, reorder_level: qtyStr(milli(i.reorder_level)),
     on_hand: qtyStr(milli(i.on_hand)), active: !!i.active, cat: i.cat || '', codes: i.codes ? String(i.codes).split(',') : [],
     image: i.image ? `/img/p/${i.image}` : null, image_source: i.image_source || null,
+    offer_price: i.offer_price, offer_from: i.offer_from, offer_to: i.offer_to,
   };
 }
 
@@ -385,5 +421,5 @@ async function importCsv(text, user) {
   return { created, updated, barcodes, errors: errors.slice(0, 50) };
 }
 
-module.exports = { stockNow, setCount, counterCatalogue, version, search, get, save, receive, receiveIn, writeOff, issue, moves, importCsv, parseCsv,
+module.exports = { setOffer, offers, internalBarcode, stockNow, setCount, counterCatalogue, version, search, get, save, receive, receiveIn, writeOff, issue, moves, importCsv, parseCsv,
   categoryId, UNITS };

@@ -1,4 +1,4 @@
-/* Madhuram – customers' online shop. One page for home delivery and takeaway. No login: the cart and "my orders" stay on the phone. */
+/* Madhuram online shop: home delivery and takeaway from one page. */
 'use strict';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -32,28 +32,13 @@ async function get(path) {
 }
 const remember = (list) => { for (const it of list) S.items.set(it.id, it); return list; };
 
-// ------------------------------------------------------------------ pictures: a friendly emoji per product / category, on a pastel tile
-const PICS = [
-  [/apple/i, '🍎'], [/banana|plantain|vazhai|வாழை/i, '🍌'], [/mango|மாம்/i, '🥭'], [/grape/i, '🍇'], [/orange|mosambi|sathukudi/i, '🍊'], [/lemon|lime/i, '🍋'],
-  [/water ?melon/i, '🍉'], [/pine ?apple/i, '🍍'], [/papaya|pappaya/i, '🍈'], [/pomegranate/i, '🔴'], [/guava/i, '🍐'], [/coconut|தேங்காய்/i, '🥥'], [/strawberr/i, '🍓'],
-  [/tomato|தக்காளி/i, '🍅'], [/onion|வெங்காய/i, '🧅'], [/potato|உருளை/i, '🥔'], [/carrot/i, '🥕'], [/brinjal|egg ?plant|கத்தரி/i, '🍆'], [/chilli|chili|mirchi/i, '🌶️'],
-  [/garlic|பூண்டு/i, '🧄'], [/ginger|இஞ்சி/i, '🫚'], [/corn/i, '🌽'], [/beans|avarai|அவரை/i, '🫛'], [/cucumber|vellari/i, '🥒'], [/cabbage|cauli|broc/i, '🥦'],
-  [/leaf|keerai|spinach|coriander|mint|curry/i, '🌿'], [/mushroom/i, '🍄'], [/pumpkin|gourd|பூசணி|பாகற்/i, '🎃'],
-  [/milk|பால்/i, '🥛'], [/curd|yog|தயிர்/i, '🥣'], [/butter|ghee|நெய்/i, '🧈'], [/cheese|paneer/i, '🧀'], [/egg|முட்டை/i, '🥚'],
-  [/bread|bun|rusk/i, '🍞'], [/cake/i, '🍰'], [/biscuit|cookie|marie|good ?day/i, '🍪'], [/chocolate|dairy milk|kitkat|5 ?star|choco/i, '🍫'],
-  [/chips|snack|mixture|murukku/i, '🍿'], [/candy|toffee|sweet/i, '🍬'], [/juice|maaza|frooti|slice/i, '🧃'], [/cola|pepsi|sprite|bovonto|soda|drink/i, '🥤'],
-  [/tea|chai|தேநீர்/i, '🍵'], [/coffee|bru|nescafe/i, '☕'], [/horlicks|boost|bournvita/i, '🥤'], [/rice|அரிசி|ponni/i, '🍚'], [/dhal|dal|gram|paruppu|பருப்பு/i, '🫘'],
-  [/atta|flour|maida|rava|sooji|மாவு/i, '🌾'], [/oil|எண்ணெய்/i, '🫒'], [/sugar|சர்க்கரை|jaggery/i, '🍯'], [/salt|உப்பு/i, '🧂'],
-  [/masala|spice|turmeric|pepper|jeera|mustard|மஞ்சள்/i, '🌶️'], [/noodle|maggi|pasta|vermi/i, '🍜'], [/oats|cornflakes|chocos|kellogg/i, '🥣'], [/pickle|ஊறுகாய்/i, '🫙'],
-  [/dates|பேரீச்/i, '🌴'], [/nuts|cashew|badam|almond|dry fruit/i, '🥜'], [/soap|சோப்/i, '🧼'], [/shampoo|conditioner/i, '🧴'], [/paste|tooth/i, '🪥'],
-  [/brush/i, '🪥'], [/detergent|washing|surf|tide|rin|ariel/i, '🫧'], [/clean|phenyl|lizol|harpic|vim/i, '🧽'], [/cream|lotion|face|fair/i, '💆'],
-  [/spray|deo|perfume|scent/i, '🌸'], [/shav|blade|razor|gillette/i, '🪒'], [/baby|diaper|cerelac/i, '🍼'], [/medic|tablet|balm|vicks|syrup/i, '💊'],
-  [/match|agarbatti|camphor|karpur|fire/i, '🔥'], [/oil|hair/i, '💧'], [/talc|powder/i, '🫙'], [/vegetable/i, '🥦'], [/fruit/i, '🍎'], [/food/i, '🍱'],
-];
-const TINTS = ['#fff1e6', '#eaf7ee', '#fff6d9', '#ffe9ee', '#e8f1ff', '#f2ecff', '#e6f8f6', '#fdf0e2'];
-const pic = (text) => (PICS.find(([re]) => re.test(text || '')) || [null, '🛒'])[1];
-const itemPic = (it) => pic(`${it.name} ${it.name_ta}`) !== '🛒' ? pic(`${it.name} ${it.name_ta}`) : pic(it.cat);
-const tint = (k) => TINTS[[...String(k)].reduce((a, c) => a + c.charCodeAt(0), 0) % TINTS.length];
+// ------------------------------------------------------------------ pictures: product photo, or a plain line icon for its product group
+const GROUP_TINT = { fruit: '#fdeee6', veg: '#e8f4ea', dairy: '#eaf1fb', bakery: '#f8efe3', snacks: '#f9eedf', drink: '#e9f3f6', oil: '#f6f3df',
+  staples: '#f4efe6', clean: '#e9f0f7', care: '#f3ecf6', baby: '#eef3f9', pill: '#f7eaea', box: '#eff2f0' };
+const pic = (text) => ico(groupOf(text), 'pic');
+const itemPic = (it) => ico(groupOf(`${it.name} ${it.cat}`), 'pic');
+const tint = () => '#f3f5f4';
+const catTint = (k) => GROUP_TINT[groupOf(k)] || GROUP_TINT.box;
 
 // ------------------------------------------------------------------ cart
 function saveCart() { localStorage.setItem('mpc_cart', JSON.stringify(S.cart)); drawBars(); }
@@ -90,7 +75,7 @@ function drawBars() {
   $('#navCount').hidden = !c.n; $('#navCount').textContent = c.n;
   $('#topCartText').textContent = c.n ? `${c.n} item${c.n === 1 ? '' : 's'} · ${rs(c.total)}` : 'Cart';
   $('#topCart').classList.toggle('full', !!c.n);
-  $('#acctLink').textContent = S.me ? `👤 ${S.me.name.split(' ')[0]}` : '👤 Login / Sign up';
+  $('#acctLink').innerHTML = `${ico('user')}<span>${S.me ? esc(S.me.name.split(' ')[0]) : 'Login'}</span>`;
   const page = hash.startsWith('#cart') ? 'cart' : /^#(account|login|signup|forgot|orders|o=)/.test(hash) ? 'account' : hash.startsWith('#cat') ? 'cats' : 'home';
   $$('.bottom a').forEach((a) => a.classList.toggle('on', a.dataset.nav === page));
 }
@@ -106,7 +91,7 @@ const card = (it) => {
   const off = offPct(it);
   return `<div class="pc ${it.in_stock ? '' : 'out'}" data-pid="${it.id}">
     <div class="pimg" style="background:${it.image ? '#fff' : tint(it.cat || it.name)}">${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy">` : itemPic(it)}
-      ${off ? `<span class="tag">${off}%<br>OFF</span>` : ''}${it.popular ? '<span class="pop">★ Popular</span>' : ''}</div>
+      ${off ? `<span class="tag">${off}%<br>OFF</span>` : ''}${it.popular ? '<span class="pop">Bestseller</span>' : ''}</div>
     <div class="pbody"><div class="pn">${esc(it.name)}</div><div class="pt ta">${esc(it.name_ta)}</div>
       <div class="pu">${it.unit === 'kg' ? 'Per kg · choose weight' : '1 piece'}</div>
       <div class="pr"><span class="price">${rs(paise(it.price))}${it.unit === 'kg' ? '<small>/kg</small>' : ''}
@@ -129,14 +114,14 @@ async function openSheet(it) {
   let q = S.cart[it.id] || step(it);
   const card$ = $('#sheetCard');
   const draw = () => {
-    card$.innerHTML = `<div class="grab"></div><button class="x" data-close aria-label="Close">✕</button>
+    card$.innerHTML = `<div class="grab"></div><button class="x" data-close aria-label="Close">${ico('x')}</button>
       <div class="big-img" style="background:${it.image ? '#fff' : tint(it.cat || it.name)}">${it.image ? `<img src="${esc(it.image)}" alt="">` : itemPic(it)}${off ? `<span class="tag">${off}%<br>Save</span>` : ''}</div>
       <h2>${esc(it.name)}</h2><div class="ta mut">${esc(it.name_ta)}</div>
       <div style="margin-top:6px"><span class="bp">${rs(paise(it.price))}${it.unit === 'kg' ? '<small>/kg</small>' : ''}</span>
-        ${off ? `<span class="mrp" style="display:inline;margin-left:6px">MRP ${rs(paise(it.mrp))}</span>` : ''}${it.popular ? '<span class="sold">★ Popular here</span>' : ''}</div>
+        ${off ? `<span class="mrp" style="display:inline;margin-left:6px">MRP ${rs(paise(it.mrp))}</span>` : ''}${it.popular ? '<span class="sold">Bestseller</span>' : ''}</div>
       <p class="small mut">${it.in_stock ? `In stock${it.unit === 'kg' ? ' · loose, weighed when packed (the bill shows the exact weight)' : ''}` : '<b class="bad">Sold out right now</b>'}
         ${it.cat ? ` · ${esc(it.cat)}` : ''}</p>
-      <div class="sec-h"><h2>Picked for you</h2></div><div class="rail" id="similar"><div class="mut small">Loading…</div></div>`;
+      <div class="sec-h"><h2>Similar products</h2></div><div class="rail" id="similar"><div class="mut small">Loading…</div></div>`;
     $('#sheetFoot') && $('#sheetFoot').remove();
     const foot = document.createElement('div');
     foot.className = 'sheet-foot'; foot.id = 'sheetFoot';
@@ -174,15 +159,18 @@ async function homeView() {
   const s = S.info.shop;
   const firstSlot = S.info.slots[0] && S.info.slots[0].slots[0];
   const banners = [
-    `<a class="banner b-green" href="#cats"><h3>Fresh &amp; healthy<br>fruits &amp; veggies</h3><p>Picked every morning. Order now, ${S.mode === 'delivery' ? 'delivered' : 'ready to collect'} ${firstSlot ? `from ${esc(firstSlot.l)}` : 'today'}.</p><span class="cta">Order now</span><span class="art">🥦</span></a>`,
-    Number(s.online_free_delivery_above) && s.online_delivery === '1' ? `<a class="banner b-yellow" href="#cats"><h3>Free delivery</h3><p>On orders above ${rs(paise(s.online_free_delivery_above))}${s.online_area ? ` · ${esc(s.online_area)}` : ''}.</p><span class="cta">Shop now</span><span class="art">🛵</span></a>` : '',
-    s.online_pickup === '1' ? `<a class="banner b-teal" href="#cats"><h3>Order &amp; pick up</h3><p>Skip the queue – we pack it, you collect at the counter.</p><span class="cta">Takeaway</span><span class="art">🛍️</span></a>` : '',
+    `<a class="banner b-green" href="#cats"><span class="b-k">Fresh every morning</span><h3>Fruits and vegetables</h3>
+      <p>${S.mode === 'delivery' ? 'Delivered' : 'Packed for pickup'} ${firstSlot ? `from ${esc(firstSlot.l.split('–')[0])}` : 'today'}</p><span class="cta">Shop now ${ico('right')}</span></a>`,
+    Number(s.online_free_delivery_above) && s.online_delivery === '1' ? `<a class="banner b-dark" href="#cats"><span class="b-k">Home delivery</span><h3>Free above ${rs(paise(s.online_free_delivery_above))}</h3>
+      <p>${s.online_area ? esc(s.online_area) : 'Near the shop'}</p><span class="cta">Order now ${ico('right')}</span></a>` : '',
+    s.online_pickup === '1' ? `<a class="banner b-light" href="#cats"><span class="b-k">Takeaway</span><h3>Order now, collect at the counter</h3>
+      <p>No waiting in the queue</p><span class="cta">Order for pickup ${ico('right')}</span></a>` : '',
   ].filter(Boolean);
   view().innerHTML = `${closedNote()}
     <div class="banners" id="banners">${banners.join('')}</div><div class="dots">${banners.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>
     <section><div class="sec-h"><h2>Shop by category</h2><a href="#cats">See all ›</a></div>
       <div class="cats-row">${S.info.cats.slice(0, 14).map(catTile).join('')}</div></section>
-    <section id="offersSec" hidden><div class="sec-h"><h2>Offers for you 🔥</h2></div><div class="rail" id="offers"></div></section>
+    <section id="offersSec" hidden><div class="sec-h"><h2>On offer</h2></div><div class="rail" id="offers"></div></section>
     <section><div class="sec-h"><h2>Best sellers</h2></div><div class="grid" id="popular"><div class="mut small">Loading…</div></div></section>
     <p class="credit">Some product photos: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (CC BY-SA).
       Pictures are for illustration; packs may differ.</p>`;
@@ -195,7 +183,7 @@ async function homeView() {
   } catch (e) { $('#popular').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
   drawBars();
 }
-const catTile = (c) => `<a class="cat" href="#cat=${c.id}"><div class="ci" style="background:${tint(c.name)}">${pic(c.name)}</div><div class="cn">${esc(c.name)}</div></a>`;
+const catTile = (c) => `<a class="cat" href="#cat=${c.id}"><div class="ci" style="background:${catTint(c.name)}">${pic(c.name)}</div><div class="cn">${esc(c.name)}</div></a>`;
 
 function catsView() {
   view().innerHTML = `${closedNote()}<div class="page"><h1>All categories</h1><div class="cat-grid">${S.info.cats.map(catTile).join('')}</div></div>`;
@@ -205,7 +193,7 @@ async function listView({ cat = '', q = '', code = '' }) {
   const c = S.info.cats.find((x) => String(x.id) === String(cat));
   view().innerHTML = `${closedNote()}<div class="page"><h1>${c ? `${pic(c.name)} ${esc(c.name)}` : q ? `Results for “${esc(q)}”` : 'Scanned product'}</h1>
     ${c ? `<div class="cats-row" style="margin-bottom:10px">${S.info.cats.map((x) => `<a class="cat" href="#cat=${x.id}" style="flex-basis:70px;${String(x.id) === String(cat) ? 'color:var(--g-d)' : ''}">
-      <div class="ci" style="width:58px;height:58px;font-size:1.7rem;background:${String(x.id) === String(cat) ? 'var(--g-s2)' : tint(x.name)}">${pic(x.name)}</div><div class="cn">${esc(x.name)}</div></a>`).join('')}</div>` : ''}
+      <div class="ci" style="width:58px;height:58px;font-size:1.7rem;background:${String(x.id) === String(cat) ? 'var(--g-s2)' : catTint(x.name)}">${pic(x.name)}</div><div class="cn">${esc(x.name)}</div></a>`).join('')}</div>` : ''}
     <div class="grid" id="list"><div class="mut small">Loading…</div></div></div>`;
   try {
     const { items } = await get(`/items?${new URLSearchParams({ cat, q, code, sort: 'popular' })}`);
@@ -220,7 +208,7 @@ function cartView() {
   const s = S.info.shop;
   const lines = Object.entries(S.cart).map(([id, q]) => [S.items.get(Number(id)), q]).filter(([it]) => it);
   if (!lines.length) {
-    view().innerHTML = '<div class="page"><div class="empty" style="font-size:3rem">🛒</div><div class="empty">Your cart is empty.<br><br><a class="btn-g" href="#" style="display:inline-block;padding:12px 22px">Start shopping</a></div></div>';
+    view().innerHTML = `<div class="page"><div class="empty-state">${ico('cart', 'big')}<h2>Your cart is empty</h2><a class="btn-g" href="#">Browse products</a></div></div>`;
     return;
   }
   const c = cartSums();
@@ -231,8 +219,8 @@ function cartView() {
   if (S.dayIdx >= days.length) S.dayIdx = 0;
   view().innerHTML = `${closedNote()}<div class="page"><h1>My cart</h1><div class="cart-cols"><div class="main-col">
     <div class="box"><div class="seg">
-      ${s.online_delivery === '1' ? `<label class="${S.mode === 'delivery' ? 'on' : ''}"><input type="radio" name="cmode" value="delivery" ${S.mode === 'delivery' ? 'checked' : ''}> 🛵 Home delivery</label>` : ''}
-      ${s.online_pickup === '1' ? `<label class="${S.mode === 'pickup' ? 'on' : ''}"><input type="radio" name="cmode" value="pickup" ${S.mode === 'pickup' ? 'checked' : ''}> 🛍️ Takeaway</label>` : ''}</div>
+      ${s.online_delivery === '1' ? `<label class="${S.mode === 'delivery' ? 'on' : ''}"><input type="radio" name="cmode" value="delivery" ${S.mode === 'delivery' ? 'checked' : ''}> ${ico('truck')} Home delivery</label>` : ''}
+      ${s.online_pickup === '1' ? `<label class="${S.mode === 'pickup' ? 'on' : ''}"><input type="radio" name="cmode" value="pickup" ${S.mode === 'pickup' ? 'checked' : ''}> ${ico('bag')} Takeaway</label>` : ''}</div>
       <p class="small mut" style="margin:8px 0 0">${S.mode === 'delivery' ? `We deliver${s.online_area ? ` ${esc(s.online_area)}` : ''}. Minimum order ${rs(minOrder)}.` : `Collect at the shop${s.address ? `: ${esc(s.address)}` : ''}.`}</p></div>
     <div class="box"><h3>${c.n} item${c.n === 1 ? '' : 's'}</h3>
       ${lines.map(([it, q]) => `<div class="cl" data-pid="${it.id}"><div class="ce" style="background:${it.image ? '#fff' : tint(it.cat || it.name)}">${it.image ? `<img src="${esc(it.image)}" alt="">` : itemPic(it)}</div>
@@ -243,7 +231,7 @@ function cartView() {
       <div class="bill-row"><span>Items total</span><span>${rs(c.total)}</span></div>
       ${S.mode === 'delivery' ? `<div class="bill-row"><span>Delivery charge</span><span>${dc ? rs(dc) : '<b class="okc">FREE</b>'}</span></div>` : ''}
       <div class="bill-row total"><span>To pay (approx.)</span><span>${rs(c.total + dc)}</span></div>
-      ${c.saved > 0 ? `<div class="save-strip">🎉 You save ${rs(c.saved)} on MRP</div>` : ''}
+      ${c.saved > 0 ? `<div class="save-strip">You save ${rs(c.saved)} on MRP</div>` : ''}
       ${S.mode === 'delivery' && dc && paise(s.online_free_delivery_above) ? `<p class="small mut">Add ${rs(paise(s.online_free_delivery_above) - c.total)} more for free delivery.</p>` : ''}
       ${S.mode === 'delivery' && c.total < minOrder ? `<div class="err">Minimum order for delivery is ${rs(minOrder)}. Add ${rs(minOrder - c.total)} more, or choose takeaway.</div>` : ''}</div>
     <div class="box"><h3>${S.mode === 'delivery' ? 'Delivery' : 'Pickup'} time</h3>
@@ -254,7 +242,7 @@ function cartView() {
       <div class="row2"><a class="btn-g" href="#login" data-after="#cart">Log in</a><a class="btn-o" href="#signup" data-after="#cart">Sign up</a></div></div>`}
     <form class="box" id="of" ${S.me ? '' : 'hidden'}><h3>Your details</h3>
       <div class="field"><label>Name</label><input name="name" required value="${esc((S.me && S.me.name) || saved.name || '')}" autocomplete="name"></div>
-      <div class="field"><label>Mobile</label><div class="fixed">${esc(S.me ? S.me.phone : '')} ${S.me && S.me.verified ? '<span class="pill">✓ verified</span>' : ''}</div></div>
+      <div class="field"><label>Mobile</label><div class="fixed">${esc(S.me ? S.me.phone : '')} ${S.me && S.me.verified ? '<span class="pill">Verified</span>' : ''}</div></div>
       ${S.mode === 'delivery' ? `<div class="field"><label>Delivery address with landmark</label><textarea name="address" rows="2">${esc((S.me && S.me.address) || saved.address || '')}</textarea></div>` : ''}
       <div class="field"><label>Note for the shop (optional)</label><input name="notes" placeholder="e.g. ripe bananas, call before coming"></div>
       <div class="field"><label>Pay by</label><select name="pay"><option value="cash">Cash</option><option value="upi">UPI${s.upi_id ? ` (${esc(s.upi_id)})` : ''}</option></select></div>
@@ -305,7 +293,7 @@ async function ordersView() {
     const { orders } = await get('/account/orders');
     view().innerHTML = `<div class="page narrow"><h1>My orders</h1>${orders.map((o) => `<a class="box order-row" href="#o=${o.token}"><span><b>${esc(o.number)}</b>
       <span class="pill ${o.status === 'cancelled' ? 'red' : o.status === 'done' ? 'grey' : ''}">${esc(o.status === 'done' ? 'Completed' : o.status === 'cancelled' ? 'Cancelled' : 'In progress')}</span><br>
-      <span class="small mut">${o.mode === 'delivery' ? '🛵 Delivery' : '🛍️ Takeaway'} · ${esc(o.slot_label)}</span></span><b>${rs(paise(o.bill_total || o.est_total))} ›</b></a>`).join('')
+      <span class="small mut">${o.mode === 'delivery' ? 'Delivery' : 'Takeaway'} · ${esc(o.slot_label)}</span></span><b>${rs(paise(o.bill_total || o.est_total))} ›</b></a>`).join('')
       || '<div class="empty">No orders yet. <a href="#" class="okc">Start shopping</a></div>'}</div>`;
     return;
   }
@@ -315,7 +303,7 @@ async function ordersView() {
   const rows = await Promise.all(mine.map((m) => get(`/track/${m.t}`).then((r) => ({ ...r.order, token: m.t })).catch(() => null)));
   $('#olist').innerHTML = rows.filter(Boolean).map((o) => `<a class="box order-row" href="#o=${o.token}"><span><b>${esc(o.number)}</b>
     <span class="pill ${o.status === 'cancelled' ? 'red' : o.status === 'done' ? 'grey' : ''}">${esc(o.status === 'done' ? 'Completed' : o.status === 'cancelled' ? 'Cancelled' : 'In progress')}</span><br>
-    <span class="small mut">${o.mode === 'delivery' ? '🛵 Delivery' : '🛍️ Takeaway'} · ${esc(o.slot_label)}</span></span><b>${rs(paise(o.bill_total || o.est_total))} ›</b></a>`).join('');
+    <span class="small mut">${o.mode === 'delivery' ? 'Delivery' : 'Takeaway'} · ${esc(o.slot_label)}</span></span><b>${rs(paise(o.bill_total || o.est_total))} ›</b></a>`).join('');
 }
 
 let trackTimer;
@@ -323,13 +311,13 @@ async function trackView(token) {
   const { order: o } = await get(`/track/${token}`);
   const steps = ['new', 'accepted', o.mode === 'pickup' ? 'ready' : 'out', 'done'];
   const names = { new: 'Received', accepted: 'Processing', ready: 'Ready to collect', out: 'On the way', done: 'Completed' };
-  const icon = { new: '🧾', accepted: '📦', ready: '🛍️', out: '🛵', done: '✅', cancelled: '❌' }[o.status];
+  const icon = ico({ new: 'receipt', accepted: 'box', ready: 'bag', out: 'truck', done: 'check', cancelled: 'x' }[o.status]);
   const at = steps.indexOf(o.status);
   view().innerHTML = `<div class="page"><h1>Order ${esc(o.number)}</h1>
-    <div class="status-card"><div class="small">${o.mode === 'delivery' ? '🛵 Home delivery' : '🛍️ Takeaway'} · ${esc(o.slot_label)}</div>
+    <div class="status-card"><div class="small">${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'} · ${esc(o.slot_label)}</div>
       <div class="st">${icon} ${esc(o.status_label)}</div>${o.status === 'cancelled' && o.note ? `<div class="small">Reason: ${esc(o.note)}</div>` : ''}</div>
     ${o.status !== 'cancelled' ? `<div class="steps">${steps.map((s, i) => `<div class="${i <= at ? 'done' : ''}">${names[s]}</div>`).join('')}</div>` : ''}
-    ${o.lines.some((l) => l.note) ? '<div class="notice" style="margin:0 0 12px">Some items were not available. You are <b>not charged</b> for them; if you already paid, the shop refunds the difference.</div>' : ''}
+    ${o.lines.some((l) => l.note) ? '<div class="notice" style="margin:0 0 12px">Some items were not available. They are not charged. Anything already paid for them is refunded.</div>' : ''}
     <div class="box"><h3>Items</h3>${o.lines.map((l) => `<div class="cl" ${l.note && !Number(l.qty) ? 'style="opacity:.55;text-decoration:line-through"' : ''}>
       <div class="ce" style="background:${tint(l.name)}">${pic(`${l.name} ${l.name_ta}`)}</div>
       <div class="cm"><b>${esc(l.name)}</b><span>${esc(l.qty)} ${l.unit === 'kg' ? 'kg' : 'pc'} × ${rs(paise(l.price))}</span>
@@ -338,7 +326,7 @@ async function trackView(token) {
       ${Number(o.delivery_charge) ? `<div class="bill-row"><span>Delivery charge</span><span>${rs(paise(o.delivery_charge))}</span></div>` : ''}
       <div class="bill-row total"><span>${o.bill_no ? `Bill ${esc(o.bill_no)}` : 'Approx. total'}</span><span>${rs(paise(o.bill_total || o.est_total))}</span></div></div>
     <div class="box small">Questions? ${o.shop.phone ? `Call <a href="tel:${esc(o.shop.phone)}"><b>${esc(o.shop.phone)}</b></a>` : 'Call the shop'}.
-      ${o.shop.upi_id ? `<br>UPI: <b>${esc(o.shop.upi_id)}</b>` : ''}<br><span class="mut">This page updates by itself.</span></div>
+      ${o.shop.upi_id ? `<br>UPI: <b>${esc(o.shop.upi_id)}</b>` : ''}<br></div>
     <a class="btn-g" href="#" style="display:block">Order more</a></div>`;
   clearTimeout(trackTimer);
   if (!['done', 'cancelled'].includes(o.status)) trackTimer = setTimeout(() => { if (location.hash === `#o=${token}`) trackView(token).catch(() => {}); }, 20000);
@@ -360,7 +348,7 @@ function authView(kind) {
       ${S.sms ? `<div class="field" id="otpBox" hidden><label>6-digit code sent by SMS</label><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
         <button type="button" class="link" id="resend">Send the code again</button></div>` : ''}
       <div id="aerr"></div><button class="btn-g wide" id="abtn">${S.sms ? 'Send code by SMS' : 'Create account'}</button>
-      <p class="small mut" style="text-align:center">${S.sms ? 'We send a code to check the mobile number is yours.' : 'The shop confirms your number when you collect your first order.'}</p></form>`,
+      <p class="small mut" style="text-align:center">${S.sms ? 'A 6-digit code is sent to your mobile.' : ''}</p></form>`,
     forgot: S.sms ? `<form id="af"><p class="small mut">We send a code to your mobile number. Then choose a new password.</p>
       <div class="field"><label>Mobile number</label><input name="phone" inputmode="tel" autocomplete="tel" required></div>
       <div class="field" id="otpBox" hidden><label>6-digit code sent by SMS</label><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>
@@ -408,8 +396,8 @@ function authView(kind) {
 function accountView() {
   const m = S.me;
   view().innerHTML = `<div class="page narrow"><div class="box acct-head"><div class="avatar">${esc(m.name.slice(0, 1).toUpperCase())}</div>
-      <div><h1 style="margin:0">${esc(m.name)}</h1><div class="mut">${esc(m.phone)} ${m.verified ? '<span class="pill">✓ verified</span>' : '<span class="pill grey">not verified yet</span>'}</div></div></div>
-    <a class="box order-row" href="#orders"><b>🧾 My orders</b><span>›</span></a>
+      <div><h1 style="margin:0">${esc(m.name)}</h1><div class="mut">${esc(m.phone)} ${m.verified ? '<span class="pill">Verified</span>' : '<span class="pill grey">not verified yet</span>'}</div></div></div>
+    <a class="box order-row" href="#orders"><b>${ico('receipt')} My orders</b>${ico('right')}</a>
     <form class="box" id="pf"><h3>My details</h3>
       <div class="field"><label>Name</label><input name="name" value="${esc(m.name)}" required></div>
       <div class="field"><label>Delivery address with landmark</label><textarea name="address" rows="2">${esc(m.address)}</textarea></div>
@@ -433,7 +421,7 @@ function accountView() {
 async function scan() {
   if (!('BarcodeDetector' in window)) { toast('Scanning works in Chrome on Android. Please type the name.'); $('#q').focus(); return; }
   const card$ = $('#sheetCard');
-  card$.innerHTML = '<div class="grab"></div><button class="x" data-close>✕</button><h2>Scan a barcode</h2><p class="mut small">Point the camera at the barcode on the pack.</p><video autoplay playsinline muted></video>';
+  card$.innerHTML = `<div class="grab"></div><button class="x" data-close>${ico('x')}</button><h2>Scan a barcode</h2><p class="mut small">Point the camera at the barcode on the pack.</p><video autoplay playsinline muted></video>`;
   $('#sheet').hidden = false;
   let stream;
   const stop = () => { if (stream) stream.getTracks().forEach((t) => t.stop()); };
@@ -497,8 +485,9 @@ async function route() {
     S.info = await get('/info');
   } catch (e) { view().innerHTML = `<div class="page"><div class="err">${esc(e.message)}</div></div>`; return; }
   const s = S.info.shop;
-  document.title = `${s.name} – order online`;
+  document.title = `${s.name} | Order online`;
   $('#brandName').textContent = s.name;
+  fillIcons();
   try { const a = await get('/account'); S.me = a.me; S.sms = a.sms; } catch (_) { /* browse without an account */ }
   document.addEventListener('click', (e) => { const a = e.target.closest('[data-after]'); if (a) S.after = a.dataset.after; });
   if (!S.mode) S.mode = s.online_delivery === '1' ? 'delivery' : 'pickup';

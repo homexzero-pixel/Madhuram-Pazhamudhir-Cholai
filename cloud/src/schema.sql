@@ -368,3 +368,17 @@ CREATE TABLE IF NOT EXISTS otps (
   ip VARCHAR(45) NOT NULL DEFAULT '',
   INDEX (phone, created_at), INDEX (ip, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- shop expenses (rent, power, salary, tea …)
+CREATE TABLE IF NOT EXISTS expenses (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  business_date DATE NOT NULL,
+  at DATETIME NOT NULL,
+  category VARCHAR(40) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  method VARCHAR(6) NOT NULL,
+  note VARCHAR(200) NOT NULL DEFAULT '',
+  user_id INT NOT NULL,
+  shift_id INT NULL,
+  INDEX (business_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

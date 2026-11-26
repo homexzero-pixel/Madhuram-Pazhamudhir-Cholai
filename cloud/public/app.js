@@ -1,4 +1,4 @@
-/* Madhuram cloud – screens other than billing (billing is in pos.js). Plain JavaScript, no build step. */
+/* Madhuram cloud: all screens except billing (pos.js). */
 'use strict';
 
 const App = { me: null, perms: new Set(), settings: {}, counters: [], version: '', installEvent: null, views: {}, afterFrame: [] };
@@ -180,7 +180,7 @@ function pickCounter(after) {
     <div class="actions"><button data-close>Close</button></div>`);
   $$('[data-c]', d).forEach((b) => b.addEventListener('click', () => {
     localStorage.setItem('mpc_counter', b.dataset.c);
-    const w = $('.who span'); if (w) w.textContent = b.dataset.c;
+    const w = $('#who-c'); if (w) w.textContent = b.dataset.c;
     d.close('ok');
     if (after) after();
   }));
@@ -195,27 +195,37 @@ function pickCounter(after) {
 }
 
 // ------------------------------------------------------------------ frame, menu and routing
+// [route, label, permission, icon, group]
 const MENU = [
-  ['bill', 'Billing', 'bill'], ['orders', 'Online orders', 'orders'], ['bills', 'Bills', 'bill'], ['returns', 'Returns', 'bill'],
-  ['cash', 'Cash closing', 'cash'], ['customers', 'Customers & credit', 'customers'], ['products', 'Products & stock', 'stock_view'],
-  ['purchases', 'Purchases & suppliers', 'purchase'], ['dashboard', 'Dashboard', 'reports'], ['owner', 'Daily tools', 'daily'],
-  ['reports', 'Reports', 'reports'], ['staff', 'Staff logins', 'users'], ['settings', 'Settings & backup', 'settings'],
-  ['install', 'Install on this PC', null],
+  ['bill', 'Billing', 'bill', 'bill', 'Sales'], ['orders', 'Online orders', 'orders', 'bag', 'Sales'], ['bills', 'Bills', 'bill', 'file', 'Sales'],
+  ['returns', 'Returns', 'bill', 'undo', 'Sales'], ['cash', 'Cash closing', 'cash', 'wallet', 'Sales'],
+  ['products', 'Products & stock', 'stock_view', 'box', 'Stock'], ['purchases', 'Purchases', 'purchase', 'truck', 'Stock'],
+  ['customers', 'Customers', 'customers', 'users', 'People'], ['staff', 'Staff', 'users', 'user', 'People'],
+  ['dashboard', 'Dashboard', 'reports', 'chart', 'Reports'], ['reports', 'Reports', 'reports', 'pie', 'Reports'], ['owner', 'Daily tools', 'daily', 'tools', 'Reports'],
+  ['settings', 'Settings & backup', 'settings', 'settings', 'Admin'], ['install', 'Install on this PC', null, 'download', 'Admin'],
 ];
+function navHtml() {
+  let group = '';
+  return MENU.filter((m) => !m[2] || can(m[2])).map((m) => {
+    const head = m[4] !== group ? `<div class="nav-h">${esc(m[4])}</div>` : '';
+    group = m[4];
+    return `${head}<a href="#/${m[0]}" data-r="${m[0]}">${ico(m[3])}<span class="lbl">${esc(m[1])}</span><span class="badge"></span></a>`;
+  }).join('');
+}
 
 function frame() {
   const s = App.settings;
   $('#app').className = '';
   $('#app').innerHTML = `
-    <div class="topbar"><button id="menu-btn" aria-label="Menu">☰</button><b>${esc(s.name)}</b>
+    <div class="topbar"><button id="menu-btn" aria-label="Menu">${ico('menu')}</button><b>${esc(s.name)}</b>
       <button class="install-btn primary">Install</button></div>
     <div class="shell">
       <aside class="side" id="side">
-        <img src="/img/logo.webp" alt="${esc(s.name)}">
-        <nav class="nav">${MENU.filter((m) => !m[2] || can(m[2])).map((m) => `<a href="#/${m[0]}" data-r="${m[0]}">${esc(m[1])}</a>`).join('')}</nav>
-        <button class="install-btn primary" id="install-btn">⬇ Install on this PC</button>
-        <div class="who">${esc(App.me.name)} · ${esc(App.me.role)}<br><span>${esc(myCounter() || 'No counter chosen')}</span><br>
-          <a href="#" id="logout">Log out</a> · <span class="small">v${esc(App.version)}</span></div>
+        <div class="side-brand"><img src="/img/logo.webp" alt=""><div><b>${esc(s.name)}</b><span>Store software</span></div></div>
+        <nav class="nav">${navHtml()}</nav>
+        <button class="install-btn" id="install-btn">${ico('download')} Install on this PC</button>
+        <div class="who"><div class="who-n">${esc(App.me.name)}</div><div class="who-r">${esc(App.me.role)} · <span id="who-c">${esc(myCounter() || 'no counter')}</span></div>
+          <a href="#" id="logout">${ico('logout')} Log out</a><span class="ver">v${esc(App.version)}</span></div>
       </aside>
       <main class="main" id="main"></main>
     </div>`;
@@ -223,7 +233,7 @@ function frame() {
   $$('.install-btn').forEach((b) => b.addEventListener('click', installApp));
   $('#menu-btn').addEventListener('click', () => $('#side').classList.toggle('open'));
   markBackup();
-  if (window.matchMedia('(display-mode: standalone)').matches) { const a = $('.nav a[data-r="install"]'); if (a) a.innerHTML = 'Install on this PC <span class="ok">✓</span>'; }
+  if (window.matchMedia('(display-mode: standalone)').matches) { const b = $('.nav a[data-r="install"] .badge'); if (b) b.innerHTML = `<span class="ok">${ico('check')}</span>`; }
   App.afterFrame.forEach((fn) => fn());
   $('#logout').addEventListener('click', async (e) => {
     e.preventDefault();
@@ -235,9 +245,9 @@ function frame() {
 
 // The settings menu shows a red dot until today's backup has been downloaded on this PC.
 function markBackup() {
-  const a = $('.nav a[data-r="settings"]');
+  const a = $('.nav a[data-r="settings"] .badge');
   if (!a || !can('backup')) return;
-  a.innerHTML = `Settings & backup ${backupDoneToday() ? '<span class="dot ok-dot" title="Backup downloaded today"></span>' : '<span class="dot bad-dot" title="Download today\'s backup"></span>'}`;
+  a.innerHTML = backupDoneToday() ? '<span class="dot ok-dot" title="Backup downloaded today"></span>' : '<span class="dot bad-dot" title="Download today\'s backup"></span>';
 }
 
 async function route() {
@@ -300,7 +310,7 @@ function showLogin(st) {
       <div class="error" hidden></div>
       <button class="primary big" style="width:100%;margin-top:10px">Log in</button></form>
     <p class="small muted">Forgot the password? The owner can set a new one in Staff logins.</p>
-    <button class="install-btn" style="width:100%">⬇ Install on this PC</button></div>`;
+    <button class="install-btn" style="width:100%">Install on this PC</button></div>`;
   if (App.installEvent) $$('.install-btn').forEach((b) => b.classList.add('show'));
   $$('.install-btn').forEach((b) => b.addEventListener('click', installApp));
   $('#showpw').addEventListener('change', (e) => { $('[name=password]').type = e.target.checked ? 'text' : 'password'; });
@@ -354,7 +364,7 @@ function showSetup() {
   });
 }
 
-// ------------------------------------------------------------------ receipt (80 mm / 58 mm thermal) – printed for every sale
+// ------------------------------------------------------------------ receipt (80 mm / 58 mm thermal)
 function receiptHtml(b) {
   const s = App.settings;
   const lines = b.lines.map((l) => `<tr><td colspan="3">${esc(l.name)}${l.name_ta ? `<br><span class="ta">${esc(l.name_ta)}</span>` : ''}</td></tr>
@@ -382,7 +392,10 @@ function receiptHtml(b) {
     <hr><div class="c">${esc(s.bill_footer)}</div></div>`;
 }
 async function printBill(bill, reprint = false) {
-  $('#print-area').innerHTML = receiptHtml(bill);
+  const two = App.settings.print_copies === '2' && !reprint;
+  $('#print-area').innerHTML = two
+    ? `<div class="copy-label">CUSTOMER COPY</div>${receiptHtml(bill)}<div class="page-break"></div><div class="copy-label">SHOP COPY</div>${receiptHtml(bill)}`
+    : receiptHtml(bill);
   await new Promise((r) => setTimeout(r, 50));
   window.print();
   api(`/bills/${bill.id}/printed`, { method: 'POST', body: { reprint } }).catch(() => {});
@@ -447,7 +460,8 @@ App.views.cash = async (main) => {
         <table>${row('Opening cash (checked at opening)', summary.float)}${row('+ Cash sales', summary.cash_sales)}${row('+ Cash in', summary.cash_in)}
         ${Number(summary.udhaar_received) ? row('&nbsp;&nbsp;(of which credit paid back)', summary.udhaar_received, 'muted') : ''}
         ${row('− Cash out', summary.cash_out)}${Number(summary.refunds) ? row('&nbsp;&nbsp;(of which refunds)', summary.refunds, 'muted') : ''}
-        ${Number(summary.supplier_paid) ? row('&nbsp;&nbsp;(of which paid to suppliers)', summary.supplier_paid, 'muted') : ''}<tr><td><b>Cash expected</b></td><td class="r"><b>${inr(summary.expected)}</b></td></tr>
+        ${Number(summary.supplier_paid) ? row('&nbsp;&nbsp;(of which paid to suppliers)', summary.supplier_paid, 'muted') : ''}
+        ${Number(summary.expenses) ? row('&nbsp;&nbsp;(of which expenses)', summary.expenses, 'muted') : ''}<tr><td><b>Cash expected</b></td><td class="r"><b>${inr(summary.expected)}</b></td></tr>
         ${row('UPI (not in drawer)', summary.upi, 'muted')}${row('Card (not in drawer)', summary.card, 'muted')}
         ${Number(summary.credit) ? row('Credit / udhaar given', summary.credit, 'muted') : ''}</table>
         <h2>Cash in / out</h2><form id="move" class="row"><select name="kind" style="max-width:150px"><option value="out">Cash out</option>
@@ -500,11 +514,11 @@ App.views.cash = async (main) => {
 App.views.products = async (main) => {
   main.innerHTML = `<h1>Products & stock</h1>
     <div class="row" style="margin-bottom:10px">
-      <input id="pq" placeholder="Scan a barcode or type name / code – Enter opens it" style="max-width:380px" autofocus>
+      <input id="pq" placeholder="Scan barcode or search name / code" style="max-width:380px" autofocus>
       <select id="ps" style="max-width:200px"><option value="all">All products</option><option value="active">Selling now</option>
         <option value="inactive">Not selling (no price)</option><option value="low">Low stock</option><option value="nophoto">No photo (best sellers first)</option></select>
       ${can('products') ? `<button class="primary" id="padd">+ Add product</button><button id="pimp">Import CSV</button>
-        <button id="pbulk">🖼 Bulk photos</button><button id="pmode">📷 Photo mode</button>` : ''}
+        <button id="pbulk">${ico('image')} Bulk photos</button><button id="pmode">${ico('camera')} Photo mode</button>` : ''}
     </div><div id="plist"></div><div id="pmore"></div>`;
   let offset = 0;
   const load = async (more = false) => {
@@ -557,7 +571,7 @@ async function productDialog(id, onSaved, preset = {}) {
   const d = modal(`<h3>${id ? 'Product' : 'Add product'}</h3>
     <form id="pf">
       ${id ? `<div class="photo-row"><div class="photo" id="ph">${item.image ? `<img src="${esc(item.image)}" alt="">` : '<span>No photo</span>'}</div>
-        ${can('products') ? `<div><label class="btn" for="phf">📷 Take / choose photo</label><input id="phf" type="file" accept="image/*" capture="environment" hidden>
+        ${can('products') ? `<div><label class="btn" for="phf">${ico('camera')} Take or choose photo</label><input id="phf" type="file" accept="image/*" capture="environment" hidden>
           ${item.image ? '<button type="button" class="danger" id="phx">Remove photo</button>' : ''}
           <div class="small muted">${item.image_source === 'openfoodfacts' ? 'Photo: Open Food Facts' : 'Shown in the online shop and on the billing tiles.'}</div></div>` : ''}</div>` : ''}
       <label>Name (English)</label><input name="name" value="${esc(item.name)}" required ${id ? '' : 'autofocus'}>
@@ -571,7 +585,7 @@ async function productDialog(id, onSaved, preset = {}) {
       <div class="grid3"><div><label>Category</label><input name="cat" value="${esc(item.cat)}" list="catlist"></div>
         <div><label>PLU (loose items)</label><input name="plu" inputmode="numeric" value="${esc(item.plu)}"></div>
         <div><label>Reorder when stock ≤</label><input name="reorder_level" inputmode="decimal" value="${esc(item.reorder_level)}"></div></div>
-      <label>Barcodes – click here and scan (each scan is added)</label>
+      <label>Barcodes (click and scan)</label>
       <div class="row"><input id="bcscan" placeholder="Scan the barcode here" autocomplete="off" style="flex:1"><button type="button" id="bcadd">Add</button></div>
       <div id="bclist" class="chips-list"></div><input type="hidden" name="codes" value="${esc(item.codes.join(','))}">
       ${id ? '' : `<div class="grid2"><div><label>Stock now (opening)</label><input name="opening_qty" inputmode="decimal" placeholder="0"></div>
@@ -719,17 +733,17 @@ async function photoMode(onDone) {
   let list = [];
   let i = 0;
   let saved = 0;
-  const d = modal(`<h3>📷 Photo mode</h3><input id="pmscan" placeholder="Scan a pack to jump to it" autocomplete="off">
+  const d = modal(`<h3>Photo mode</h3><input id="pmscan" placeholder="Scan a pack to jump to it" autocomplete="off">
     <div id="pmbody" style="margin-top:10px"><p class="muted">Loading…</p></div>
     <div class="actions"><button data-close>Finish</button></div>`, { onClose: () => { if (saved && onDone) onDone(); } });
   const fetchList = async () => { list = (await api('/products?status=nophoto&limit=200')).items; i = 0; };
   const show = () => {
     const it = list[i];
-    if (!it) { $('#pmbody', d).innerHTML = '<p class="ok"><b>All done</b> – every product in this list has a photo.</p>'; return; }
+    if (!it) { $('#pmbody', d).innerHTML = '<p class="ok"><b>All done.</b> Every product in this list has a photo.</p>'; return; }
     $('#pmbody', d).innerHTML = `<div class="pm-card"><div class="muted small">${i + 1} of ${list.length} without a photo · ${saved} saved now</div>
       <h2 style="margin:6px 0 2px">${esc(it.name)}</h2><div class="ta muted">${esc(it.name_ta)}</div>
       <div class="small">${esc(it.codes.join(', ') || it.sku)} · ₹${esc(it.price || '')}</div>
-      <div class="row" style="margin-top:12px"><label class="btn primary big" for="pmf">📷 Take photo</label>
+      <div class="row" style="margin-top:12px"><label class="btn primary big" for="pmf">${ico('camera')} Take photo</label>
         <input id="pmf" type="file" accept="image/*" capture="environment" hidden><button id="pmskip" class="big">Skip ›</button></div></div>`;
     $('#pmf', d).addEventListener('change', (e) => submitting(null, async () => {
       const f = e.target.files[0];
@@ -786,7 +800,9 @@ App.views.dashboard = async (main) => {
     ${periodChips(period, 'dashboard')}
     <div class="cards">
       <div class="card stat big1"><div class="l">Sales (after returns)</div><div class="v">${inr(d.net)}</div><div class="l">${d.bills} bills · average ${inr(d.average)}</div></div>
-      <div class="card stat"><div class="l">Profit</div><div class="v ok">${inr(d.profit)}</div><div class="l">${d.margin_pct}% of sales</div></div>
+      <div class="card stat"><div class="l">Gross profit</div><div class="v ok">${inr(d.profit)}</div><div class="l">${d.margin_pct}% of sales</div></div>
+      <div class="card stat"><div class="l">Expenses · Net profit</div><div class="v ${Number(d.net_profit) < 0 ? 'bad' : ''}">${inr(d.net_profit)}</div>
+        <div class="l">after ${inr(d.expenses)} expenses</div></div>
       <div class="card stat"><div class="l">In the shop · Online</div><div class="small" style="margin-top:6px"><b>${inr((ch.store || {}).total || 0)}</b> (${(ch.store || {}).bills || 0})
         · <b>${inr((ch.online || {}).total || 0)}</b> (${(ch.online || {}).bills || 0})</div><div class="l">${d.orders.total} online orders · ${d.orders.open} open</div></div>
       <div class="card stat"><div class="l">Cash · UPI · Card · Credit</div><div class="small" style="margin-top:6px">${inr(m.cash || 0)} · ${inr(m.upi || 0)} · ${inr(m.card || 0)} · ${inr(m.credit || 0)}</div>
@@ -822,8 +838,8 @@ App.views.staff = async (main) => {
     <table><tr><th>Name</th><th>Login name</th><th>Role</th><th>PIN</th><th>Status</th></tr>${users.map((u) => `<tr class="click" data-id="${u.id}">
       <td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td>${u.has_pin ? 'set' : '-'}</td>
       <td>${u.active ? '<span class="pill">active</span>' : '<span class="pill off">disabled</span>'}</td></tr>`).join('')}</table>
-    <div class="card small" style="margin-top:14px"><b>Roles:</b> Owner – everything. Manager – everything except settings and staff logins.
-      Cashier – billing, own cash drawer, customers. Purchaser – products and stock in. Auditor – reports only (read-only).</div>`;
+    <div class="card small" style="margin-top:14px"><b>Roles:</b> Owner: everything. Manager: everything except settings and staff.
+      Cashier: billing, own cash drawer, customers. Purchaser: products and stock. Auditor: reports only.</div>`;
   const edit = (u) => {
     const d = modal(`<h3>${u ? 'Edit login' : 'Add login'}</h3><form>
       <div class="grid2"><div><label>Name</label><input name="name" value="${esc(u ? u.name : '')}" required autofocus></div>
@@ -853,9 +869,11 @@ App.views.settings = async (main) => {
       <div class="grid2">${f('name', 'Shop name')}${f('name_ta', 'Shop name in Tamil', 'class="ta"')}</div>
       <div class="grid2">${f('address', 'Address')}${f('phone', 'Phone')}</div>
       <div class="grid3">${f('gstin', 'GSTIN')}${f('fssai', 'FSSAI licence')}${f('invoice_prefix', 'Bill number prefix', 'maxlength="6"')}</div>
-      <div class="grid2">${f('bill_footer', 'Bill footer')}<div><label>Bill paper width</label><select name="receipt_width">
-        <option value="80">80 mm</option><option value="58" ${s.receipt_width === '58' ? 'selected' : ''}>58 mm</option></select></div></div>
-      <h2>Counters</h2>${f('counters', 'Counter names (comma between) – add more here or from the counter button in Billing')}
+      <div class="grid3">${f('bill_footer', 'Bill footer')}<div><label>Bill paper width</label><select name="receipt_width">
+        <option value="80">80 mm</option><option value="58" ${s.receipt_width === '58' ? 'selected' : ''}>58 mm</option></select></div>
+        <div><label>Copies of each bill</label><select name="print_copies"><option value="1">1 (customer)</option>
+        <option value="2" ${s.print_copies === '2' ? 'selected' : ''}>2 (customer + shop copy)</option></select></div></div>
+      <h2>Counters</h2>${f('counters', 'Counter names (separate with commas)')}
       <label class="row" style="font-weight:400"><input type="checkbox" name="require_tax_setup" style="width:auto" ${s.require_tax_setup === '1' ? 'checked' : ''}>
         Stop billing products whose GST type is "Not set yet" (turn on after the accountant checks the GST data)</label>
       <h2>WhatsApp and UPI</h2>
@@ -885,16 +903,16 @@ App.views.settings = async (main) => {
     <div class="grid2" style="margin-top:14px">
       <div class="card"><h2 style="margin-top:0">Backup</h2><p class="small">Download a copy of everything (products, stock, bills, cash, staff) to this PC.
         Do it every evening and keep the files in Google Drive or a pen drive. Hostinger also keeps its own daily backups.</p>
-        ${can('backup') ? `<a class="btn big ${backupDoneToday() ? 'okbtn' : 'badbtn'}" id="bkdl" href="/api/backup">${backupDoneToday() ? '✓ Today\'s backup downloaded' : '⬇ Download today\'s backup'}</a>
+        ${can('backup') ? `<a class="btn big ${backupDoneToday() ? 'okbtn' : 'badbtn'}" id="bkdl" href="/api/backup">${backupDoneToday() ? 'Today\'s backup downloaded' : 'Download today\'s backup'}</a>
           <button id="bknow">Save a backup on the server now</button>` : ''}
         <div id="bklist" class="small" style="margin-top:10px"></div>
         <p class="small muted">To restore: Hostinger hPanel → Databases → phpMyAdmin → choose the database → Import → the backup file.</p></div>
       <div class="card"><h2 style="margin-top:0">Product photos</h2><div id="phst" class="small">…</div>
         <p class="small">Finds the photo of each packed product by its barcode in the open product databases <b>Open Food Facts</b>, <b>Open Beauty Facts</b>
           and <b>Open Products Facts</b> (food, soap/shampoo/cream, household; free, open data whose photos may be
-          used with credit, which the shop page shows). Runs on the server by itself – about 80 products a minute; you can close this page.
-          Loose items and local brands are not there: use <b>Products → 🖼 Bulk photos</b> (photo files named by barcode, e.g. from your distributor)
-          or <b>📷 Photo mode</b> (best sellers first, one tap per product).</p>
+          used with credit, which the shop page shows). Runs on the server, about 80 products a minute.
+          Loose items and local brands are not there: use <b>Products, Bulk photos</b> (photo files named by barcode, e.g. from your distributor)
+          or <b>Photo mode</b> (best sellers first, one tap per product).</p>
         <button class="primary" id="phgo">Find photos by barcode</button> <button id="phstop">Stop</button></div>
       <div class="card"><h2 style="margin-top:0">Bring data from the shop PC</h2><p class="small">On the shop PC double-click <b>Export_For_Cloud.bat</b>.
         It makes <i>madhuram_cloud_export.json.gz</i> on the desktop with all products, prices, barcodes, stock, customers and staff logins
@@ -920,7 +938,7 @@ App.views.settings = async (main) => {
   };
   if ($('#bkdl')) $('#bkdl').addEventListener('click', () => {
     localStorage.setItem('mpc_backup_day', today());
-    setTimeout(() => { const b = $('#bkdl'); if (b) { b.className = 'btn big okbtn'; b.textContent = '✓ Today\'s backup downloaded'; } markBackup(); }, 800);
+    setTimeout(() => { const b = $('#bkdl'); if (b) { b.className = 'btn big okbtn'; b.textContent = 'Today\'s backup downloaded'; } markBackup(); }, 800);
   });
   if ($('#bklist')) {
     loadBackups().catch((e) => { $('#bklist').textContent = e.message; });
@@ -936,7 +954,7 @@ App.views.settings = async (main) => {
   };
   if ($('#phgo')) {
     photoStatus().catch(() => {});
-    $('#phgo').addEventListener('click', () => submitting($('#phgo'), async () => { await api('/images/fetch', { method: 'POST', body: {} }); toast('Finding photos – this runs by itself.'); photoStatus(); }));
+    $('#phgo').addEventListener('click', () => submitting($('#phgo'), async () => { await api('/images/fetch', { method: 'POST', body: {} }); toast('Finding photos. You can keep working.'); photoStatus(); }));
     $('#phstop').addEventListener('click', () => submitting($('#phstop'), async () => { await api('/images/fetch', { method: 'POST', body: { action: 'stop' } }); photoStatus(); }));
   }
   $('#impgo').addEventListener('click', () => submitting($('#impgo'), async () => {
@@ -956,7 +974,7 @@ App.views.install = async (main) => {
     <div class="grid2">
       <div class="card"><h2 style="margin-top:0">1. Install the app</h2>
         <p>Click the button. "Madhuram Store" gets its own window, a desktop icon and a Start-menu entry, like a normal program.</p>
-        <button class="primary big install-btn show" id="inst">⬇ Install Madhuram Store</button>
+        <button class="primary big install-btn show" id="inst">${ico('download')} Install Madhuram Store</button>
         <p class="small muted">If nothing happens: in Microsoft Edge click ⋯ → Apps → Install this site as an app. In Google Chrome click ⋮ →
           Cast, save and share → Install page as app. On an Android phone: ⋮ → Add to Home screen / Install app.</p></div>
       <div class="card"><h2 style="margin-top:0">2. Counter PC with bill printer (recommended)</h2>
@@ -968,7 +986,7 @@ App.views.install = async (main) => {
     <div class="card" style="margin-top:14px"><h2 style="margin-top:0">Good to know</h2><ul class="small">
       <li>Everything is saved on the cloud server: all counters, the owner's mobile and home PC see the same stock and bills.</li>
       <li>The internet must be working to complete a bill. Keep a mobile hotspot ready as a backup connection.</li>
-      <li>Updates come by themselves – no setup needed on the PCs.</li></ul></div>`;
+      <li>Updates reach every PC automatically.</li></ul></div>`;
   $('#inst').addEventListener('click', installApp);
 };
 

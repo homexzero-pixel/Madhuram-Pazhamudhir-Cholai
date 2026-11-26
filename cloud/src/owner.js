@@ -175,6 +175,7 @@ async function dayText(query = {}) {
   if (paise(t.returns)) L.push(`Returns: -${inr(paise(t.returns))}`);
   L.push(`Cash ${inr(paise(t.cash))} · UPI ${inr(paise(t.upi))} · Card ${inr(paise(t.card))}${paise(t.credit) ? ` · Credit ${inr(paise(t.credit))}` : ''}`);
   L.push(`Gross margin: ${inr(paise(t.margin))} (${t.margin_pct}%)`);
+  if (paise(t.expenses)) L.push(`Expenses: ${inr(paise(t.expenses))} · Net profit: *${inr(paise(t.net_profit))}*`);
   if (paise(t.wastage)) L.push(`Damaged / expired written off: ${inr(paise(t.wastage))}`);
   if (paise(t.purchases)) L.push(`Purchases received: ${inr(paise(t.purchases))}`);
   L.push(shifts.length ? `Cash closing: ${shifts.length} counter(s), difference ${inr(variance)} ${variance === 0 ? '✅' : '⚠️'}` : 'Cash closing: no counter closed yet ⚠️');
