@@ -1,5 +1,5 @@
 'use strict';
-// Madhuram Pazhamudhir Cholai – cloud edition. Start: `node server.js` (Hostinger: entry file server.js).
+// Madhuram Pazhamudhir Solai – cloud edition. Start: `node server.js` (Hostinger: entry file server.js).
 const path = require('path');
 const express = require('express');
 const config = require('./src/config');
@@ -158,6 +158,7 @@ async function main() {
   for (;;) {
     try {
       await db.migrate();
+      await require('./src/settings').upgrade();
       app = createApp();
       problem = null;
       startJobs();

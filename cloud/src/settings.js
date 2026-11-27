@@ -3,15 +3,15 @@ const db = require('./db');
 
 // Store settings, kept as key/value rows. Anything not saved yet uses these defaults.
 const DEFAULTS = {
-  name: 'Madhuram Pazhamudhir Cholai',
+  name: 'Madhuram Pazhamudhir Solai',
   name_ta: 'மதுரம் பழமுதிர் சோலை',
   tagline: 'Supermarket · Fresh fruits, vegetables & daily needs',
-  address: '',
-  phone: '',
-  gstin: '',
+  address: 'NO.1,ARCOT PETTAI,METTU COLONY\nManapakkam,Chennai-600125',   // one line per printed line of the bill
+  phone: '9841123414',
+  gstin: '33BCDPA6967J1ZJ',
   fssai: '',
-  invoice_prefix: 'MPC',
-  bill_footer: 'Thank you! Visit again. நன்றி, மீண்டும் வருக!',
+  invoice_prefix: 'MPC',           // bill numbers: PREFIX/MMYY/T<counter>/<number>, e.g. MU/1126/T2/107
+  bill_footer: 'THANK U VISIT AGAIN',
   receipt_width: '80',
   print_copies: '1',               // 2 = customer copy + shop copy
   loyalty_enabled: '0',            // 1 = customers earn points on store and online bills
@@ -128,6 +128,20 @@ async function save(values) {
   cache = null;
 }
 
+// Once: the shop's own details from its printed bill (November 2026). Fills details that are still empty and replaces the
+// old default spellings; anything the owner typed in Settings is kept.
+const UPGRADE_KEY = '_shop_details_2026_11';
+const OLD_DEFAULTS = { name: 'Madhuram Pazhamudhir Cholai', bill_footer: 'Thank you! Visit again. நன்றி, மீண்டும் வருக!' };
+async function upgrade() {
+  if (await db.one('SELECT v FROM settings WHERE k=?', [UPGRADE_KEY])) return;
+  const saved = Object.fromEntries((await db.query('SELECT k, v FROM settings')).map((r) => [r.k, r.v]));
+  const set = {};
+  for (const [k, old] of Object.entries(OLD_DEFAULTS)) if (saved[k] === old) set[k] = DEFAULTS[k];
+  for (const k of ['address', 'phone', 'gstin']) if (k in saved && !String(saved[k]).trim()) set[k] = DEFAULTS[k];
+  await save(set);
+  await db.query('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v=v', [UPGRADE_KEY, '1']);
+}
+
 async function publicSettings() {
   const s = await load();
   return Object.fromEntries(PUBLIC.map((k) => [k, s[k]]));
@@ -137,7 +151,11 @@ const counters = (s) => s.counters.split(',').map((c) => c.trim()).filter(Boolea
 
 async function shopSettings() {
   const s = await load();
-  return Object.fromEntries(SHOP_PUBLIC.map((k) => [k, s[k]]));
+  const out = Object.fromEntries(SHOP_PUBLIC.map((k) => [k, s[k]]));
+  out.address = oneLine(out.address);
+  return out;
 }
+// "NO.1,ARCOT PETTAI\nManapakkam" → "NO.1,ARCOT PETTAI, Manapakkam" for places that show the address on one line
+const oneLine = (a) => String(a || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean).join(', ');
 
-module.exports = { festival, photoUrl, shopBanners, shopSettings, DEFAULTS, load, save, publicSettings, counters, reset: () => { cache = null; } };
+module.exports = { festival, photoUrl, shopBanners, shopSettings, DEFAULTS, load, save, publicSettings, counters, upgrade, oneLine, reset: () => { cache = null; } };

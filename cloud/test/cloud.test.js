@@ -3,6 +3,8 @@
 // Run: DB_HOST=127.0.0.1 DB_PORT=3307 DB_USER=mpc DB_PASSWORD=... DB_NAME=madhuram_test npm test
 process.env.NODE_ENV = 'test';
 process.env.MPC_NO_AUTOSTART = '1';
+// this month in India, as it appears in bill numbers (November 2026 → 1126)
+const MMYY = (() => { const d = new Date(Date.now() + 330 * 60000).toISOString(); return d.slice(5, 7) + d.slice(2, 4); })();
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
@@ -151,14 +153,16 @@ test('shift, checkout with FEFO stock, GST, idempotency and receipt', async () =
   assert.equal(r.data.ok, true, JSON.stringify(r.data));
   const b = r.data.bill;
   assert.equal(b.total, '285.00');                         // 2 × 75 + 0.75 × 180
-  assert.equal(b.bill_no, 'MPC/2627/00001');
+  // numbered like the shop's printed bills: PREFIX/MMYY/T<counter>/<number>
+  assert.equal(b.bill_no, `MPC/${MMYY}/T2/1`);
+  assert.deepEqual(b.gst_all.map((g) => [g.rate, g.taxable]), [['0.00', '135.00'], ['5.00', '142.86']]);
   assert.equal(b.customer.phone, '9840012345');
   assert.deepEqual(b.gst, [{ rate: '5.00', taxable: '142.86', cgst: '3.57', sgst: '3.57' }]);
   assert.equal(b.payments.find((p) => p.method === 'cash').change_amt, '300.00');
 
   // the same bill sent again (network drop) is not saved twice
   r = await cashier.post('/api/checkout', bill);
-  assert.equal(r.data.bill.bill_no, 'MPC/2627/00001');
+  assert.equal(r.data.bill.bill_no, `MPC/${MMYY}/T2/1`);
   assert.equal((await db.one('SELECT COUNT(*) n FROM sales')).n, 1);
 
   const lots = await db.query('SELECT qty, expiry FROM lots WHERE item_id=? ORDER BY id', [rice.id]);
@@ -181,13 +185,16 @@ test('shift, checkout with FEFO stock, GST, idempotency and receipt', async () =
   const log = await db.one("SELECT * FROM audit WHERE action='price_override'");
   assert.match(log.summary, /₹75.00 → ₹70.00/);
 
-  // two counters billing at the same moment share one bill series without gaps
+  // two counters billing at the same moment: each counter numbers its own bills (T2, T3), without gaps
   await owner.post('/api/shift/open', { counter: 'Counter 3', float: '0' });
   const many = await Promise.all([...Array(6)].map((_, i) => (i % 2 ? owner : cashier).post('/api/checkout', {
     uuid: uuid(), counter: i % 2 ? 'Counter 3' : c, lines: [{ id: rice.id, qty: 1 }], payments: [{ method: 'cash', amount: '75' }] })));
   assert.ok(many.every((x) => x.data.ok), JSON.stringify(many.map((x) => x.data.error)));
-  const nos = (await db.query('SELECT bill_no FROM sales ORDER BY bill_no')).map((x) => Number(x.bill_no.slice(-5)));
-  assert.deepEqual(nos, [1, 2, 3, 4, 5, 6, 7, 8]);
+  const nos = (await db.query('SELECT bill_no FROM sales')).map((x) => x.bill_no);
+  const series = (t) => nos.filter((n) => n.startsWith(`MPC/${MMYY}/${t}/`)).map((n) => Number(n.split('/').pop())).sort((x, y) => x - y);
+  assert.deepEqual(series('T2'), [1, 2, 3, 4, 5]);
+  assert.deepEqual(series('T3'), [1, 2, 3]);
+  assert.equal(nos.length, 8);
   assert.equal((await owner.get(`/api/products/${rice.id}`)).data.item.on_hand, '6');
 
   const receipt = await cashier.get(`/api/bills/${b.id}`);
@@ -222,7 +229,7 @@ test('backup download and import from the shop PC', async () => {
   assert.equal(res.status, 200);
   const sql = require('zlib').gunzipSync(Buffer.from(await res.arrayBuffer())).toString();
   assert.match(sql, /INSERT INTO `sales`/);
-  assert.match(sql, /MPC\/2627\/00001/);
+  assert.ok(sql.includes(`MPC/${MMYY}/T2/1`));
   assert.match(sql, /பொன்னி அரிசி/);
 
   // import is refused once the cloud has bills
@@ -241,4 +248,30 @@ test('pages, install files and the counter shortcut are served', async () => {
   const bat = await (await fetch(`${base}/counter-shortcut.bat?counter=3`)).text();
   assert.match(bat, /--kiosk-printing/);
   assert.match(bat, /\?counter=3/);
+});
+
+test("the shop's details from its printed bill are filled in once, and the owner's own entries are kept", async () => {
+  const settings = require('../src/settings');
+  const keys = ['name', 'address', 'phone', 'gstin', 'bill_footer'];
+  const before = Object.fromEntries((await db.query('SELECT k, v FROM settings WHERE k IN (?)', [keys])).map((r) => [r.k, r.v]));
+  await db.query("DELETE FROM settings WHERE k IN (?) OR k='_shop_details_2026_11'", [keys]);
+  await settings.save({ name: 'Madhuram Pazhamudhir Cholai', address: '', phone: '', gstin: '29ABCDE1234F1Z5', bill_footer: 'Thank you! Visit again. நன்றி, மீண்டும் வருக!' });
+  await settings.upgrade();
+  let s = await settings.load();
+  assert.equal(s.name, 'Madhuram Pazhamudhir Solai');
+  assert.equal(s.address, 'NO.1,ARCOT PETTAI,METTU COLONY\nManapakkam,Chennai-600125');
+  assert.equal(s.phone, '9841123414');
+  assert.equal(s.gstin, '29ABCDE1234F1Z5');                    // typed by the owner: kept
+  assert.equal(s.bill_footer, 'THANK U VISIT AGAIN');
+  assert.equal((await settings.shopSettings()).address, 'NO.1,ARCOT PETTAI,METTU COLONY, Manapakkam,Chennai-600125');
+  await settings.save({ phone: '' });                           // later changes by the owner are never undone
+  await settings.upgrade();
+  s = await settings.load();
+  assert.equal(s.phone, '');
+  // a prefix typed in small letters is saved in capitals; more than 3 would make bill numbers too long for GST
+  assert.equal((await owner.post('/api/settings', { invoice_prefix: 'mu' })).data.settings.invoice_prefix, 'MU');
+  assert.match((await owner.post('/api/settings', { invoice_prefix: 'MADH' })).data.error, /1 to 3/);
+  await owner.post('/api/settings', { invoice_prefix: 'MPC' });
+  await db.query('DELETE FROM settings WHERE k IN (?)', [keys]);
+  for (const [k, v] of Object.entries(before)) await settings.save({ [k]: v });
 });

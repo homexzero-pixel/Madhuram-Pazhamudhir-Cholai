@@ -156,7 +156,10 @@ r.get('/audit', need('reports'), wrap(async (req, res) => ok(res, { rows: await 
 r.get('/settings', need('settings'), wrap(async (req, res) => ok(res, { settings: await settings.publicSettings() })));
 r.post('/settings', need('settings'), wrap(async (req, res) => {
   const v = req.body || {};
-  if (v.invoice_prefix !== undefined && !/^[A-Z0-9]{1,6}$/.test(v.invoice_prefix)) throw new UserError('Bill prefix: 1–6 capital letters or digits.');
+  if (v.invoice_prefix !== undefined) v.invoice_prefix = String(v.invoice_prefix).trim().toUpperCase();
+  if (v.invoice_prefix !== undefined && !/^[A-Z0-9]{1,3}$/.test(v.invoice_prefix)) {
+    throw new UserError('Bill number prefix: 1 to 3 capital letters or digits (GST allows at most 16 characters in a bill number).');
+  }
   await settings.save(v);
   await auth.audit({ user_id: req.user.id, action: 'settings', summary: `Settings changed: ${Object.keys(v).join(', ').slice(0, 250)}` });
   ok(res, { settings: await settings.publicSettings() });

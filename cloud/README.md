@@ -46,6 +46,10 @@ Tamil, customer, price change and discount with manager PIN, hold, cancel), cash
 4. Turn on **SSL** for the domain (hPanel → Security → SSL) so the address starts with `https://` – needed for "Install".
 5. **Settings & backup:** fill in the shop details (printed on the bill), counter names, bill prefix, WhatsApp, UPI ID, and – when you
    are ready – **Online orders** (hours, slot length, delivery charge, minimum order). Print the QR poster from **Online orders**.
+   The printed bill follows the shop's own bill: name, address, phone and GSTIN at the top; No / Product / Qty / GST% / Rate / Amount;
+   total, tax, net total, the amount in words, the GST table, the payment, "THANK U VISIT AGAIN" and the bill number between stars.
+   Bill numbers look like `MU/1126/T2/107`: prefix / month and year / counter / number, and each counter starts again at 1 every
+   month. Set the prefix to `MU` from the 1st of the month you stop using the old billing machine, so no two bills share a number.
 6. Products – either
    - **Bring data from the shop PC:** on the shop PC double-click `Export_For_Cloud.bat` (it is in the Madhuram folder) and upload
      the file it puts on the desktop. Products, prices, barcodes, stock, customers and staff (with their passwords and PINs) come over.

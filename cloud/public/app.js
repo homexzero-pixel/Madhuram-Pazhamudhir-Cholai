@@ -341,7 +341,7 @@ function showSetup() {
     <h1>Welcome! First-time setup</h1>
     <p class="muted">Create the owner login. You can add cashiers and managers afterwards.</p>
     <form id="setup-form">
-      <label>Shop name</label><input name="shop_name" value="Madhuram Pazhamudhir Cholai" required>
+      <label>Shop name</label><input name="shop_name" value="Madhuram Pazhamudhir Solai" required>
       <div class="grid2"><div><label>Your name</label><input name="name" value="Owner" required></div>
         <div><label>Login name</label><input name="username" value="owner" required autocomplete="off"></div></div>
       <div class="grid2"><div><label>Password (at least 6 letters/digits)</label><input name="password" type="text" required minlength="6" autocomplete="new-password"></div>
@@ -365,34 +365,82 @@ function showSetup() {
   });
 }
 
-// ------------------------------------------------------------------ receipt (80 mm / 58 mm thermal)
+// ------------------------------------------------------------------ receipt (80 mm / 58 mm thermal), laid out like the shop's own printed bill
+const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen',
+  'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+// 1234567 → "Twelve Lakh Thirty Four Thousand Five Hundred Sixty Seven" (Indian system)
+function inWords(n) {
+  n = Math.floor(n);
+  if (!n) return 'Zero';
+  const two = (x) => (x < 20 ? ONES[x] : `${TENS[Math.floor(x / 10)]}${x % 10 ? ` ${ONES[x % 10]}` : ''}`);
+  const crore = Math.floor(n / 10000000);
+  const lakh = Math.floor((n % 10000000) / 100000);
+  const thousand = Math.floor((n % 100000) / 1000);
+  const hundred = Math.floor((n % 1000) / 100);
+  const rest = n % 100;
+  return [crore && `${inWords(crore)} Crore`, lakh && `${two(lakh)} Lakh`, thousand && `${two(thousand)} Thousand`,
+    hundred && `${ONES[hundred]} Hundred`, rest && two(rest)].filter(Boolean).join(' ');
+}
+// 8675 paise → "Eighty Six  and Seventy Five Paise Only", worded as on the shop's bill
+const amountWords = (p) => `${inWords(Math.floor(p / 100))}${p % 100 ? `  and ${inWords(p % 100)} Paise` : ''} Only`;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// '2026-11-27 19:28:05' → '27/Nov/2026 07:28 PM'
+function billDate(at) {
+  const [d = '', t = '00:00'] = String(at || '').split(/[ T]/);
+  const [y, m, day] = d.split('-');
+  const [h, mi] = t.split(':').map(Number);
+  return `${day}/${MONTHS[Number(m) - 1] || m}/${y} ${String(h % 12 || 12).padStart(2, '0')}:${String(mi || 0).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+const PAY_NAMES = { cash: 'Cash', upi: 'UPI', card: 'Card', credit: 'Credit', points: 'Points', cod: 'Cash on delivery' };
+const RB_COLS = '<colgroup><col class="k1"><col class="k2"><col class="k3"><col class="k4"><col class="k5"><col class="k6"></colgroup>';
 function receiptHtml(b) {
   const s = App.settings;
-  const lines = b.lines.map((l) => `<tr><td colspan="3">${esc(l.name)}${l.name_ta ? `<br><span class="ta">${esc(l.name_ta)}</span>` : ''}</td></tr>
-    <tr><td>${esc(l.qty)} ${l.unit === 'kg' ? 'kg' : ''} × ${esc(l.rate)}</td><td></td><td class="r">${esc(l.gross)}</td></tr>
-    ${Number(l.discount) ? `<tr><td colspan="2">  Discount</td><td class="r">-${esc(l.discount)}</td></tr>` : ''}`).join('');
-  const saved = b.lines.reduce((sum, l) => sum + (l.mrp ? Math.max(0, Money.line(Money.paise(l.mrp), Money.milli(l.qty)) - Money.paise(l.net)) : 0), 0);
-  const pays = b.payments.map((p) => `<tr><td>${esc(p.method.toUpperCase())}${p.reference ? ` ${esc(p.reference)}` : ''}</td><td></td>
-    <td class="r">${esc(p.amount)}</td></tr>${p.tendered ? `<tr><td>Cash given</td><td></td><td class="r">${esc(p.tendered)}</td></tr>
-    <tr><td>Change</td><td></td><td class="r">${esc(p.change_amt)}</td></tr>` : ''}`).join('');
-  const gst = b.gst.length ? `<hr><table><tr><th>GST%</th><th class="r">Taxable</th><th class="r">CGST</th><th class="r">SGST</th></tr>
-    ${b.gst.map((g) => `<tr><td>${esc(Number(g.rate))}</td><td class="r">${esc(g.taxable)}</td><td class="r">${esc(g.cgst)}</td><td class="r">${esc(g.sgst)}</td></tr>`).join('')}</table>` : '';
-  return `<div class="receipt ${s.receipt_width === '58' ? 'w58' : ''}">
-    <div class="c"><h2>${esc(s.name)}</h2>${s.name_ta ? `<div class="ta">${esc(s.name_ta)}</div>` : ''}
-    ${s.address ? `<div>${esc(s.address)}</div>` : ''}${s.phone ? `<div>Ph: ${esc(s.phone)}</div>` : ''}
-    ${s.gstin ? `<div>GSTIN: ${esc(s.gstin)}</div>` : ''}${s.fssai ? `<div>FSSAI: ${esc(s.fssai)}</div>` : ''}</div><hr>
-    <div>Bill: <b>${esc(b.bill_no)}</b>${b.print_count > 0 ? ' (COPY)' : ''}</div>
-    <div>${esc(b.at)} · ${esc(b.counter)} · ${esc(b.cashier)}</div>
-    ${b.customer ? `<div>Customer: ${esc(b.customer.name)} ${esc(b.customer.phone || '')}</div>` : ''}<hr>
-    <table>${lines}</table><hr>
-    <table><tr><td>Items</td><td class="r">${b.items_count}</td></tr>
-    ${Number(b.discount) ? `<tr><td>Discount</td><td class="r">-${esc(b.discount)}</td></tr>` : ''}
-    <tr class="tot"><td>TOTAL</td><td class="r">${inr(b.total)}</td></tr></table>
-    <table>${pays}</table>${gst}
-    ${saved > 0 ? `<hr><div class="c">You saved ${inr(saved)} on MRP</div>` : ''}
-    ${b.customer && (Number(b.points_earned) || Number(b.points_used)) ? `<hr><div class="c">${Number(b.points_used) ? `Points used: ${Number(b.points_used)} · ` : ''}Points earned: ${Number(b.points_earned)}<br>
-      Points balance: <b>${Number(b.customer.points)}</b></div>` : ''}
-    <hr><div class="c">${esc(s.bill_footer)}</div></div>`;
+  const P = (v) => Money.paise(v) || 0;
+  const amt = (v) => Money.rs(P(v));
+  const qtyOf = (l) => (l.unit === 'kg' ? (Money.milli(l.qty) / 1000).toFixed(3) : String(l.qty));
+  const qtyMilli = b.lines.reduce((t, l) => t + (Money.milli(l.qty) || 0), 0);
+  const qtyTotal = (Math.round(qtyMilli / 10) / 100).toFixed(2);                 // 0.325 + 0.110 → 0.44
+  const lineTotal = b.lines.reduce((t, l) => t + P(l.gross), 0);
+  const gstRows = b.gst_all || b.gst || [];
+  const tax = gstRows.reduce((t, g) => t + P(g.cgst) + P(g.sgst), 0);
+  const paid = b.payments.reduce((t, p) => t + P(p.amount), 0);
+  const items = b.lines.map((l, i) => `<tr class="nm"><td class="l">${i + 1}</td><td class="l" colspan="5">${esc(l.name)}</td></tr>
+    <tr><td colspan="2"></td><td>${esc(qtyOf(l))}</td><td>${esc(Number(l.gst_rate))}%</td><td>${esc(amt(l.rate))}</td><td>${esc(amt(l.gross))}</td></tr>
+    ${P(l.discount) ? `<tr><td></td><td class="l" colspan="4">Discount</td><td>-${esc(amt(l.discount))}</td></tr>` : ''}`).join('');
+  const change = b.payments.filter((p) => P(p.change_amt) > 0).map((p) => `<tr><td class="l">Cash Given</td><td>Rs.${esc(amt(p.tendered))}</td></tr>
+    <tr><td class="l">Change</td><td>Rs.${esc(amt(p.change_amt))}</td></tr>`).join('');
+  const addr = String(s.address || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  return `<div class="receipt rb ${s.receipt_width === '58' ? 'w58' : ''}">
+    <div class="rb-hd"><div class="rb-name">${esc(String(s.name || '').toUpperCase())}</div>
+      ${addr.map((x) => `<div>${esc(x)}</div>`).join('')}
+      ${s.phone || s.gstin ? `<div class="rb-ph">${s.phone ? `Phone:-${esc(s.phone)}` : ''}${s.phone && s.gstin ? '&nbsp; ' : ''}${s.gstin ? `GSTIN:${esc(s.gstin)}` : ''}</div>` : ''}
+      ${s.fssai ? `<div>FSSAI:${esc(s.fssai)}</div>` : ''}</div>
+    <div class="rb-rule"></div>
+    <div class="rb-b">Bill No: ${esc(b.bill_no)}${b.print_count > 0 ? ' (DUPLICATE)' : ''}</div>
+    <div class="rb-b">Date :${esc(billDate(b.at))}</div>
+    ${b.customer ? `<div>Customer : ${esc(b.customer.name)} ${esc(b.customer.phone || '')}</div>` : ''}
+    <div class="rb-rule"></div>
+    <table class="rb-t">${RB_COLS}<thead><tr><th class="l" colspan="2">No&nbsp; Product</th><th>Qty</th><th>GST%</th><th>Rate</th><th>Amount</th></tr></thead>
+      <tbody>${items}</tbody></table>
+    <div class="rb-rule"></div>
+    <table class="rb-t rb-tt">${RB_COLS}<tr><td class="l" colspan="2">Total:${b.lines.length}</td><td></td><td class="c">${qtyTotal}</td><td colspan="2">Rs.${Money.rs(lineTotal)}</td></tr>
+      ${P(b.discount) ? `<tr><td colspan="3"></td><td class="c">Discount:</td><td colspan="2">-Rs.${esc(amt(b.discount))}</td></tr>` : ''}
+      <tr><td colspan="3"></td><td class="c">Tax Amt:</td><td colspan="2">Rs ${Money.rs(tax)}</td></tr></table>
+    <div class="rb-short"></div>
+    <div class="rb-net"><span>Net Total :</span><span>Rs.${esc(amt(b.total))}</span></div>
+    <div class="rb-short"></div>
+    <div class="rb-words">${esc(amountWords(P(b.total)))}</div>
+    <table class="rb-g"><tr><th class="l"><span>GST %</span></th><th><span>Value</span></th><th><span>SGST</span></th><th><span>CGST</span></th></tr>
+      ${gstRows.map((g) => `<tr><td class="l">${esc(Number(g.rate))} %</td><td>${esc(g.taxable)}</td><td>${esc(g.sgst)}</td><td>${esc(g.cgst)}</td></tr>`).join('')}</table>
+    <div class="rb-rule"></div>
+    <table class="rb-p">${b.payments.map((p) => `<tr><td class="l">${esc(PAY_NAMES[p.method] || p.method)}${p.reference ? ` ${esc(p.reference)}` : ''}</td>
+      <td>Rs.${esc(amt(p.amount))}</td></tr>`).join('')}</table>
+    <div class="rb-short"></div>
+    <table class="rb-p"><tr><td></td><td>Rs.${Money.rs(paid)}</td></tr>${change}</table>
+    ${b.customer && (Number(b.points_earned) || Number(b.points_used)) ? `<div class="rb-pts">${Number(b.points_used) ? `Points used: ${Number(b.points_used)} · ` : ''}Points earned: ${Number(b.points_earned)} · Balance: ${Number(b.customer.points)}</div>` : ''}
+    <div class="rb-foot">${esc(s.bill_footer)}</div>
+    <div class="rb-no">*${esc(b.bill_no)}*</div></div>`;
 }
 async function printBill(bill, reprint = false) {
   const two = App.settings.print_copies === '2' && !reprint;
@@ -875,8 +923,12 @@ App.views.settings = async (main) => {
   main.innerHTML = `<h1>Settings & backup</h1>
     <form id="sf" class="card"><h2 style="margin-top:0">Shop details (printed on the bill)</h2>
       <div class="grid2">${f('name', 'Shop name')}${f('name_ta', 'Shop name in Tamil', 'class="ta"')}</div>
-      <div class="grid2">${f('address', 'Address')}${f('phone', 'Phone')}</div>
-      <div class="grid3">${f('gstin', 'GSTIN')}${f('fssai', 'FSSAI licence')}${f('invoice_prefix', 'Bill number prefix', 'maxlength="6"')}</div>
+      <div class="grid2"><div><label>Address (one line on the bill for each line here)</label><textarea name="address" rows="2">${esc(s.address)}</textarea></div>
+        ${f('phone', 'Phone')}</div>
+      <div class="grid3">${f('gstin', 'GSTIN')}${f('fssai', 'FSSAI licence')}${f('invoice_prefix', 'Bill number prefix', 'maxlength="3" style="text-transform:uppercase"')}</div>
+      <p class="small muted">Bill numbers look like <b>${esc(s.invoice_prefix)}/${esc(today().slice(5, 7) + today().slice(2, 4))}/T2/107</b>: prefix / month and year / counter / bill number.
+        Every counter starts again at 1 each month. If your old billing machine already printed bills with the same prefix this month,
+        keep a different prefix until the 1st of next month, so no two bills share a number.</p>
       <div class="grid3">${f('bill_footer', 'Bill footer')}<div><label>Bill paper width</label><select name="receipt_width">
         <option value="80">80 mm</option><option value="58" ${s.receipt_width === '58' ? 'selected' : ''}>58 mm</option></select></div>
         <div><label>Copies of each bill</label><select name="print_copies"><option value="1">1 (customer)</option>

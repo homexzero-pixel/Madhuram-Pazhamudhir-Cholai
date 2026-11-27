@@ -5,7 +5,7 @@ rem sets up backups on this PC + Google Drive, adds desktop shortcuts, starts au
 cd /d "%~dp0"
 title Madhuram - installing
 echo.
-echo  Madhuram Pazhamudhir Cholai - store system installer
+echo  Madhuram Pazhamudhir Solai - store system installer
 echo  ----------------------------------------------------
 where py >nul 2>nul
 if errorlevel 1 (

@@ -100,6 +100,9 @@ test('returns: partial, approval, refund to credit or cash, stock back, paise ad
     payments: [{ method: 'cash', amount: '288.27' }] });
   assert.equal(r0.data.ok, true, JSON.stringify(r0.data));
   const sale = (await cashier.get(`/api/returns/find?bill=${encodeURIComponent(r0.data.bill.bill_no)}`)).data.bill;
+  // the number as printed at the foot of the bill (*MPC/1126/T1/1*), or only its last part, finds the same bill
+  assert.equal((await cashier.get(`/api/returns/find?bill=${encodeURIComponent(`*${r0.data.bill.bill_no}*`)}`)).data.bill.id, sale.id);
+  assert.equal((await cashier.get(`/api/returns/find?bill=${r0.data.bill.bill_no.split('/').pop()}`)).data.bill.id, sale.id);
   const riceLine = sale.lines.find((l) => l.name.startsWith('Ponni'));
   const appleLine = sale.lines.find((l) => l.name === 'Apple');
   const ret = (lines, extra = {}) => cashier.post('/api/returns', { sale_id: sale.id, counter: 'Counter 1', method: 'cash', reason: 'Damaged pack', lines, ...extra });

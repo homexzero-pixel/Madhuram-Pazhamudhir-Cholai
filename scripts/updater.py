@@ -264,7 +264,7 @@ def main():
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     here = Path(a.here).resolve() if a.here else None
     tmp = None
-    print("\n  Madhuram Pazhamudhir Cholai – program update\n  -------------------------------------------")
+    print("\n  Madhuram Pazhamudhir Solai – program update\n  -------------------------------------------")
 
     # what is installed, what is new
     if here and is_program(here) and venv_python(here).exists() and not a.target:

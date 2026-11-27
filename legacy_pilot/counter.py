@@ -29,7 +29,7 @@ style.configure('Treeview',background='white',fieldbackground='white',rowheight=
 style.configure('Treeview.Heading',font=('Segoe UI',10,'bold'),padding=5)
 style.configure('TNotebook.Tab',padding=(9,8))
 head=tk.Frame(app,bg=green,padx=18,pady=10);head.pack(fill='x')
-tk.Label(head,text='Madhuram  /  Pazhamudhir Cholai',bg=green,fg='white',font=('Segoe UI',18,'bold')).pack(side='left')
+tk.Label(head,text='Madhuram  /  Pazhamudhir Solai',bg=green,fg='white',font=('Segoe UI',18,'bold')).pack(side='left')
 tk.Label(head,text='PRACTICE COUNTER' if DEMO else 'STORE COUNTER',bg=green,fg='white').pack(side='right')
 tabs=ttk.Notebook(app);tabs.pack(fill='both',expand=True,padx=12,pady=10)
 pages={}
@@ -244,7 +244,7 @@ def receipt(i):
         taxtable='<h3>Inclusive local tax</h3><table><tr><th>Item</th><th>HSN</th><th>GST</th><th>Taxable ₹</th><th>CGST ₹</th><th>SGST ₹</th></tr>'+breakdown+'</table>' if breakdown else ''
         rows=''.join('<tr>'+''.join('<td>'+esc(v)+'</td>' for v in t.item(k,'values')[1:])+'</tr>' for k in t.get_children())
         dest=DATA/f'receipt-{i}.html'
-        dest.write_text('<meta charset="utf-8"><title>Store receipt</title><style>body{font:15px sans-serif;max-width:720px;margin:24px auto}td,th{padding:6px;text-align:left;border-bottom:1px solid #ccc}@media print{button{display:none}}</style><h2>Madhuram Pazhamudhir Cholai</h2>'+header+'<table><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Rate ₹</th><th>Amount ₹</th><th>Status</th></tr>'+rows+'</table>'+taxtable+'<p>'+foot+'</p><button onclick="print()">Print receipt</button>',encoding='utf-8');webbrowser.open(dest.as_uri())
+        dest.write_text('<meta charset="utf-8"><title>Store receipt</title><style>body{font:15px sans-serif;max-width:720px;margin:24px auto}td,th{padding:6px;text-align:left;border-bottom:1px solid #ccc}@media print{button{display:none}}</style><h2>Madhuram Pazhamudhir Solai</h2>'+header+'<table><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Rate ₹</th><th>Amount ₹</th><th>Status</th></tr>'+rows+'</table>'+taxtable+'<p>'+foot+'</p><button onclick="print()">Print receipt</button>',encoding='utf-8');webbrowser.open(dest.as_uri())
     button(b,'Printable receipt',printbill,True)
     def ret():
         line=selected(t)[0]

@@ -122,6 +122,41 @@ dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top
 .receipt td, .receipt th { padding: 1px 0; border: none; font-size: inherit; background: none; color: #000; }
 .receipt hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
 .receipt .tot { font-size: 16px; font-weight: 800; }
+/* the shop's bill: the same lines, columns and words as its printed bills (MU/1126/T2/107) */
+.receipt.rb { font: 12px/1.32 Arial, "Helvetica Neue", Helvetica, "Nirmala UI", sans-serif; }
+.rb .rb-hd { text-align: center; }
+.rb .rb-name { font-size: 14px; font-weight: 700; letter-spacing: .01em; }
+.rb .rb-b { font-weight: 700; font-size: 12.5px; }
+.rb .rb-rule { border-top: 1px solid #000; margin: 5px 0; }
+.rb .rb-short { border-top: 1px solid #000; margin: 4px 0 4px auto; width: 38%; }
+.rb table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.rb td, .rb th { padding: 1px 0; text-align: right; font-weight: 400; white-space: nowrap; overflow: hidden; text-transform: none; letter-spacing: 0;
+  font-size: inherit; color: #000; background: none; border: none; position: static; }
+.rb .rb-hd .rb-ph { white-space: nowrap; font-size: 11px; }
+.rb .l { text-align: left; }
+.rb .c { text-align: center; }
+.rb .rb-t tr.nm td { white-space: normal; padding-top: 4px; }
+.rb .rb-tt td, .rb .rb-t thead th.l, .rb .rb-g th, .rb .rb-g td { overflow: visible; }
+.rb col.k1 { width: 7%; } .rb col.k2 { width: 18%; } .rb col.k3 { width: 14%; } .rb col.k4 { width: 22%; } .rb col.k5 { width: 18%; } .rb col.k6 { width: 21%; }
+.rb .rb-net { display: flex; justify-content: flex-end; gap: 14px; font-size: 15px; font-weight: 700; white-space: nowrap; }
+.rb .rb-net span:first-child { margin-right: auto; padding-left: 39%; }
+.rb .rb-words { white-space: pre-wrap; margin: 4px 0 8px; }
+.rb .rb-g th { padding: 0 0 2px; }
+.rb .rb-g th span { display: block; border-bottom: 1px solid #000; margin: 0 2px 2px; padding-bottom: 1px; }
+.rb .rb-g th.l span { margin-left: 0; }
+.rb .rb-g th:last-child span { margin-right: 0; }
+.rb .rb-pts { margin-top: 4px; text-align: center; }
+.rb .rb-foot { text-align: center; margin-top: 10px; font-size: 12.5px; }
+.rb .rb-no { text-align: center; font-size: 17px; margin-top: 2px; letter-spacing: .02em; }
+.receipt.rb.w58 { font-size: 10.5px; }
+.rb.w58 .rb-t { font-size: 9.5px; }
+.rb.w58 .rb-t th { font-size: 8.5px; padding-left: 3px; overflow: visible; }
+.rb.w58 col.k1 { width: 6%; } .rb.w58 col.k2 { width: 21%; } .rb.w58 col.k3 { width: 16%; } .rb.w58 col.k4 { width: 16%; } .rb.w58 col.k5 { width: 19%; } .rb.w58 col.k6 { width: 22%; }
+.rb.w58 .rb-net span:first-child { padding-left: 0; }
+.rb.w58 .rb-name { font-size: 12.5px; }
+.rb.w58 .rb-net { font-size: 13px; }
+.rb.w58 .rb-no { font-size: 14px; }
+.rb.w58 .rb-hd .rb-ph { white-space: normal; font-size: inherit; }
 
 /* phones and small screens */
 @media (max-width: 900px) {

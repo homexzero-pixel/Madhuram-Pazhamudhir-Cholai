@@ -1,4 +1,4 @@
-# Madhuram Pazhamudhir Cholai – Supermarket Management System
+# Madhuram Pazhamudhir Solai – Supermarket Management System
 
 மதுரம் பழமுதிர் சோலை · Billing, stock, purchasing and daily accounts for a Tamil Nadu supermarket.
 

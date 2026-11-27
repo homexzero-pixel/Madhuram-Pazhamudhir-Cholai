@@ -8,9 +8,11 @@ const { approvedBy, audit } = require('./auth');
 const { paise, milli, rs, qtyDb, qtyStr, divRound, financialYear, nowIST, UserError } = require('./money');
 
 async function findSale(text) {
-  text = String(text || '').trim();
+  text = String(text || '').trim().replace(/^\*+|\*+$/g, '').trim().toUpperCase();    // "*MU/1126/T2/107*" as printed at the foot
   if (!text) throw new UserError('Enter or scan the bill number.');
-  const s = await db.one('SELECT id FROM sales WHERE bill_no=? OR bill_no LIKE ? ORDER BY id DESC LIMIT 1', [text, `%/${text.padStart(5, '0')}`]);
+  // the full number; or the last part alone ("107" = the latest bill ending /107, old style /00107 too)
+  const s = await db.one('SELECT id FROM sales WHERE bill_no=? OR bill_no LIKE ? OR bill_no LIKE ? ORDER BY id DESC LIMIT 1',
+    [text, `%/${text}`, /^\d+$/.test(text) ? `%/${text.padStart(5, '0')}` : `%/${text}`]);
   if (!s) throw new UserError(`Bill ${text} not found.`, 404);
   return billing.receipt(s.id);
 }

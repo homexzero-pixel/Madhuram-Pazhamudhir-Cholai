@@ -3,7 +3,7 @@ const db = require('./db');
 const settings = require('./settings');
 const catalog = require('./catalog');
 const { approvedBy, audit, can } = require('./auth');
-const { paise, milli, rateBp, rs, qtyDb, qtyStr, lineAmount, splitTax, financialYear, nowIST, todayIST, UserError } = require('./money');
+const { paise, milli, rateBp, rs, qtyDb, qtyStr, lineAmount, splitTax, nowIST, todayIST, UserError } = require('./money');
 
 // cod = cash on delivery of an online order: collected by the delivery person, put in the drawer at "Process completed"
 const METHODS = ['cash', 'upi', 'card', 'credit', 'points', 'cod'];
@@ -17,6 +17,14 @@ function cleanCounter(name) {
   name = String(name || '').trim().slice(0, 20);
   if (!name) throw new UserError('Choose this PC\'s counter first (top of the billing screen).');
   return name;
+}
+
+// The counter's number on the bill (T2): the number in its name ("Counter 2"), else its place in the Settings list.
+function counterNo(cfg, name) {
+  const m = String(name || '').match(/(\d+)\s*$/);
+  if (m) return Number(m[1]);
+  const i = settings.counters(cfg).indexOf(name);
+  return i >= 0 ? i + 1 : 1;
 }
 
 // ------------------------------------------------------------------ shifts: one open shift per counter
@@ -250,12 +258,13 @@ async function checkout(user, body) {
       }
       const pointsEarned = customerId ? loyalty.pointsFor(total - byPoints, lr) : 0;
 
-      const prefix = cfg.invoice_prefix;
-      const fy = financialYear(bdate);
-      await q('INSERT INTO sequences (k, last) VALUES (?, LAST_INSERT_ID(1)) ON DUPLICATE KEY UPDATE last=LAST_INSERT_ID(last+1)', [`bill:${prefix}:${fy}`]);
+      // Bill number as on the shop's printed bills: PREFIX/MMYY/T<counter>/<number>, e.g. MU/1126/T2/107.
+      // One series per counter per month (GST allows several series; the month and counter keep every number unique).
+      const series = `${cfg.invoice_prefix}/${bdate.slice(5, 7)}${bdate.slice(2, 4)}/T${counterNo(cfg, counter)}`;
+      await q('INSERT INTO sequences (k, last) VALUES (?, LAST_INSERT_ID(1)) ON DUPLICATE KEY UPDATE last=LAST_INSERT_ID(last+1)', [`bill:${series}`]);
       const seq = (await q.one('SELECT LAST_INSERT_ID() n')).n;
-      const billNo = `${prefix}/${fy}/${String(seq).padStart(5, '0')}`;
-      if (billNo.length > 20) throw new UserError('Invoice prefix too long.');
+      const billNo = `${series}/${seq}`;
+      if (billNo.length > 16) throw new UserError('Bill numbers may have at most 16 characters (GST rule). Choose a shorter bill number prefix in Settings.');
 
       // An online order's bill is the GST invoice that goes in the bag; its goods stay reserved and leave the stock
       // at "Process completed" (stock_pending=1 until then).
@@ -336,7 +345,10 @@ async function receipt(saleId) {
   const lines = await db.query('SELECT * FROM sale_lines WHERE sale_id=? ORDER BY id', [saleId]);
   const pays = await db.query('SELECT method, amount, tendered, change_amt, reference FROM payments WHERE sale_id=? ORDER BY id', [saleId]);
   const gst = {};
+  const all = {};                             // every rate, 0 % too: the GST table at the foot of the printed bill
   for (const l of lines) {
+    const a = (all[l.gst_rate] ||= { rate: l.gst_rate, taxable: 0, cgst: 0, sgst: 0 });
+    a.taxable += paise(l.taxable); a.cgst += paise(l.cgst); a.sgst += paise(l.sgst);
     if (Number(l.gst_rate) <= 0) continue;
     const g = (gst[l.gst_rate] ||= { rate: l.gst_rate, taxable: 0, cgst: 0, sgst: 0 });
     g.taxable += paise(l.taxable); g.cgst += paise(l.cgst); g.sgst += paise(l.sgst);
@@ -351,6 +363,8 @@ async function receipt(saleId) {
       gross: l.gross, discount: l.discount, net: l.net, gst_rate: l.gst_rate })),
     payments: pays,
     gst: Object.values(gst).map((g) => ({ rate: g.rate, taxable: rs(g.taxable), cgst: rs(g.cgst), sgst: rs(g.sgst) })),
+    gst_all: Object.values(all).sort((a, b) => Number(a.rate) - Number(b.rate))
+      .map((g) => ({ rate: g.rate, taxable: rs(g.taxable), cgst: rs(g.cgst), sgst: rs(g.sgst) })),
     items_count: lines.length,
   };
 }

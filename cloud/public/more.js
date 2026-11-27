@@ -341,7 +341,7 @@ function posterPrint() {
 // ================================================================== Returns
 App.views.returns = async (main) => {
   main.innerHTML = `<h1>Returns</h1>
-    <div class="card" style="margin-bottom:14px"><form id="rf" class="row"><input name="bill" placeholder="Bill number (e.g. 152 or MPC/2627/00152)" style="max-width:340px" autofocus required>
+    <div class="card" style="margin-bottom:14px"><form id="rf" class="row"><input name="bill" placeholder="Bill number (e.g. 107 or MU/1126/T2/107)" style="max-width:340px" autofocus required>
       <button class="primary">Find bill</button></form><div id="rbill"></div></div>
     <h2>Returns today</h2><div id="rlist"></div>`;
   const list = async () => {

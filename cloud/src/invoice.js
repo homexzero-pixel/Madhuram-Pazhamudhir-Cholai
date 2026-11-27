@@ -42,7 +42,7 @@ th{background:#f7f8fa;font-size:12px;text-transform:uppercase;color:#647084}.r{t
 .btn{display:inline-block;margin:16px 0 0;padding:10px 18px;border-radius:8px;border:0;background:#0c831f;color:#fff;font-weight:700;font-size:15px;cursor:pointer}
 @media print{body{background:#fff}.page{box-shadow:none;margin:0;padding:0}.btn{display:none}}
 </style></head><body><div class="page">
-<div class="top"><div><h1>${esc(cfg.name)}</h1><div class="muted">${esc(cfg.address)}${cfg.phone ? `<br>Phone ${esc(cfg.phone)}` : ''}
+<div class="top"><div><h1>${esc(cfg.name)}</h1><div class="muted">${esc(cfg.address).replace(/\r?\n/g, '<br>')}${cfg.phone ? `<br>Phone ${esc(cfg.phone)}` : ''}
   ${cfg.gstin ? `<br>GSTIN ${esc(cfg.gstin)}` : ''}${cfg.fssai ? ` · FSSAI ${esc(cfg.fssai)}` : ''}</div></div>
   <div style="text-align:right"><span class="tag">TAX INVOICE</span><div style="margin-top:6px"><b>${esc(b.bill_no)}</b></div>
   <div class="muted">${esc(String(b.at).slice(0, 16))}<br>Online order ${esc(o.number)}</div></div></div>
