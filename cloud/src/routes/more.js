@@ -97,7 +97,7 @@ r.get('/orders', need('orders'), wrap(async (req, res) => ok(res, { orders: awai
   shop_url: shopUrl(req), online_enabled: (await settings.load()).online_enabled })));
 r.get('/orders/badge', need(), wrap(async (req, res) => ok(res, auth.can(req.user, 'orders') ? await shop.badge() : { new: 0, open: 0, last: 0 })));
 // live updates for the billing screens (new order, invoiced, dispatched, completed, cancelled)
-r.get('/events', need('orders'), (req, res) => events.subscribe(req, res, req.user));
+r.get('/events', need('orders'), (req, res) => { events.subscribe(req, res, req.user).catch(() => res.end()); });
 r.get('/orders/:id', need('orders'), wrap(async (req, res) => {
   ok(res, { order: await shop.order('o.id=?', [req.params.id]), whatsapp: await fulfilment.statusMessage(req.params.id, shopUrl(req)) });
 }));

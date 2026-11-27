@@ -4,6 +4,7 @@
 process.env.NODE_ENV = 'test';
 process.env.MPC_NO_AUTOSTART = '1';
 process.env.BACKUP_DIR = require('path').join(require('os').tmpdir(), `mpc_backup_test_${process.pid}`);
+process.env.IMAGE_DIR = require('path').join(require('os').tmpdir(), `mpc_img_test_${process.pid}`);
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
@@ -90,7 +91,10 @@ test.before(async () => {
   await cashier.post('/api/shift/open', { counter: 'Counter 1', float: '1000' });
   slot = (await owner.get('/api/shop/info')).data.slots[0].slots[0].v;
 });
-test.after(async () => { server.close(); events.stop(); await db.end(); });
+test.after(async () => {
+  server.close(); events.stop(); await db.end();
+  require('fs').rmSync(process.env.IMAGE_DIR, { recursive: true, force: true });
+});
 
 test('two customers buy the last piece at the same moment: exactly one gets it, and it disappears from the shop', async () => {
   const a = await customer('Anu', '9000000001', '10.1.0.1');
@@ -295,6 +299,15 @@ test('order events reach the billing screens through the outbox', async () => {
   await new Promise((r) => setTimeout(r, 150));
   req.destroy();
   assert.match(got.join(''), new RegExp(`event: order[\\s\\S]*NEW_ONLINE_ORDER[\\s\\S]*${o.data.number}`));
+  // a screen that reconnects (the host ends every request within 2 minutes) gets the events it missed
+  const id = Number((await db.one("SELECT id FROM outbox WHERE type='NEW_ONLINE_ORDER' ORDER BY id DESC LIMIT 1")).id);
+  const again = [];
+  const req2 = http.request({ host: '127.0.0.1', port, path: '/api/events', headers: { Host: '127.0.0.1', Cookie: cashier.cookie, 'Last-Event-ID': String(id - 1) } },
+    (res) => { res.on('data', (d) => again.push(String(d))); });
+  req2.end();
+  await new Promise((r) => setTimeout(r, 200));
+  req2.destroy();
+  assert.match(again.join(''), new RegExp(`id: ${id}[\\s\\S]*${o.data.number}`));
 });
 
 test('rate limits: too many logins from one address are refused', async () => {
@@ -380,5 +393,28 @@ test('shop assistant: answers only from available products and the customer\'s o
   } finally {
     gateway._setClient(null);
     delete process.env.AI_SHOP;
+  }
+});
+
+test('the customers\' site copies a product photo from the billing site once, then serves its own copy', async () => {
+  const png = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
+  const name = 'p1_0123abcd.png';
+  let hits = 0;
+  const billing = http.createServer((req, res) => {
+    hits += 1;
+    if (req.url === `/img/p/${name}`) { res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(png); } else { res.writeHead(404); res.end(); }
+  }).listen(0);
+  process.env.SITE_ROLE = 'shop';
+  process.env.BILLING_URL = `http://127.0.0.1:${billing.address().port}`;
+  try {
+    const c = new Client();
+    assert.equal((await c.get(`/img/p/${name}`)).status, 200);
+    assert.equal((await c.get(`/img/p/${name}`)).status, 200);
+    assert.equal(hits, 1);
+    assert.equal((await c.get('/img/p/p1_deadbeef.png')).status, 404);
+    assert.equal((await c.get('/img/p/..%2F..%2Fetc%2Fpasswd')).status, 404);
+  } finally {
+    delete process.env.SITE_ROLE; delete process.env.BILLING_URL;
+    billing.close();
   }
 });

@@ -55,7 +55,8 @@ Two ways to run it (same code):
 * **Two copies** (recommended on Hostinger): the billing app with `SITE_ROLE=billing`, the customers' app with `SITE_ROLE=shop`, both
   with the same `DB_*` settings. The shop copy wakes the billing copy after each change with a signed call
   (`BILLING_URL`, `EVENTS_SECRET`); the billing copy also reads new events from the database every second, so nothing is lost if
-  that call fails.
+  that call fails. Product photos are uploaded on the billing copy; the shop copy fetches each photo from `BILLING_URL` the first
+  time a customer needs it and keeps its own copy (photo names are unique per upload).
 * **One copy answering both addresses**: `SHOP_HOST=mpccustomer.zeravista.com`, `BILLING_HOST=<billing address>`. Requests are routed by
   the `Host` header; any other address gets `421`.
 * Without these settings the app works as before (staff at `/`, shop at `/shop/`).
@@ -140,6 +141,9 @@ because nothing left the shelf), gives back cash / credit / points that were tak
 * **Rate limits** per visitor address (token buckets): staff logins 10/min, customer account actions 20/min (plus 5 wrong passwords
   per account per 15 min), orders 10/min (plus 5 per hour per address in the database), assistant 10/min, customers' site 600/min,
   billing site 900/min. Answer: 429 with `Retry-After`.
+* **Live staff alerts on Hostinger:** the host ends every request after 120 seconds, so each Server-Sent Events connection ends
+  itself after 100 seconds; the browser reconnects 3 seconds later with `Last-Event-ID` and gets any events from the gap. The
+  screens also poll every 20 seconds.
 * **Signed events:** `X-MPC-Signature: sha256=HMAC(EVENTS_SECRET, timestamp + "." + body)`, `X-MPC-Timestamp` within 5 minutes,
   compared in constant time. The wake-up call carries no data the billing site trusts: it only triggers a read of the database outbox.
 * Headers: CSP (`script-src 'self'`), `X-Frame-Options: DENY`, `nosniff`, COOP/CORP same-origin, HSTS on https.

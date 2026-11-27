@@ -76,6 +76,22 @@ function filePath(name) {
   return fs.existsSync(p) ? p : null;
 }
 
+// Two copies of the app (billing site and customers' site) live in different hosting folders. Photos are uploaded on the
+// billing site, so the customers' site fetches each one from there the first time a customer needs it and keeps a copy
+// (every upload gets a new file name, so a copy is never out of date).
+async function fetchFromBilling(name) {
+  const base = String(process.env.BILLING_URL || '').replace(/\/+$/, '');
+  if (!base || !NAME.test(name || '')) return null;
+  const r = await fetch(`${base}/img/p/${name}`, { signal: AbortSignal.timeout(8000), headers: { 'X-MPC-Photo-Copy': '1' } });
+  if (!r.ok) return null;
+  const buf = Buffer.from(await r.arrayBuffer());
+  if (!buf.length || buf.length > 2 * MAX || !kind(buf)) return null;
+  fs.mkdirSync(DIR, { recursive: true });
+  const p = path.join(DIR, name);
+  fs.writeFileSync(p, buf);
+  return p;
+}
+
 // ------------------------------------------------------------------ background lookup by barcode
 const job = { running: false, total: 0, done: 0, found: 0, missing: 0, failed: 0, started: null, finished: null, stop: false, last: '', error: '' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -155,4 +171,4 @@ async function status() {
   return { ...j, with_photo: Number(c.with_photo || 0), without_photo: Number(c.without_photo || 0), from_db: Number(c.from_db || 0) };
 }
 
-module.exports = { saveBanner, saveByCode, save, remove, filePath, start, stop, status, DIR, kind };
+module.exports = { fetchFromBilling, saveBanner, saveByCode, save, remove, filePath, start, stop, status, DIR, kind };

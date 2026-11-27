@@ -1,6 +1,6 @@
 {
   "name": "madhuram-store",
-  "version": "2026.11.26",
+  "version": "2026.11.27",
   "private": true,
   "description": "Madhuram Store cloud edition (app in ./cloud)",
   "main": "server.js",

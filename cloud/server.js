@@ -75,8 +75,11 @@ function createApp() {
     res.sendFile(path.join(pub, 'sw.js'));
   });
   // product photos (public: the customers' shop shows them)
-  app.get('/img/p/:name', (req, res, next) => {
-    const p = require('./src/images').filePath(req.params.name);
+  app.get('/img/p/:name', async (req, res, next) => {
+    const images = require('./src/images');
+    let p = images.filePath(req.params.name);
+    // customers' site as its own app: the photo was uploaded on the billing site; copy it from there once
+    if (!p && req.site === 'shop' && !req.headers['x-mpc-photo-copy']) p = await images.fetchFromBilling(req.params.name).catch(() => null);
     if (!p) return next(new UserError('Not found.', 404));
     res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
     return res.sendFile(p);

@@ -47,19 +47,33 @@ async function post(url, type, id, payload) {
 }
 
 // ---------------------------------------------------------------- billing screens (Server-Sent Events)
-function subscribe(req, res, user) {
+// Hosting cuts every request after 120 seconds (Hostinger), so each connection ends by itself after 100 seconds and the
+// browser reconnects 3 seconds later, sending the last event id it saw; events from that gap are sent again.
+async function subscribe(req, res, user) {
   res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform',
     Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
-  res.write('retry: 5000\n\n');
+  res.write('retry: 3000\n\n');
   const c = { res, user };
+  const seen = Number(req.headers['last-event-id']) || 0;
+  if (seen > 0) {
+    try {
+      const missed = await db.query(`SELECT id, type, data, created_at FROM outbox WHERE id > ? AND pushed=1 AND created_at > ?
+        ORDER BY id LIMIT 50`, [seen, nowIST(Date.now() - 10 * 60000)]);
+      for (const r of missed) res.write(message(r));
+    } catch (_) { /* the poll on the screen covers it */ }
+  }
   clients.add(c);
   const beat = setInterval(() => res.write(': keep-alive\n\n'), 20000);
-  req.on('close', () => { clearInterval(beat); clients.delete(c); });
+  const end = setTimeout(() => res.end(), 100000);
+  req.on('close', () => { clearInterval(beat); clearTimeout(end); clients.delete(c); });
 }
-function broadcast(row) {
+function message(row) {
   let data;
   try { data = JSON.parse(row.data); } catch (_) { data = {}; }
-  const msg = `id: ${row.id}\nevent: order\ndata: ${JSON.stringify({ type: row.type, at: row.created_at, ...data })}\n\n`;
+  return `id: ${row.id}\nevent: order\ndata: ${JSON.stringify({ type: row.type, at: row.created_at, ...data })}\n\n`;
+}
+function broadcast(row) {
+  const msg = message(row);
   for (const c of clients) { try { c.res.write(msg); } catch (_) { clients.delete(c); } }
 }
 
