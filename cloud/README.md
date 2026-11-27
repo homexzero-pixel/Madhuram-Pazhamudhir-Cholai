@@ -102,18 +102,22 @@ The staff keep the current address. Customers get their own address, `mpccustome
 database. The staff screens and staff API do not exist on the customers' address, and the customers' API does not exist on the
 billing address.
 
-**Recommended: a second Web App for the customers' address (same GitHub repository, same database).**
+**Recommended: a second Web App for the customers' address (same GitHub repository, same database).** The Business plan allows
+5 Node.js apps. Do the steps in this order, so customers always have a working shop:
 
-1. Billing app (the one you have) → **Environment variables**, add:
-   `SITE_ROLE` = `billing`, `SHOP_URL` = `https://mpccustomer.zeravista.com`, `EVENTS_SECRET` = a long random password you make up
-   (at least 16 characters; use a password generator; never send it to anyone) → **Redeploy**.
-2. hPanel → **Websites → Add website → Node.js app** → domain `mpccustomer.zeravista.com` (if zeravista.com's DNS is not at Hostinger,
-   hPanel shows the DNS record to add where the domain is managed). Same repository and root folder, entry file `server.js`,
-   Node 20 or newer. **Environment variables:** the same `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` as the billing app,
-   plus `SITE_ROLE` = `shop`, `BILLING_URL` = `https://<your billing address>`, `EVENTS_SECRET` = the same password as step 1.
-   Deploy, then turn on **SSL** for the new address.
-3. Print a new QR poster: **Online orders → QR poster** now points to `https://mpccustomer.zeravista.com/`. Old `/shop/` links on the
-   billing address forward there.
+1. **Billing app (the one you have) → Redeploy** with the new code. Nothing else changes yet: the shop still opens at `/shop/`.
+   The version at the bottom left of the staff screens shows `v2026.11.27` or later.
+2. hPanel → **Websites → Add Website → Node.js web app**. Use the domain `mpccustomer.zeravista.com` as its own website (not a folder
+   of zeravista.com; if the domain's DNS is managed elsewhere, add the record hPanel shows there). **Import Git repository →
+   Connect with GitHub** → this repository, branch `main`, the same root folder / entry file (`server.js`) / Node version as the
+   billing app. **Environment variables:** the same `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` as the billing app
+   (and `SMS_PROVIDER`, `SMS_API_KEY` if you use SMS codes), plus `SITE_ROLE` = `shop`, `BILLING_URL` = `https://<your billing address>`,
+   `EVENTS_SECRET` = a long random password you make up (20+ letters and numbers; never send it to anyone). Leave every other
+   variable empty. Deploy, then turn on **SSL** for the new address. Product photos come over from the billing app by themselves.
+3. Billing app → **Environment variables**: add `SITE_ROLE` = `billing`, `SHOP_URL` = `https://mpccustomer.zeravista.com`,
+   `EVENTS_SECRET` = the same password as step 2 → **Redeploy**. From now on `/shop/` on the billing address forwards customers to
+   the new address.
+4. Print a new QR poster: **Online orders → QR poster** now points to `https://mpccustomer.zeravista.com/`.
 
 *If your panel lets one Node.js app answer two addresses instead,* set `SHOP_HOST` = `mpccustomer.zeravista.com` and
 `BILLING_HOST` = `<your billing address>` on that one app (no `SITE_ROLE`); every other address is refused.
