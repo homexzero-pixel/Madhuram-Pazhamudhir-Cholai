@@ -19,6 +19,8 @@ const { OPEN, AVAILABLE, DELIVERY_SKU } = stock;
 const STATUS = { new: 'New', accepted: 'Accepted', packing: 'Billed & packed', ready: 'Ready for pickup', out: 'Out for delivery',
   done: 'Completed', cancelled: 'Cancelled' };
 // what the customer sees on the tracking page
+// What the shop does when an ordered item is not available (the customer chooses at checkout).
+const SUB_PREF = { call: 'Call me', replace: 'Replace with a similar item', remove: 'Remove it' };
 const CUSTOMER_STATUS = { new: 'Order placed – waiting for the shop', accepted: 'Accepted – the shop is getting your items',
   packing: 'Billed and packed', ready: 'Ready – please collect from the counter', out: 'Out for delivery – the delivery person is on the way',
   done: 'Completed – thank you!', cancelled: 'Cancelled' };
@@ -245,10 +247,12 @@ async function placeOrder(data, ip, customer) {
     const token = crypto.randomBytes(16).toString('hex');
     const now = nowIST();
     if (mode === 'delivery' && address) await q('UPDATE customers SET address=? WHERE id=?', [address, customer.id]);
+    const subPref = SUB_PREF[data.sub_pref] ? data.sub_pref : 'call';
+    const dropNote = mode === 'delivery' ? String(data.drop_note || '').replace(/\s+/g, ' ').trim().slice(0, 200) : '';
     const o = await q(`INSERT INTO online_orders (customer_id, number, token, name, phone, mode, address, notes, slot, pay_pref, est_items, delivery_charge, ip,
-      created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [customer.id, number, token, name, phone, mode, mode === 'delivery' ? address : '',
+      created_at, updated_at, sub_pref, drop_note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [customer.id, number, token, name, phone, mode, mode === 'delivery' ? address : '',
       String(data.notes || '').replace(/\s+/g, ' ').trim().slice(0, 300), `${slot.replace('T', ' ')}:00`, data.pay === 'upi' ? 'upi' : 'cash',
-      rs(total), rs(charge), String(ip || '').slice(0, 45), now, now]);
+      rs(total), rs(charge), String(ip || '').slice(0, 45), now, now, subPref, dropNote]);
     for (const [it, qty] of lines) {
       await q('INSERT INTO online_order_lines (order_id, item_id, name, name_ta, unit, qty, price) VALUES (?,?,?,?,?,?,?)',
         [o.insertId, it.id, it.name, it.name_ta, it.unit, qtyDb(qty), it.price]);
@@ -308,8 +312,10 @@ const publicOrder = async (token, viewer = null) => {
       qty: l.qty, price: l.price, ordered: l.ordered_qty === null ? null : qtyStr(milli(l.ordered_qty)), note: l.note })),
     est_items: o.est_items, delivery_charge: o.delivery_charge, est_total: o.est_total, bill_no: o.bill_no, bill_total: o.bill_total,
     cod_due: o.status === 'done' ? null : o.cod_due || null, invoice: mine && o.status === 'done' && !!o.sale_id,
+    can_cancel: mine && ['new', 'accepted'].includes(o.status) && !o.sale_id,
     shop: { name: cfg.name, phone: cfg.phone, upi_id: cfg.upi_id } };
-  if (mine) Object.assign(out, { name: o.name, address: o.address, pay_pref: o.pay_pref, pay_ref: o.pay_ref || '' });
+  if (mine) Object.assign(out, { name: o.name, address: o.address, pay_pref: o.pay_pref, pay_ref: o.pay_ref || '', notes: o.notes,
+    sub_pref: o.sub_pref, sub_label: SUB_PREF[o.sub_pref] || SUB_PREF.call, drop_note: o.drop_note });
   else Object.assign(out, { name: String(o.name || '').split(' ')[0], pay_pref: o.pay_pref, pay_ref: '' });
   return out;
 };
@@ -377,6 +383,17 @@ async function badge() {
   return { new: Number(r.n || 0), open: Number(r.n || 0) + Number(r.busy || 0), last: last.m || 0 };
 }
 
-module.exports = { suggest, setPayRef, buyAgain, offerSummary, slotTime, customerOrders, stats, CUSTOMER_STATUS, catalogue, categories, slots, slotLabel,
+// The customer cancels their own order before the shop bills it (the held stock is released at once).
+async function cancelByCustomer(token, customer, reason) {
+  if (!customer) throw new UserError('Please log in.', 401);
+  if (!/^[0-9a-f]{32}$/.test(token || '')) throw new UserError('Order not found.', 404);
+  const o = await db.one('SELECT id, status, sale_id FROM online_orders WHERE token=? AND customer_id=?', [token, customer.id]);
+  if (!o) throw new UserError('Order not found.', 404);
+  if (o.sale_id || !['new', 'accepted'].includes(o.status)) throw new UserError('The shop has already billed this order. Please call the shop to cancel it.', 409);
+  const why = String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  await require('./fulfilment').cancel(o.id, { note: `Cancelled by the customer${why ? `: ${why}` : ''}` }, { id: null });
+}
+
+module.exports = { SUB_PREF, cancelByCustomer, suggest, setPayRef, buyAgain, offerSummary, slotTime, customerOrders, stats, CUSTOMER_STATUS, catalogue, categories, slots, slotLabel,
   placeOrder, publicOrder, order, staffList, badge, steps,
   phone10, STATUS, OPEN };

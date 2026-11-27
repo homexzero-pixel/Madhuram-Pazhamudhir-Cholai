@@ -91,6 +91,12 @@ Owner phone: open the address in Chrome → ⋮ → **Install app** / Add to Hom
 - **Customers' profile:** orders with items, wishlist, address book with a default address, edit name / mobile / email,
   help & support (call or WhatsApp: Settings → *WhatsApp number for customer help*), refer a friend (Settings → *Points when a
   referred friend shops*; needs loyalty points on).
+- **Quick-delivery layout (27 Nov 2026):** the home page starts with the next delivery time and the address, a search bar with a
+  microphone, the customer's open order with *Track*, and the categories in one row. Section pages show the other sections on the
+  left. Loose items have 250 g / 500 g / 1 kg / 2 kg buttons. The basket is one short page: the earliest time is chosen, and the
+  customer picks what to do if an item is not available (call me / replace / remove) and notes for the delivery person; staff see
+  both on the order and the packing list. Customers can cancel their order until the shop bills it. Search understands Tamil and
+  Tanglish words (thakkali, தக்காளி, paruppu, ennai…).
 - **Pay online by UPI:** Settings → *UPI QR code* (a screenshot of your GPay / PhonePe QR). Customers who choose "Pay online"
   see the QR and your UPI ID after ordering, and type the UPI transaction number; the Online orders screen shows it so you can
   check it in your UPI app before packing. (Card / netbanking through a payment gateway such as Cashfree needs their App ID

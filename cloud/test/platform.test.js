@@ -418,3 +418,43 @@ test('the customers\' site copies a product photo from the billing site once, th
     billing.close();
   }
 });
+
+test('checkout choices reach the shop; the customer can cancel until the order is billed; Tamil and Tanglish search words', async () => {
+  const c = await customer('Hema', '9000000009', '10.1.0.9');
+  const id = products.plenty.id;
+  const before = await reserved(id);
+  const o = await order(c, [{ id, qty: 1 }], { sub_pref: 'replace', drop_note: 'Call when you arrive; Leave at the gate', mode: 'delivery', address: '7, East Street, near the school' });
+  assert.equal(o.data.ok, true, JSON.stringify(o.data));
+  const oid = await orderId(o.data.number);
+  const staffView = (await cashier.get(`/api/orders/${oid}`)).data.order;
+  assert.deepEqual([staffView.sub_pref, staffView.drop_note], ['replace', 'Call when you arrive; Leave at the gate']);
+  const mine = (await c.get(`/api/shop/track/${o.data.token}`)).data.order;
+  assert.deepEqual([mine.sub_label, mine.can_cancel], ['Replace with a similar item', true]);
+  // a stranger with the link sees neither the choices nor a cancel button, and cannot cancel
+  const other = new Client('127.0.0.1', '10.1.0.10');
+  const seen = (await other.get(`/api/shop/track/${o.data.token}`)).data.order;
+  assert.deepEqual([seen.sub_label, seen.can_cancel], [undefined, false]);
+  assert.equal((await other.post(`/api/shop/track/${o.data.token}/cancel`, {})).status, 401);
+  const stranger = await customer('Ilango', '9000000010', '10.1.0.11');
+  assert.equal((await stranger.post(`/api/shop/track/${o.data.token}/cancel`, {})).status, 404);
+  // the customer cancels: held stock comes back, the staff see why
+  const cn = await c.post(`/api/shop/track/${o.data.token}/cancel`, { reason: 'ordered twice' });
+  assert.equal(cn.data.ok, true, JSON.stringify(cn.data));
+  assert.equal(cn.data.order.status, 'cancelled');
+  assert.equal(await reserved(id), before);
+  assert.match((await cashier.get(`/api/orders/${oid}`)).data.order.status_note, /Cancelled by the customer: ordered twice/);
+  // an unknown choice falls back to "call me"; once billed, only the shop can cancel
+  const o2 = await order(c, [{ id, qty: 1 }], { sub_pref: 'whatever' });
+  const id2 = await orderId(o2.data.number);
+  assert.equal((await cashier.get(`/api/orders/${id2}`)).data.order.sub_pref, 'call');
+  assert.equal((await invoice(id2)).data.ok, true);
+  assert.equal((await c.post(`/api/shop/track/${o2.data.token}/cancel`, {})).status, 409);
+  assert.equal((await c.get(`/api/shop/track/${o2.data.token}`)).data.order.can_cancel, false);
+  // search: Tanglish and Tamil words find the English product names
+  const names = async (q) => (await c.get(`/api/shop/items?q=${encodeURIComponent(q)}`)).data.items.map((x) => x.name);
+  assert.ok((await names('arisi')).some((n) => /rice/i.test(n)));
+  assert.ok((await names('அரிசி')).some((n) => /rice/i.test(n)));
+  assert.ok((await names('ennai')).some((n) => /oil/i.test(n)));
+  assert.ok((await names('vazhai')).some((n) => /banana/i.test(n)));
+  assert.ok((await names('ponni arisi')).some((n) => /ponni rice/i.test(n)));
+});

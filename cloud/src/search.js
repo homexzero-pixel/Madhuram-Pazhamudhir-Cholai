@@ -53,6 +53,63 @@ function prefixIds(ix, w) {
   return out;
 }
 
+// Words customers in Tamil Nadu type, in Tamil or in English letters ("thakkali"), and the word the product list uses.
+const SYN = {};
+const syn = (target, words) => { for (const w of words.split(' ')) (SYN[w] ||= []).push(target); };
+syn('tomato', 'thakkali takkali thakali தக்காளி');
+syn('onion', 'vengayam venkayam vengaayam வெங்காயம்');
+syn('potato', 'urulai urulaikizhangu urulaikilangu aloo உருளைக்கிழங்கு உருளை');
+syn('brinjal', 'kathirikai kathirikkai kathrikai baingan கத்தரிக்காய் கத்தரி');
+syn('ladies', 'vendakkai vendaikai bhindi okra வெண்டைக்காய் வெண்டை');
+syn('drumstick', 'murungakkai murungai murunga முருங்கைக்காய் முருங்கை');
+syn('coriander', 'kothamalli kothamali malli கொத்தமல்லி');
+syn('mint', 'pudina புதினா');
+syn('curry', 'karuveppilai kariveppilai karivepilai கறிவேப்பிலை');
+syn('ginger', 'inji இஞ்சி');
+syn('garlic', 'poondu பூண்டு');
+syn('chilli', 'milagai milakai மிளகாய்');
+syn('lemon', 'elumichai elumichambazham எலுமிச்சை');
+syn('coconut', 'thengai thenga thengaai தேங்காய்');
+syn('banana', 'vazhaipazham valaipalam vazhai valai வாழைப்பழம் வாழை');
+syn('mango', 'maambazham mambazham maangai மாம்பழம் மாங்காய்');
+syn('guava', 'koyya கொய்யா');
+syn('watermelon', 'tharpoosani tharbusani தர்பூசணி');
+syn('milk', 'paal பால்');
+syn('curd', 'thayir thair தயிர்');
+syn('ghee', 'nei ney நெய்');
+syn('butter', 'vennai வெண்ணெய்');
+syn('egg', 'muttai mutta முட்டை');
+syn('rice', 'arisi அரிசி');
+syn('dhal', 'paruppu பருப்பு');
+syn('dal', 'paruppu பருப்பு');
+syn('toor', 'thuvaram thuvarai துவரம்');
+syn('moong', 'pasiparuppu பாசிப்பருப்பு');
+syn('gram', 'kadalai கடலை');
+syn('sugar', 'sakkarai sakkara seeni சர்க்கரை சீனி');
+syn('salt', 'uppu உப்பு');
+syn('oil', 'ennai ennei yennai எண்ணெய்');
+syn('gingelly', 'nallennai நல்லெண்ணெய்');
+syn('wheat', 'godhumai gothumai கோதுமை');
+syn('atta', 'maavu மாவு');
+syn('rava', 'ravai ரவை');
+syn('coffee', 'kaapi kapi காபி');
+syn('tea', 'டீ தேநீர்');
+syn('jaggery', 'vellam வெல்லம்');
+syn('tamarind', 'puli புளி');
+syn('turmeric', 'manjal மஞ்சள்');
+syn('pepper', 'milagu மிளகு');
+syn('jeera', 'seeragam jeeragam சீரகம்');
+syn('mustard', 'kadugu கடுகு');
+syn('methi', 'vendhayam vendayam வெந்தயம்');
+syn('soap', 'sopu சோப்பு');
+const SYN_KEYS = Object.keys(SYN).sort();
+// the word itself, and the product-list words of any Tamil / Tanglish word it starts (typing "thakk" already finds tomatoes)
+function expand(w) {
+  const out = new Set([w]);
+  if ([...w].length >= 3) for (const k of SYN_KEYS) if (k.startsWith(w)) for (const t of SYN[k]) out.add(t);
+  return [...out];
+}
+
 // Product ids matching every word of the query (as the start of a word), or null when the index cannot answer.
 async function find(q) {
   const words = tokens(q).slice(0, 5);
@@ -60,7 +117,8 @@ async function find(q) {
   const ix = await ensure();
   let result = null;
   for (const w of words) {
-    let ids = prefixIds(ix, w);
+    let ids = new Set();
+    for (const x of expand(w)) for (const id of prefixIds(ix, x)) ids.add(id);
     if (!ids.size && w.length > 3) {          // plurals: tomatoes → tomato, onions → onion
       const stem = w.replace(/(es|s)$/, '');
       if (stem !== w) ids = prefixIds(ix, stem);
@@ -72,4 +130,4 @@ async function find(q) {
   return [...result];
 }
 
-module.exports = { find, ensure, tokens, reset: () => { idx = { v: null, words: [], post: [] }; checkedAt = 0; } };
+module.exports = { find, ensure, tokens, expand, reset: () => { idx = { v: null, words: [], post: [] }; checkedAt = 0; } };

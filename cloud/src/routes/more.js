@@ -192,6 +192,10 @@ r.get('/shop/account/suggest', wrap(async (req, res) => {
   ok(res, { items: await shop.suggest(c ? c.id : null) });
 }));
 r.post('/shop/track/:token/payref', wrap(async (req, res) => { await shop.setPayRef(req.params.token, (req.body || {}).ref, await cust.current(req)); ok(res); }));
+r.post('/shop/track/:token/cancel', wrap(async (req, res) => {
+  await shop.cancelByCustomer(req.params.token, await cust.current(req), (req.body || {}).reason);
+  ok(res, { order: await shop.publicOrder(req.params.token, await cust.current(req)) });
+}));
 // the GST invoice of a completed order: only for the customer who placed it
 r.get('/shop/account/orders/:number/invoice', wrap(async (req, res) => {
   const page = await require('../invoice').forCustomer(await cust.current(req), req.params.number);

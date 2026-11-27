@@ -12,6 +12,7 @@ const S = {
   info: null, items: new Map(), cart: LS.get('mpc_cart', {}), mode: localStorage.getItem('mpc_mode') || '', dayIdx: 0, slot: '',
   me: null, sms: false, after: '', fav: new Set(LS.get('mpc_fav', [])), sort: 'popular', only: '', instock: false,
   recent: LS.get('mpc_recent', []), active: 0, page: 'home', tok: 0, rtok: 0, hist: [], addresses: null, addrId: 0, pay: LS.get('mpc_pay', 'cash'),
+  sub: LS.get('mpc_sub', 'call'), drop: LS.get('mpc_drop', []), note: '', liveOrd: null,
 };
 
 async function get(path) {
@@ -202,12 +203,20 @@ function actHtml(it) {
   return q ? `<span class="qp"><button data-d="-1" aria-label="Less">${ico('minus')}</button><b>${fmtQ(q, it)}</b><button data-d="1" aria-label="More">${ico('plus')}</button></span>`
     : `<button class="add" data-d="1" aria-label="Add ${esc(nice(it.name))}">${ico('plus')}</button>`;
 }
+// "Only 3 left" from the real stock (never invented): pieces at 5 or fewer, loose items at 2 kg or less
+function lowLeft(it) {
+  const a = Number(it.available);
+  if (!(a > 0)) return '';
+  if (it.unit === 'kg') return a <= 2 ? `Only ${fmtQ(a, it)} left` : '';
+  return a <= 5 ? `Only ${a} left` : '';
+}
 function card(it) {
   const sv = saving(it);
   const offer = Number(it.regular) > Number(it.price);
+  const low = lowLeft(it);
   return `<div class="pc${it.in_stock ? '' : ' out'}" data-pid="${it.id}">
     <div class="pc-img"><a href="#p=${it.id}" aria-label="${esc(nice(it.name))}">${pic(it)}</a>
-      ${offer ? `<span class="tagx">${sv.pct}% OFF</span>` : ''}
+      ${offer ? `<span class="tagx">${sv.pct}% OFF</span>` : ''}${low ? `<span class="lowx">${esc(low)}</span>` : ''}
       <button class="fav ${S.fav.has(it.id) ? 'on' : ''}" data-fav="${it.id}" aria-label="Wishlist">${ico('heart')}</button>
       <div class="act${S.cart[it.id] ? ' q' : ''}">${actHtml(it)}</div></div>
     <a class="pc-t" href="#p=${it.id}"><div class="pc-pr"><span class="pill-p">${rs(paise(it.price))}${it.unit === 'kg' ? '<small>/kg</small>' : ''}</span>${sv ? `<s>${rs(paise(sv.was))}</s>` : ''}</div>
@@ -247,6 +256,61 @@ function drawBars() {
   acct.innerHTML = S.me ? `${avatar()}<span>${esc(S.me.name.split(' ')[0])}</span>` : 'Log in';
   $('#pcLoc').innerHTML = `${ico(S.mode === 'delivery' ? 'scooter' : 'bag')}<span>${esc(locText())}</span>${ico('down')}`;
 }
+// The earliest time the customer can get the order: "Today, 7–8 am"
+const istDay = (ms = Date.now()) => new Date(ms + 330 * 60000).toISOString().slice(0, 10);
+function shortTime(l) {
+  const [a, b] = String(l || '').replace(/:00/g, '').split('–');
+  if (!b) return a || '';
+  const sa = (a.match(/\s?[ap]m$/i) || [''])[0];
+  const sb = (b.match(/\s?[ap]m$/i) || [''])[0];
+  return sa && sa.trim() === sb.trim() ? `${a.slice(0, -sa.length)}–${b}` : `${a}–${b}`;
+}
+const dayName = (d) => (d.date === istDay() ? 'Today' : d.date === istDay(Date.now() + 86400000) ? 'Tomorrow' : d.label);
+function slotText(v) {
+  for (const d of S.info.slots || []) for (const x of d.slots) if (x.v === v) return `${dayName(d)}, ${shortTime(x.l)}`;
+  return '';
+}
+function nextSlot() {
+  const d = (S.info.slots || [])[0];
+  return d && d.slots.length ? { day: dayName(d), time: shortTime(d.slots[0].l), v: d.slots[0].v } : null;
+}
+function addrShort() {
+  const s = S.info.shop;
+  if (S.mode !== 'delivery') return `Takeaway · ${s.address || s.name}`;
+  if (S.me && S.me.address) return S.me.address;
+  return S.me ? 'Add your delivery address' : `Home delivery${s.online_area ? ` · ${s.online_area}` : ''}`;
+}
+const shortSec = (n) => String(n).replace(/^Fresh /, '').replace(/ & .*$/, '').replace(/,.*$/, '');
+const canVoice = () => 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+function voiceSearch() {
+  const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!R) { toast('Voice search works in Chrome. Please type the name.'); return; }
+  const r = new R();
+  r.lang = 'en-IN';
+  r.interimResults = false;
+  r.maxAlternatives = 1;
+  toast('Listening… say a product name');
+  r.onresult = (e) => { const t = e.results[0][0].transcript; if (t) location.hash = `#q=${encodeURIComponent(t)}`; };
+  r.onerror = () => toast('Could not hear that. Please type it.');
+  try { r.start(); } catch (_) { toast('Voice search is busy. Try again.'); }
+}
+// the open order, on top of the home page
+function drawLive() {
+  const el = $('#liveOrd');
+  if (!el) return;
+  const o = S.liveOrd;
+  if (!o) { el.innerHTML = ''; return; }
+  const st = { new: 'Order placed', accepted: 'Order accepted', packing: 'Billed and packed', ready: 'Ready for pickup', out: 'Out for delivery' }[o.status] || 'In progress';
+  el.innerHTML = `<a class="live-ord" href="#o=${esc(o.token)}"><span class="lo-i">${ico(o.status === 'out' ? 'scooter' : 'bag')}</span>
+    <span class="lo-t"><b>${esc(st)}</b><span>Order ${esc(o.number)} · ${esc(o.slot_label)}</span></span><span class="lo-go">Track${ico('right')}</span></a>`;
+}
+function catStrip() {
+  const secs = (S.info.sections || []).filter((x) => x.count > 0).slice(0, 11);
+  if (!secs.length) return '';
+  return `<nav class="cat-strip" aria-label="Categories">${secs.map((x) => `<a href="#sec=${x.key}"><span class="cs-i">${secImg(x.key)}</span><span class="cs-n">${esc(shortSec(x.name))}</span></a>`).join('')}
+    <a href="#cats"><span class="cs-i cs-all">${ico('grid')}</span><span class="cs-n">All</span></a></nav>`;
+}
+
 const view = () => $('#view');
 const appbar = (title, right = '') => `<div class="appbar"><button class="ab-back" data-back aria-label="Back">${ico('left')}</button><h1>${esc(title)}</h1><div class="ab-r">${right}</div></div>`;
 const closedNote = () => (S.info.shop.online_enabled === '1' ? '' : `<div class="notice">We are not taking online orders right now. Please call the shop${
@@ -290,6 +354,7 @@ function setMode(m) {
   localStorage.setItem('mpc_mode', m);
   $$('.loc span').forEach((el) => { el.textContent = locText(); });
   if (S.page === 'cart') cartView();
+  if (S.page === 'home') homeView();
   drawBars();
 }
 
@@ -299,7 +364,6 @@ function sortSheet(onDone, { offersFixed = false } = {}) {
     ${Object.entries(SORTS).map(([k, l]) => `<button class="opt ${S.sort === k ? 'on' : ''}" data-s="${k}"><span><b>${l}</b></span><i class="rad"></i></button>`).join('')}
     <h2 style="margin-top:16px">Show</h2>
     ${offersFixed ? '' : `<button class="opt ${S.only === 'offers' ? 'on' : ''}" data-t="only"><span><b>Only offers</b><span>Below MRP or on offer</span></span><i class="rad"></i></button>`}
-    <button class="opt ${S.instock ? 'on' : ''}" data-t="instock"><span><b>Only in stock</b><span>Hide sold-out products</span></span><i class="rad"></i></button>
     <button class="btn-g wide" id="sApply" style="margin-top:8px">Show products</button>`);
   $$('[data-s]', c).forEach((b) => b.addEventListener('click', () => { S.sort = b.dataset.s; $$('[data-s]', c).forEach((x) => x.classList.toggle('on', x === b)); }));
   $$('[data-t]', c).forEach((b) => b.addEventListener('click', () => {
@@ -323,6 +387,8 @@ document.addEventListener('click', (e) => {
   if (f) { e.preventDefault(); e.stopPropagation(); toggleFav(Number(f.dataset.fav)); return; }
   if (e.target.closest('[data-back]')) { e.preventDefault(); goBack(); return; }
   if (e.target.closest('[data-loc]')) { e.preventDefault(); modeSheet(); return; }
+  if (e.target.closest('[data-ask]')) { e.preventDefault(); askSheet(); return; }
+  if (e.target.closest('[data-mic]')) { e.preventDefault(); voiceSearch(); return; }
   const a = e.target.closest('[data-after]');
   if (a) S.after = a.dataset.after;
 });
@@ -456,14 +522,19 @@ async function homeView() {
   const fphoto = f.photo || (has('b', `fest_${f.style}`) ? `/photos/b/fest_${f.style}.webp` : has('b', 'fest_generic') ? '/photos/b/fest_generic.webp' : '');
   const bl = banners();
   const stores = S.info.stores || [];
+  void fphoto;
+  const ns = nextSlot();
   view().innerHTML = `
-    <div class="mhd"><div class="who"><a href="#account" aria-label="Profile">${avatar()}</a><span class="who-t">
-      <a class="who-n" href="#account"><span>${esc(S.me ? S.me.name : s.name)}</span>${S.me && S.me.verified ? VF : ''}</a>
-      <button class="loc" data-loc type="button"><span>${esc(locText())}</span>${ico('down')}</button></span></div>
-      <div class="hd-btns"><a class="cbtn" href="#cart" aria-label="Basket">${ico('bag')}<b class="bdg g" data-cartn hidden></b></a>
-        <a class="cbtn" href="#orders" aria-label="My orders">${ico('bell')}<b class="bdg" data-ordn hidden></b></a></div></div>
+    <div class="qhd"><button class="qhd-when" data-loc type="button" aria-label="Delivery or takeaway, and where">
+        <span class="qhd-k">${S.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}</span>
+        <b class="qhd-t">${ns ? `${esc(ns.day)}, ${esc(ns.time)}` : 'No time slots open now'}</b>
+        <span class="qhd-a">${ico(S.mode === 'delivery' ? 'pin' : 'store')}<span>${esc(addrShort())}</span>${ico('down')}</span></button>
+      <div class="hd-btns"><button class="cbtn" type="button" data-ask aria-label="Ask the shop">${ico('chat')}</button>
+        <a class="cbtn av-btn" href="#account" aria-label="Profile">${avatar()}</a></div></div>
     <div class="home-srch"><a class="srch" href="#search">${ico('search')}<span class="ph-t">Search "${HINTS[0]}"</span></a>
-      ${f.name ? `<a class="fest-chip" href="#offers">${fphoto ? `<img src="${esc(fphoto)}" alt="">` : ''}<span>${esc(f.name)}</span></a>` : ''}</div>
+      ${canVoice() ? `<button class="mic-b" type="button" data-mic aria-label="Search by voice">${ico('mic')}</button>` : ''}</div>
+    <div id="liveOrd"></div>
+    ${catStrip()}
     ${closedNote()}
     ${bl.length ? `<div class="bnr-wrap"><div class="bnrs" id="bnrs">${bl.map(bnrHtml).join('')}</div>
       ${bl.length > 1 ? `<div class="dots-tab">${bl.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>` : ''}
@@ -485,6 +556,7 @@ async function homeView() {
   carousel();
   rotateHint();
   drawBars();
+  drawLive();
   const PICS = { secVeg: 'veg', secFruits: 'fruits', secExotic: 'exotics', secFest: 'offers' };
   const fillRail = (id, items) => {
     const sec = live() && $(`#${id}`);
@@ -527,13 +599,12 @@ function catsView() {
     <div class="groups">${(S.info.groups || []).map(groupTiles).join('')}</div>`;
 }
 
-function chipsHtml({ sec = '', offersFixed = false } = {}) {
+function chipsHtml({ sec = '', offersFixed = false, rail = false } = {}) {
   const here = S.info.sections.find((x) => x.key === sec);
-  const sibs = S.info.sections.filter((x) => (here ? x.group === here.group : true) && x.key !== sec).slice(0, 14);
+  const sibs = rail ? [] : S.info.sections.filter((x) => (here ? x.group === here.group : true) && x.key !== sec).slice(0, 14);
   return `<div class="chips"><button class="chip ic" data-sort aria-label="Sort and filter">${ico('sliders')}</button>
     <button class="chip" data-sort>${ico('sort')}${esc(SORTS[S.sort])}</button>
     ${offersFixed ? '' : `<button class="chip ${S.only === 'offers' ? 'on' : ''}" data-tog="only">${ico('tag')}Offers</button>`}
-    <button class="chip ${S.instock ? 'on' : ''}" data-tog="instock">In stock</button>
     ${sibs.map((x) => `<a class="chip" href="#sec=${x.key}">${esc(x.name)}</a>`).join('')}</div>`;
 }
 function bindChips(rerun, opts = {}) {
@@ -552,11 +623,16 @@ async function listView({ sec = '', cat = '', only = '', saved = false, store = 
   const c = S.info.cats.find((x) => String(x.id) === String(cat));
   const f = S.info.festival || {};
   const title = section ? section.name : c ? c.name : store ? `₹${store} Store` : only ? (f.name || 'Offers') : saved ? 'Your Wishlist' : fresh ? 'New Launch' : trending ? 'Trending' : 'Products';
-  const opts = { sec, offersFixed: !!only };
+  const sibs = section ? S.info.sections.filter((x) => x.group === section.group) : [];
+  const rail = sibs.length > 1;
+  const opts = { sec, offersFixed: !!only, rail };
   const params = { ...(sec ? { sec } : {}), ...(cat ? { cat } : {}), ...(only ? { only, sort: 'offers' } : {}), ...(store ? { max_price: store } : {}),
     ...(fresh ? { fresh: 1, sort: 'new' } : {}) };
   view().innerHTML = `${appbar(title, `<a class="ab-btn" href="#search" aria-label="Search">${ico('search')}</a>`)}${closedNote()}
-    <div class="page">${saved ? '' : chipsHtml(opts)}<div class="res-h">${store ? `<span class="mut small">Everything up to ₹${store}</span>` : ''}<span data-count></span></div><div id="res"></div></div>`;
+    ${rail ? `<div class="sec-split"><nav class="sec-rail" aria-label="More in this group">${sibs.map((x) => `<a href="#sec=${x.key}" class="${x.key === sec ? 'on' : ''}"${x.key === sec ? ' aria-current="page"' : ''}>
+        <span class="sr-i">${secImg(x.key)}</span><span class="sr-n">${esc(shortSec(x.name))}</span></a>`).join('')}</nav>
+      <div class="sec-main">${chipsHtml(opts)}<div class="res-h"><span data-count></span></div><div id="res"></div></div></div>`
+    : `<div class="page">${saved ? '' : chipsHtml(opts)}<div class="res-h">${store ? `<span class="mut small">Everything up to ₹${store}</span>` : ''}<span data-count></span></div><div id="res"></div></div>`}`;
   drawBars();
   if (saved) {
     const ids = [...S.fav].slice(0, 60);
@@ -579,9 +655,11 @@ async function searchView(q = '', code = '') {
   S.page = 'search';
   view().innerHTML = `<div class="appbar srch-bar"><button class="ab-back" data-back aria-label="Back">${ico('left')}</button>
       <label class="srch">${ico('search')}<input id="sq" type="search" placeholder="Search fruits, vegetables, groceries" value="${esc(q)}" autocomplete="off" enterkeyhint="search">
+      ${canVoice() ? `<button type="button" class="srch-f" data-mic aria-label="Search by voice">${ico('mic')}</button>` : ''}
       ${'BarcodeDetector' in window ? `<button type="button" class="srch-f" id="scanB" aria-label="Scan a barcode">${ico('scan')}</button>` : ''}</label></div>
     <div class="appbar pc-only"><h1 id="sTitle">Search</h1></div>${closedNote()}
-    <div class="page">${chipsHtml()}<div id="sres"></div></div>`;
+    <div class="page">${chipsHtml()}<button class="ask-row" type="button" data-ask>${ico('chat')}<span><b>Can't find it? Ask the shop</b>
+      <span>Tamil or English · answers from today's stock</span></span>${ico('right')}</button><div id="sres"></div></div>`;
   drawBars();
   const run = async (v) => {
     v = String(v || '').trim();
@@ -642,30 +720,39 @@ async function detailView(id) {
   let q = S.cart[it.id] || step(it);
   const attrs = [
     it.cat ? ['Category', esc(it.cat)] : null,
-    ['Sold by', it.unit === 'kg' ? 'Weight (in steps of 250 g)' : 'Piece'],
-    it.mrp ? ['MRP', rs(paise(it.mrp))] : null,
+    it.unit === 'kg' ? null : ['Sold by', 'Piece'],
+    it.mrp && Number(it.mrp) > Number(it.price) ? ['MRP', rs(paise(it.mrp))] : null,
     sv ? ['You save', `${rs(sv.off)} (${sv.pct}%)`] : null,
     it.offer_to ? ['Offer price till', fmtDate(it.offer_to)] : null,
   ].filter(Boolean);
+  const low = lowLeft(it);
+  const ns = nextSlot();
+  const free = paise(s.online_free_delivery_above);
+  const dc = paise(s.online_delivery_charge);
+  const W = it.unit === 'kg' ? [0.25, 0.5, 1, 2].filter((w) => w <= Number(it.available)) : [];
   view().innerHTML = `<div class="det">${appbar('Details', `<button class="ab-btn" id="shareB" aria-label="Share">${ico('share')}</button>
-      <button class="ab-btn fav ${S.fav.has(it.id) ? 'on' : ''}" data-fav="${it.id}" aria-label="Wishlist">${ico('heart')}</button>`)}
+      <button class="ab-btn ab-fav ${S.fav.has(it.id) ? 'on' : ''}" data-fav="${it.id}" aria-label="Wishlist">${ico('heart')}</button>`)}
     <div class="det-cols"><div class="det-img">${pic(it)}</div>
     <div class="det-sheet">
       <div class="det-top"><div class="det-name"><h2>${esc(nice(it.name))}</h2>${it.name_ta ? `<div class="ta">${esc(it.name_ta)}</div>` : ''}</div>
         <div class="det-pr"><b>${rs(paise(it.price))}${it.unit === 'kg' ? '<small>/kg</small>' : ''}</b>${sv ? `<s>${rs(paise(sv.was))}</s>` : ''}
-          <span class="${it.in_stock ? '' : 'bad'}">${it.in_stock ? 'In Stock' : 'Sold out'}</span></div></div>
+          <span class="${it.in_stock ? (low ? 'lowt' : '') : 'bad'}">${it.in_stock ? (low || 'In stock') : 'Sold out'}</span></div></div>
       ${sv && sv.off >= 100 ? `<div class="det-off">${rs(sv.off)} OFF · ${sv.pct}% saving</div>` : ''}
+      ${W.length > 1 ? `<div class="wchips" role="group" aria-label="Choose the weight">${W.map((w) => `<button type="button" data-w="${w}" class="${q === w ? 'on' : ''}" aria-pressed="${q === w}">
+        <b>${fmtQ(w, it)}</b><span>${rs(lineP(it, w))}</span></button>`).join('')}</div>` : ''}
+      <div class="det-dl">${ico('clock')}<span><b>${S.mode === 'delivery' ? 'Delivery' : 'Pickup'} ${ns ? `${esc(ns.day.toLowerCase())}, ${esc(ns.time)}` : 'when the shop opens'}</b>
+        <small>${S.mode === 'delivery' ? (dc ? (free ? `Free delivery above ${rs(free)}` : `Delivery ${rs(dc)}`) : 'Free delivery') : `Collect at the counter${s.address ? ` · ${esc(s.address)}` : ''}`}</small></span></div>
       <p class="det-desc">${esc(detailText(it))}</p>
-      <div class="det-store"><span class="ds-logo"><img src="/img/logo.webp" alt=""></span><span><b>${esc(s.name)}</b>
-        <small>${S.mode === 'delivery' ? `Home delivery${s.online_area ? ` · ${esc(s.online_area)}` : ''}` : 'Takeaway from the shop'}</small></span></div>
       <dl class="det-attr">${attrs.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
       <div class="det-bar" id="detBar"></div>
       <section class="sec">${secH('People also ordered', it.cat_id ? `#cat=${it.cat_id}` : '')}<div class="rail" id="similar"><span class="mut small">Loading…</span></div></section>
     </div></div></div>`;
   drawBars();
+  $$('[data-w]').forEach((b) => b.addEventListener('click', () => { q = Number(b.dataset.w); S.detBar(); }));
   S.detBar = () => {
     const bar = $('#detBar');
     if (!bar) return;
+    $$('[data-w]').forEach((b) => { const on = Number(b.dataset.w) === q; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
     const inCart = S.cart[it.id] || 0;
     const last = q <= step(it);
     bar.innerHTML = it.in_stock ? `<div class="qpill"><button type="button" id="qm" class="${last ? 'del' : ''}" aria-label="${last ? 'Remove' : 'Less'}">${ico(last ? 'trash' : 'minus')}</button>
@@ -750,6 +837,29 @@ async function refreshCart() {
   } catch (_) { /* shown later */ }
   return gone;
 }
+const SUBS = { call: 'Call me', replace: 'Replace with similar', remove: 'Remove it' };
+const DROPS = ['Call when you arrive', 'Leave at the gate', 'Leave with security', 'Do not ring the bell'];
+function timeSheet() {
+  const days = S.info.slots || [];
+  if (!days.length) return;
+  let di = Math.max(0, days.findIndex((d) => d.slots.some((x) => x.v === S.slot)));
+  const draw = () => {
+    const c = sheet(`<h2>Choose a ${S.mode === 'delivery' ? 'delivery' : 'pickup'} time</h2>
+      <div class="days">${days.map((d, i) => `<button type="button" data-day="${i}" class="${i === di ? 'on' : ''}">${esc(dayName(d))}</button>`).join('')}</div>
+      <div class="slots">${days[di].slots.map((x) => `<button type="button" data-slot="${x.v}" class="${x.v === S.slot ? 'on' : ''}">${esc(x.l)}</button>`).join('')}</div>`);
+    $$('[data-day]', c).forEach((b) => b.addEventListener('click', () => { di = Number(b.dataset.day); draw(); }));
+    $$('[data-slot]', c).forEach((b) => b.addEventListener('click', () => { S.slot = b.dataset.slot; closeSheet(); cartView(); }));
+  };
+  draw();
+}
+function addrPicker() {
+  const addrs = S.addresses || [];
+  const c = sheet(`<h2>Deliver to</h2>${addrs.map((a) => `<label class="addr ${a.id === S.addrId ? 'on' : ''}"><input type="radio" name="addrPick" value="${a.id}" ${a.id === S.addrId ? 'checked' : ''}>
+      <span class="ai">${ico(addrIcon(a.label))}</span><span class="at"><b>${esc(a.label)}${a.is_default ? ' <span class="pill">Default</span>' : ''}</b><span>${esc(addrLine(a))}</span></span></label>`).join('')}
+    <button type="button" class="add-more" id="newAddr2" style="width:100%">${ico('plus')}Add a new address</button>`);
+  $$('[name=addrPick]', c).forEach((r) => r.addEventListener('change', () => { S.addrId = Number(r.value); closeSheet(); cartView(); }));
+  $('#newAddr2', c).addEventListener('click', () => addressSheet({}, (id) => { S.addrId = id; cartView(); }));
+}
 async function cartView() {
   S.page = 'cart';
   if (!S.cartChecked || Date.now() - S.cartChecked > 15000) { S.cartChecked = Date.now(); await refreshCart(); if (S.page !== 'cart') return; }
@@ -763,24 +873,31 @@ async function cartView() {
   if (S.me && S.addresses === null) { try { await loadAddresses(); } catch (_) { S.addresses = []; } if (S.page !== 'cart') return; }
   const addrs = S.addresses || [];
   if (!addrs.some((a) => a.id === S.addrId)) S.addrId = (addrs.find((a) => a.is_default) || addrs[0] || {}).id || 0;
+  const sel = addrs.find((a) => a.id === S.addrId);
   const c = cartSums();
   const dc = deliveryCharge(c.total);
   const minOrder = paise(s.online_min_order);
-  const saved = LS.get('mpc_me', {});
-  const days = S.info.slots;
-  if (S.dayIdx >= days.length) S.dayIdx = 0;
+  const days = S.info.slots || [];
+  const all = days.flatMap((d) => d.slots.map((x) => x.v));
+  if (!all.includes(S.slot)) S.slot = all[0] || '';          // the earliest time is chosen; the customer can change it
   const per = Number(s.loyalty_points_per_100) || 0;
   const earn = s.loyalty_enabled === '1' ? Math.floor(Math.floor(c.total / 10000) * per) : 0;
   const short = S.me && S.mode === 'delivery' && c.total < minOrder ? minOrder - c.total : 0;   // below the delivery minimum
   const placeLabel = !S.me ? 'Log in to order' : short ? `Add ${rs(short)} more for delivery` : 'Place Order';
-  const closed = s.online_enabled !== '1' || !!short;
+  const closed = s.online_enabled !== '1' || !!short || !S.slot;
   const free = paise(s.online_free_delivery_above);
+  const both = s.online_delivery === '1' && s.online_pickup === '1';
+  const where = S.mode === 'delivery'
+    ? (!S.me ? '<p class="small mut" style="margin:0 0 8px">Log in to choose your delivery address.</p>'
+      : sel ? `<div class="row-line">${ico(addrIcon(sel.label))}<span class="rl-t"><b>${esc(sel.label)}</b><small>${esc(addrLine(sel))}</small></span>
+          <button type="button" class="link" id="chAddr">Change</button></div>`
+        : `<div class="field"><label for="addrText">Delivery address with landmark</label><textarea id="addrText" rows="2">${esc(S.me.address || '')}</textarea></div>`)
+    : `<div class="row-line">${ico('store')}<span class="rl-t"><b>Collect at the counter</b><small>${esc(s.address || s.name)}</small></span></div>`;
   view().innerHTML = `${appbar('My Basket', `<button class="ab-btn" id="clearB" aria-label="Empty the basket">${ico('trash')}</button>`)}${closedNote()}
     <div class="page"><div class="cart-cols"><div class="main-col">
-    <div class="modes">
-      ${s.online_delivery === '1' ? `<button class="mode-c ${S.mode === 'delivery' ? 'on' : ''}" data-mode="delivery"><img src="${FE('motor-scooter')}" alt=""><b>Home delivery</b>
-        <span>${paise(s.online_delivery_charge) ? `${rs(paise(s.online_delivery_charge))}${free ? `, free above ${rs(free)}` : ''}` : 'Free'}</span></button>` : ''}
-      ${s.online_pickup === '1' ? `<button class="mode-c ${S.mode === 'pickup' ? 'on' : ''}" data-mode="pickup"><img src="${FE('shopping-bags')}" alt=""><b>Takeaway</b><span>Collect at the counter</span></button>` : ''}</div>
+    ${both ? `<div class="seg2" role="group" aria-label="Delivery or takeaway">
+      <button type="button" data-mode="delivery" class="${S.mode === 'delivery' ? 'on' : ''}" aria-pressed="${S.mode === 'delivery'}">${ico('scooter')}Home delivery</button>
+      <button type="button" data-mode="pickup" class="${S.mode === 'pickup' ? 'on' : ''}" aria-pressed="${S.mode === 'pickup'}">${ico('bag')}Takeaway</button></div>` : ''}
     ${S.mode === 'delivery' && free ? `<div class="free-bar"><div>${c.total >= free ? '<b>Yay! FREE delivery on this order</b>' : `Add <b>${rs(free - c.total)}</b> more for <b>FREE delivery</b>`}</div>
       <i><u style="width:${Math.min(100, Math.round(c.total * 100 / free))}%"></u></i></div>` : ''}
     <div class="box"><h3>${c.n} item${c.n === 1 ? '' : 's'} in your basket</h3>
@@ -789,28 +906,25 @@ async function cartView() {
         <div class="qpill"><button data-d="-1" class="${q <= step(it) ? 'del' : ''}" aria-label="${q <= step(it) ? 'Remove' : 'Less'}">${ico(q <= step(it) ? 'trash' : 'minus')}</button>
           <b>${fmtQ(q, it)}</b><button data-d="1" aria-label="More">${ico('plus')}</button></div></div>`).join('')}
       <a class="add-more" href="#">${ico('plus')}Add more items</a></div>
-    ${S.mode === 'delivery' && S.me ? `<div class="box"><h3>Deliver to</h3>
-      ${addrs.map((a) => `<label class="addr ${a.id === S.addrId ? 'on' : ''}"><input type="radio" name="addr" value="${a.id}" ${a.id === S.addrId ? 'checked' : ''}>
-        <span class="ai">${ico(addrIcon(a.label))}</span><span class="at"><b>${esc(a.label)}${a.is_default ? ' <span class="pill">Default</span>' : ''}</b><span>${esc(addrLine(a))}</span></span></label>`).join('')}
-      <button type="button" class="add-more" id="addAddr" style="width:100%">${ico('plus')}Add a new address</button></div>` : ''}
-    <div class="box"><h3>${S.mode === 'delivery' ? 'Delivery' : 'Pickup'} time</h3>
-      ${days.length ? `<div class="days">${days.map((d, i) => `<button type="button" data-day="${i}" class="${i === S.dayIdx ? 'on' : ''}">${esc(d.label)}</button>`).join('')}</div>
-      <div class="slots">${days[S.dayIdx].slots.map((x) => `<button type="button" data-slot="${x.v}" class="${x.v === S.slot ? 'on' : ''}">${esc(x.l)}</button>`).join('')}</div>`
-    : '<div class="mut small">No time slots are open now. Please try again later.</div>'}</div>
+    <div class="box"><h3>${S.mode === 'delivery' ? 'Delivery' : 'Takeaway'}</h3>${where}
+      <div class="row-line">${ico('clock')}<span class="rl-t"><b>${S.slot ? esc(slotText(S.slot)) : 'No time slots open now'}</b>
+        <small>${S.mode === 'delivery' ? 'Delivery time' : 'Pickup time'}</small></span>${days.length ? '<button type="button" class="link" id="chTime">Change</button>' : ''}</div></div>
+    <div class="box"><h3>If an item is not available</h3>
+      <div class="pref" role="radiogroup" aria-label="If an item is not available">${Object.entries(SUBS).map(([k, l]) => `<label class="${S.sub === k ? 'on' : ''}">
+        <input type="radio" name="sub" value="${k}" ${S.sub === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+      <p class="small mut" style="margin:10px 0 0">The shop does this while packing. You never pay for an item you did not get.</p></div>
+    ${S.mode === 'delivery' ? `<div class="box"><h3>Notes for the delivery person</h3><div class="drop">${DROPS.map((d) => `<button type="button" data-drop="${esc(d)}"
+      class="${S.drop.includes(d) ? 'on' : ''}" aria-pressed="${S.drop.includes(d)}">${esc(d)}</button>`).join('')}</div></div>` : ''}
     <div class="box"><h3>Payment</h3>
       <label class="addr ${S.pay === 'cash' ? 'on' : ''}"><input type="radio" name="pay" value="cash" ${S.pay === 'cash' ? 'checked' : ''}><span class="ai">${ico('cash')}</span>
         <span class="at"><b>Pay on ${S.mode === 'delivery' ? 'delivery' : 'collection'}</b><span>Cash or UPI when you ${S.mode === 'delivery' ? 'receive the order' : 'collect'}</span></span></label>
       <label class="addr ${S.pay === 'upi' ? 'on' : ''}"><input type="radio" name="pay" value="upi" ${S.pay === 'upi' ? 'checked' : ''}><span class="ai">${ico('qr')}</span>
-        <span class="at"><b>Pay online by UPI</b><span>Scan the shop's QR code or pay${s.upi_id ? ` to ${esc(s.upi_id)}` : ''} with GPay, PhonePe or Paytm after placing the order</span></span></label></div>
+        <span class="at"><b>Pay online by UPI</b><span>Scan the shop's QR code or pay${s.upi_id ? ` to ${esc(s.upi_id)}` : ''} after placing the order</span></span></label></div>
+    <div class="box"><div class="field" style="margin:0"><label for="noteF">Note for the shop (optional)</label>
+      <input id="noteF" placeholder="e.g. ripe bananas, small tomatoes" value="${esc(S.note)}" maxlength="300"></div>
+      <input id="hpF" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true"><div id="oerr"></div></div>
     ${S.me ? '' : `<div class="box"><h3>Log in to place your order</h3><p class="small mut" style="margin-top:-6px">Your mobile number is your login. New here? Sign up in a minute.</p>
       <div style="display:flex;gap:10px"><a class="btn-g" href="#login" data-after="#cart">Log in</a><a class="btn-o" href="#signup" data-after="#cart" style="flex:1">Sign up</a></div></div>`}
-    <form class="box" id="of" ${S.me ? '' : 'hidden'}><h3>Your details</h3>
-      <div class="field"><label>Name</label><input name="name" required value="${esc((S.me && S.me.name) || saved.name || '')}" autocomplete="name"></div>
-      <div class="field"><label>Mobile</label><div class="fixed">${esc(S.me ? S.me.phone : '')} ${S.me && S.me.verified ? '<span class="pill">Verified</span>' : ''}</div></div>
-      ${S.mode === 'delivery' && !addrs.length ? `<div class="field"><label>Delivery address with landmark</label><textarea name="address" rows="2">${esc((S.me && S.me.address) || saved.address || '')}</textarea></div>` : ''}
-      <div class="field"><label>Note for the shop (optional)</label><input name="notes" placeholder="e.g. ripe bananas, call before coming"></div>
-      <input name="website" class="hp" tabindex="-1" autocomplete="off"><div id="oerr"></div>
-      <p class="small mut">The shop confirms on WhatsApp. Weighed items are billed at the exact weight.</p></form>
     </div><div class="side">
     <div class="box"><h3>Bill details</h3>
       <div class="bill-row"><span>Items total</span><span>${rs(c.total)}</span></div>
@@ -819,15 +933,22 @@ async function cartView() {
       ${c.saved > 0 ? `<div class="save-strip">You save ${rs(c.saved)} on this order</div>` : ''}
       ${earn > 0 ? `<p class="small okc" style="margin:10px 0 0">You earn about ${earn} loyalty point${earn === 1 ? '' : 's'}${S.me && Number(S.me.points) ? ` (you have ${Number(S.me.points)})` : ''}.</p>` : ''}
       ${S.mode === 'delivery' && c.total < minOrder ? `<div class="err">Minimum order for delivery is ${rs(minOrder)}. Add ${rs(minOrder - c.total)} more, or choose takeaway.</div>` : ''}
+      <p class="small mut" style="margin:10px 0 0">Weighed items are billed at the exact weight. The shop confirms on WhatsApp.</p>
       <div class="place" style="margin-top:14px"><button class="btn-g wide" data-place ${closed ? 'disabled' : ''}>${short ? placeLabel : `${placeLabel} - ${rs(c.total + dc)}`}</button></div></div>
     </div></div></div>
     <div class="cart-bar"><div class="tot"><span>To pay</span><b>${rs(c.total + dc)}</b></div><button class="btn-g" data-place ${closed ? 'disabled' : ''}>${placeLabel}</button></div>`;
   $$('[data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
-  $$('[data-day]').forEach((b) => b.addEventListener('click', () => { S.dayIdx = Number(b.dataset.day); S.slot = ''; const y = window.scrollY; cartView(); window.scrollTo(0, y); }));
-  $$('[data-slot]').forEach((b) => b.addEventListener('click', () => { S.slot = b.dataset.slot; $$('[data-slot]').forEach((x) => x.classList.toggle('on', x === b)); }));
-  $$('[name=addr]').forEach((r) => r.addEventListener('change', () => { S.addrId = Number(r.value); $$('label.addr').forEach((l) => { const i = $('input', l); if (i.name === 'addr') l.classList.toggle('on', i.checked); }); }));
+  if ($('#chTime')) $('#chTime').addEventListener('click', timeSheet);
+  if ($('#chAddr')) $('#chAddr').addEventListener('click', addrPicker);
+  $$('[name=sub]').forEach((r) => r.addEventListener('change', () => { S.sub = r.value; LS.set('mpc_sub', S.sub); $$('.pref label').forEach((l) => l.classList.toggle('on', $('input', l).checked)); }));
+  $$('[data-drop]').forEach((b) => b.addEventListener('click', () => {
+    const d = b.dataset.drop;
+    S.drop = S.drop.includes(d) ? S.drop.filter((x) => x !== d) : [...S.drop, d];
+    LS.set('mpc_drop', S.drop);
+    b.classList.toggle('on'); b.setAttribute('aria-pressed', String(S.drop.includes(d)));
+  }));
+  $('#noteF').addEventListener('input', (e) => { S.note = e.target.value; });
   $$('[name=pay]').forEach((r) => r.addEventListener('change', () => { S.pay = r.value; LS.set('mpc_pay', S.pay); $$('label.addr').forEach((l) => { const i = $('input', l); if (i.name === 'pay') l.classList.toggle('on', i.checked); }); }));
-  if ($('#addAddr')) $('#addAddr').addEventListener('click', () => addressSheet({}, (id) => { S.addrId = id; cartView(); }));
   $$('[data-place]').forEach((b) => b.addEventListener('click', placeOrder));
   $('#clearB').addEventListener('click', () => { if (confirm('Remove everything from the basket?')) { S.cart = {}; saveCart(); cartView(); } });
   drawBars();
@@ -835,21 +956,15 @@ async function cartView() {
 
 async function placeOrder() {
   if (!S.me) { S.after = '#cart'; location.hash = '#login'; return; }
-  const f = $('#of');
   const err = $('#oerr');
-  err.innerHTML = '';
-  const fail = (m) => { err.innerHTML = `<div class="err">${esc(m)}</div>`; f.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
-  if (!S.slot) {
-    toast(`Please choose a ${S.mode === 'delivery' ? 'delivery' : 'pickup'} time`);
-    const el = $('.days') || $('.slots');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return;
-  }
-  if (!f.name.value.trim()) { fail('Please enter your name.'); return; }
-  if (S.mode === 'delivery' && (S.addresses || []).length && !S.addrId) { toast('Please choose the delivery address'); return; }
+  if (err) err.innerHTML = '';
+  const fail = (m) => { if (err) { err.innerHTML = `<div class="err">${esc(m)}</div>`; err.scrollIntoView({ behavior: 'smooth', block: 'center' }); } else toast(m); };
+  if (!S.slot) { fail(`No ${S.mode === 'delivery' ? 'delivery' : 'pickup'} times are open now. Please try again later.`); return; }
+  const typed = $('#addrText') ? $('#addrText').value.replace(/\s+/g, ' ').trim() : '';
+  if (S.mode === 'delivery' && !S.addrId && typed.length < 10) { fail('Please enter the full delivery address with a landmark.'); return; }
   const lines = Object.entries(S.cart).map(([id, q]) => ({ id: Number(id), qty: String(q) }));
-  const body = { mode: S.mode, slot: S.slot, name: f.name.value, address: f.address ? f.address.value : '', address_id: S.mode === 'delivery' ? S.addrId || 0 : 0,
-    notes: f.notes.value, pay: S.pay, website: f.website.value, lines };
+  const body = { mode: S.mode, slot: S.slot, name: S.me.name, address: typed, address_id: S.mode === 'delivery' ? S.addrId || 0 : 0,
+    notes: S.note, pay: S.pay, website: ($('#hpF') || {}).value || '', lines, sub_pref: S.sub, drop_note: S.mode === 'delivery' ? S.drop.join('; ') : '' };
   const btns = $$('[data-place]');
   btns.forEach((b) => { b.disabled = true; b.textContent = 'Placing order…'; });
   try {
@@ -864,14 +979,15 @@ async function placeOrder() {
       return;
     }
     if (!d.ok) throw new Error(d.error);
-    if (body.address && !body.address_id) {       // the first address typed here is kept for next time
-      try { S.addresses = (await post('/account/addresses', { address: body.address, make_default: true })).addresses; } catch (_) { /* kept on the order anyway */ }
+    if (typed && !body.address_id) {               // the first address typed here is kept for next time
+      try { S.addresses = (await post('/account/addresses', { address: typed, make_default: true })).addresses; } catch (_) { /* kept on the order anyway */ }
     }
     const mine = LS.get('mpc_orders', []);
     mine.unshift({ n: d.number, t: d.token, at: new Date().toISOString() });
     LS.set('mpc_orders', mine.slice(0, 15));
-    S.cart = {}; S.slot = ''; S.active += 1; saveCart();
+    S.cart = {}; S.slot = ''; S.note = ''; S.active += 1; saveCart();
     location.hash = `#o=${d.token}`;
+    loadActive();
   } catch (e) {
     fail(e.message || 'Please try again.');
     btns.forEach((b) => { b.disabled = false; b.textContent = 'Place Order'; });
@@ -947,6 +1063,10 @@ async function trackView(token) {
       ${o.agent.tracking ? `<span class="small">${o.agent.tracking_url ? `<a class="okc" href="${esc(o.agent.tracking_url)}" target="_blank" rel="noopener">Track the delivery</a>` : `Tracking: ${esc(o.agent.tracking)}`}</span>` : ''}</div>
       ${o.agent.phone ? `<a class="btn-o sm" href="tel:${esc(o.agent.phone)}">${ico('phone')}Call</a>` : ''}</div>` : '';
   const cod = o.cod_due && Number(o.cod_due) ? `<div class="notice">Cash on delivery: please keep <b>${rs(paise(o.cod_due))}</b> ready (cash or UPI).</div>` : '';
+  const choices = o.mine && o.sub_label ? `<div class="box small choices"><div><b>If an item is not available:</b> ${esc(o.sub_label)}</div>
+    ${o.drop_note ? `<div><b>Notes for the delivery person:</b> ${esc(o.drop_note)}</div>` : ''}${o.notes ? `<div><b>Note for the shop:</b> ${esc(o.notes)}</div>` : ''}</div>` : '';
+  const cancel = o.can_cancel ? `<button class="btn-o wide cancel-o" id="cancelO" type="button">Cancel this order</button>
+    <p class="small mut" style="text-align:center;margin:6px 0 14px">You can cancel until the shop bills your order.</p>` : '';
   const invoice = o.invoice ? `<a class="btn-g wide" href="/api/shop/account/orders/${encodeURIComponent(o.number)}/invoice" target="_blank" rel="noopener">${ico('down')}Download GST invoice</a>`
     : o.status === 'done' && !o.mine ? '<p class="small mut" style="text-align:center"><a class="okc" href="#login">Log in</a> to download the invoice.</p>' : '';
   view().innerHTML = `${appbar(`Order ${o.number}`)}<div class="page narrow">
@@ -955,7 +1075,7 @@ async function trackView(token) {
       ${o.status === 'cancelled' && o.note ? `<div class="small">Reason: ${esc(o.note)}</div>` : ''}</div></div>
     ${payBox}${agent}${cod}
     ${o.status !== 'cancelled' && steps ? `<div class="box"><ol class="steps">${steps}</ol></div>` : ''}
-    ${invoice}
+    ${invoice}${choices}
     ${o.lines.some((l) => l.note) ? '<div class="notice">Some items were not available. They are not charged, and anything already paid for them is refunded.</div>' : ''}
     <div class="box"><h3>Items</h3>${o.lines.map((l) => `<div class="cl" ${l.note && !Number(l.qty) ? 'style="opacity:.55"' : ''}><span class="ce">${pic({ ...l })}</span>
       <div class="cm"><b>${esc(nice(l.name))}</b><span>${esc(l.qty)} ${l.unit === 'kg' ? 'kg' : 'pc'} × ${rs(paise(l.price))}</span>
@@ -966,8 +1086,14 @@ async function trackView(token) {
       ${o.address ? `<p class="small mut">${ico('pin')} ${esc(o.address)}</p>` : ''}
       ${!o.mine ? '<p class="small mut">Log in with the mobile number of this order to see the address and payment details.</p>' : ''}</div>
     <div class="box small">Questions? ${o.shop.phone ? `Call <a href="tel:${esc(o.shop.phone)}" class="okc"><b>${esc(o.shop.phone)}</b></a>` : 'Call the shop'} or see <a class="okc" href="#help">Help & support</a>.</div>
-    <button class="btn-g wide" data-reorder="${esc(token)}">${ico('undo')}Order these items again</button></div>`;
+    <button class="btn-g wide" data-reorder="${esc(token)}">${ico('undo')}Order these items again</button>${cancel}</div>`;
   drawBars();
+  if ($('#cancelO')) {
+    $('#cancelO').addEventListener('click', async () => {
+      if (!confirm(`Cancel order ${o.number}?`)) return;
+      try { await post(`/track/${token}/cancel`, {}); toast('Your order is cancelled'); loadActive(); trackView(token); } catch (ex) { toast(ex.message); }
+    });
+  }
   if ($('#copyUpi')) $('#copyUpi').addEventListener('click', async () => { try { await navigator.clipboard.writeText(s.upi_id); toast('UPI ID copied'); } catch (_) { /* ignore */ } });
   if ($('#refF')) {
     $('#refF').addEventListener('submit', async (e) => {
@@ -1247,8 +1373,10 @@ async function loadActive() {
   try {
     const { orders } = await get('/account/orders');
     S.active = orders.filter((o) => OPEN.includes(o.status)).length;
+    S.liveOrd = orders.find((o) => OPEN.includes(o.status)) || null;
   } catch (_) { /* later */ }
   drawBars();
+  drawLive();
 }
 const NEEDS_LOGIN = ['#refer', '#addresses'];
 async function route() {
@@ -1308,7 +1436,6 @@ async function route() {
   // prices in the basket always come from the shop, never from what was saved on the phone
   await refreshCart();
   $('#pcLoc').addEventListener('click', modeSheet);
-  $('#askB').addEventListener('click', () => askSheet());
   let t;
   $('#pcq').addEventListener('input', (e) => {
     clearTimeout(t);

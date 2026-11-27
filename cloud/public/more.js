@@ -164,6 +164,8 @@ async function checksView(main) {
 }
 
 // ------------------------------------------------------------------ one order
+// what the customer asked for when an item is not available
+const SUB_TEXT = { call: 'call the customer', replace: 'replace with a similar item', remove: 'remove it' };
 const STEP_NAMES = (o) => ['Order placed', 'Billed & packed', o.mode === 'delivery' ? 'Delivery person assigned' : 'Ready for pickup', 'Process completed'];
 function stepBar(o) {
   const done = [true, !!o.sale_id, o.mode === 'delivery' ? !!o.dispatched_at && ['out', 'done'].includes(o.status) : ['ready', 'done'].includes(o.status), o.status === 'done'];
@@ -270,7 +272,9 @@ async function orderDialog(id) {
   const n = nextStep(o);
   const d = modal(`<h3>${esc(o.number)} · ${esc(o.status_label)}</h3>${stepBar(o)}
     <p><b>${esc(o.name)}</b> · ${esc(o.phone)} ${o.phone_verified ? '<span class="pill">Phone verified</span>' : '<span class="pill off">phone not verified</span>'} · ${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}<br>${esc(o.slot_label)}
-    ${o.address ? `<br>${ico('pin')} ${esc(o.address)}` : ''}${o.notes ? `<br>Note: ${esc(o.notes)}` : ''}<br>Pays by ${o.pay_pref.toUpperCase()}${o.pay_ref ? ` · <b>UPI ref ${esc(o.pay_ref)}</b> (check it in your UPI app)` : ''}
+    ${o.address ? `<br>${ico('pin')} ${esc(o.address)}` : ''}${o.notes ? `<br>Note: ${esc(o.notes)}` : ''}
+    <br>If an item is not available: <b>${esc(SUB_TEXT[o.sub_pref] || SUB_TEXT.call)}</b>${o.drop_note ? `<br>For the delivery person: <b>${esc(o.drop_note)}</b>` : ''}
+    <br>Pays by ${o.pay_pref.toUpperCase()}${o.pay_ref ? ` · <b>UPI ref ${esc(o.pay_ref)}</b> (check it in your UPI app)` : ''}
     ${o.bill_no ? `<br>Bill <b>${esc(o.bill_no)}</b> ${inr(o.bill_total)}${Money.paise(o.cod_due || '0') && o.status !== 'done' ? ` · <b class="warn">cash on delivery ${inr(o.cod_due)}</b>` : ''}` : ''}
     ${o.agent_name ? `<br>${ico('scooter')} ${esc(o.agent_name)} · ${esc(o.agent_phone)}${o.tracking ? ` · ${esc(o.tracking)}` : ''}` : ''}
     ${o.status_note ? `<br><i>${esc(o.status_note)}</i>` : ''}</p>
@@ -315,7 +319,8 @@ async function orderDialog(id) {
     $('#print-area').innerHTML = `<div class="receipt"><h2>${esc(o.number)} packing list</h2><div>${esc(o.name)} ${esc(o.phone)}</div>
       <div>${esc(o.slot_label)} · ${o.mode === 'delivery' ? 'DELIVERY' : 'TAKEAWAY'}</div>${o.address ? `<div>${esc(o.address)}</div>` : ''}${o.bill_no ? `<div>Bill ${esc(o.bill_no)}</div>` : ''}<hr>
       <table>${o.lines.filter((l) => Number(l.qty)).map((l) => `<tr><td>[ ] ${esc(l.name)}<br><span class="ta">${esc(l.name_ta)}</span></td><td class="r">${esc(l.qty)} ${esc(l.unit)}</td></tr>`).join('')}</table>
-      <hr>${o.notes ? `<div>Note: ${esc(o.notes)}</div>` : ''}</div>`;
+      <hr>${o.notes ? `<div>Note: ${esc(o.notes)}</div>` : ''}<div>Not available: ${esc(SUB_TEXT[o.sub_pref] || SUB_TEXT.call)}</div>
+      ${o.drop_note ? `<div>Delivery: ${esc(o.drop_note)}</div>` : ''}</div>`;
     setTimeout(() => window.print(), 50);
   });
 }

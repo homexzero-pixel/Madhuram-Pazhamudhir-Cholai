@@ -97,6 +97,9 @@ const COLUMNS = [
   ['online_orders', 'settle_shift_id', 'INT NULL'],
   ['online_orders', 'cancelled_at', 'DATETIME NULL'],
   ['online_orders', 'void_return_id', 'INT NULL'],
+  // the customer's choices at checkout: what to do when an item is not available, notes for the delivery person
+  ['online_orders', 'sub_pref', "VARCHAR(8) NOT NULL DEFAULT 'call'"],
+  ['online_orders', 'drop_note', "VARCHAR(200) NOT NULL DEFAULT ''"],
 ];
 
 async function migrate() {

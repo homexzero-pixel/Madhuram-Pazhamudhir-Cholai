@@ -685,3 +685,101 @@ body[data-page=detail] .ask-fab, body[data-page=cart] .ask-fab, body[data-page=a
 .ask-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
 .ask-chips .chip { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: .85rem; background: #fff; }
 @media (min-width: 1000px) { .ask-fab { bottom: 28px; right: 28px; } }
+
+/* ================================================================= quick-delivery layout (same colours, type and cards) */
+/* home: when it arrives and where, search with voice, the open order, categories in one row */
+.qhd { display: flex; align-items: center; gap: 12px; padding: 12px var(--m) 0; }
+.qhd-when { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; }
+.qhd-k { font-size: .76rem; font-weight: 700; color: var(--g-d); text-transform: uppercase; letter-spacing: .05em; }
+.qhd-t { font-size: 1.34rem; font-weight: 800; line-height: 1.15; color: var(--ink); }
+.qhd-a { display: flex; align-items: center; gap: 4px; max-width: 100%; font-size: .86rem; color: var(--ink2); margin-top: 3px; }
+.qhd-a span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.qhd-a .ico { width: 16px; height: 16px; flex: none; }
+.av-btn { overflow: hidden; padding: 0; }
+.av-btn .av { width: 100%; height: 100%; box-shadow: none; }
+.home-srch { position: sticky; top: 0; z-index: 20; background: #fff; margin: 0; padding: 12px var(--m) 10px; }
+.mic-b { width: 54px; height: 54px; border-radius: 50%; background: #fff; box-shadow: var(--sh); display: grid; place-items: center; color: var(--g-d); flex: none; }
+.mic-b .ico { width: 22px; height: 22px; }
+.live-ord { margin: 2px var(--m) 8px; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--g-s); border: 1px solid var(--g-l); }
+.lo-i { width: 40px; height: 40px; border-radius: 50%; background: #fff; color: var(--g-d); display: grid; place-items: center; flex: none; }
+.lo-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lo-t b { font-size: .98rem; }
+.lo-t span { font-size: .8rem; color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lo-go { display: flex; align-items: center; gap: 2px; font-weight: 700; color: var(--g-d); font-size: .9rem; }
+.lo-go .ico { width: 16px; height: 16px; }
+.cat-strip { display: flex; gap: 4px; overflow-x: auto; padding: 4px var(--m) 12px; scrollbar-width: none; }
+.cat-strip::-webkit-scrollbar { display: none; }
+.cat-strip a { flex: 0 0 72px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.cs-i { width: 60px; height: 60px; border-radius: 18px; background: var(--soft); display: grid; place-items: center; overflow: hidden; }
+.cs-i img.art { width: 40px; height: 40px; }
+.cs-i img.ph { width: 100%; height: 100%; object-fit: contain; padding: 6px; }
+.cs-all { color: var(--g-d); }
+.cs-all .ico { width: 24px; height: 24px; }
+.cs-n { font-size: .76rem; color: var(--ink2); text-align: center; line-height: 1.2; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (min-width: 1000px) { .qhd, .cat-strip { display: none !important; } .live-ord { margin: 16px var(--m) 0; } }
+
+/* product card: real stock left, never invented */
+.pc-img { position: relative; }
+.lowx { position: absolute; left: 8px; bottom: 8px; background: #fff4e5; color: #8a4f00; font-size: .7rem; font-weight: 700; padding: 3px 7px; border-radius: 8px; }
+
+/* product page: weight choices and when it arrives */
+.ab-btn.ab-fav.on { color: var(--red); }
+.ab-btn.ab-fav.on .ico { fill: var(--red); }
+.det-pr span.lowt { color: #8a4f00; font-weight: 600; }
+.wchips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 14px 0 2px; }
+.wchips button { border: 1.5px solid #e6e6e6; border-radius: 14px; padding: 9px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; background: #fff; min-height: 56px; }
+.wchips b { font-size: .95rem; font-weight: 600; }
+.wchips span { font-size: .78rem; color: var(--mut); }
+.wchips button.on { border-color: var(--g); background: var(--g-s); }
+.wchips button.on span { color: var(--g-d); }
+.det-dl { display: flex; align-items: center; gap: 12px; padding: 14px 0; margin-top: 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.det-dl .ico { width: 24px; height: 24px; color: var(--g-d); flex: none; }
+.det-dl b { display: block; font-weight: 600; }
+.det-dl small { color: var(--mut); font-size: .82rem; }
+
+/* a section page: the other sections of the group on the left, products on the right */
+.sec-split { display: grid; grid-template-columns: 80px minmax(0, 1fr); align-items: start; }
+.sec-rail { position: sticky; top: 66px; max-height: calc(100vh - 66px); overflow-y: auto; border-right: 1px solid var(--line); padding: 4px 0 120px; scrollbar-width: none; }
+.sec-rail::-webkit-scrollbar { display: none; }
+.sec-rail a { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 4px; text-align: center; }
+.sr-i { width: 52px; height: 52px; border-radius: 16px; background: var(--soft); display: grid; place-items: center; overflow: hidden; }
+.sr-i img.art { width: 34px; height: 34px; }
+.sr-i img.ph { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+.sr-n { font-size: .74rem; color: var(--ink2); line-height: 1.2; }
+.sec-rail a.on .sr-i { background: var(--g-s); box-shadow: inset 0 0 0 1.5px var(--g); }
+.sec-rail a.on .sr-n { color: var(--g-d); font-weight: 700; }
+.sec-main { min-width: 0; padding: 0 12px 0 10px; }
+.sec-main .chips { padding: 4px 0 8px; }
+.sec-main .grid { gap: 10px; }
+
+/* search: ask the shop when it is not found */
+.ask-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin: 4px 0 6px; border-radius: 16px; background: var(--soft); text-align: left; }
+.ask-row > .ico { color: var(--g-d); width: 22px; height: 22px; flex: none; }
+.ask-row span { flex: 1; display: flex; flex-direction: column; }
+.ask-row span span { font-size: .8rem; color: var(--mut); }
+
+/* checkout on one short page */
+.seg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 16px; background: var(--soft); margin-bottom: 14px; }
+.seg2 button { height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; color: var(--ink2); }
+.seg2 button .ico { width: 20px; height: 20px; }
+.seg2 button.on { background: #fff; color: var(--g-d); box-shadow: var(--sh2); }
+.row-line { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.row-line + .row-line { border-top: 1px solid var(--line); }
+.row-line > .ico { width: 22px; height: 22px; color: var(--g-d); flex: none; }
+.rl-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rl-t small { color: var(--mut); font-size: .82rem; }
+.link { color: var(--g-d); font-weight: 700; padding: 10px 4px; min-height: 44px; }
+.pref { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pref label { position: relative; border: 1.5px solid #e6e6e6; border-radius: 14px; padding: 10px 6px; text-align: center; font-size: .86rem; font-weight: 500; cursor: pointer;
+  min-height: 46px; display: grid; place-items: center; }
+.pref label.on { border-color: var(--g); background: var(--g-s); color: var(--g-d); font-weight: 600; }
+.pref label:focus-within { outline: 2px solid var(--g-d); outline-offset: 2px; }
+.pref input { position: absolute; opacity: 0; pointer-events: none; }
+.drop { display: flex; flex-wrap: wrap; gap: 8px; }
+.drop button { border: 1.5px solid #e6e6e6; border-radius: 22px; padding: 9px 14px; font-size: .88rem; min-height: 44px; }
+.drop button.on { border-color: var(--g); background: var(--g-s); color: var(--g-d); font-weight: 600; }
+.cancel-o { border-color: var(--red); color: var(--red); margin-top: 12px; }
+.choices div + div { margin-top: 6px; }
+
+.appbar .srch { min-width: 0; }
+.srch input { width: 100%; min-width: 0; }

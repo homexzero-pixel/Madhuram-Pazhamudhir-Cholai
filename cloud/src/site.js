@@ -129,7 +129,7 @@ function bucketFor(req) {
   const p = req.path;
   if (req.method === 'POST' && /^\/(login|setup|approve)$/.test(p)) return 'login';
   if (req.method === 'POST' && /^\/shop\/account\/(signup|login|otp|reset)$/.test(p)) return 'account';
-  if (req.method === 'POST' && (p === '/shop/order' || /^\/shop\/track\/[^/]+\/payref$/.test(p))) return 'order';
+  if (req.method === 'POST' && (p === '/shop/order' || /^\/shop\/track\/[^/]+\/(payref|cancel)$/.test(p))) return 'order';
   if (p === '/shop/assistant') return 'ai';
   return req.site === 'shop' || p.startsWith('/shop/') ? 'shop' : 'api';
 }
