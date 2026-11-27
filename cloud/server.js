@@ -116,11 +116,21 @@ function dbHelp(err) {
     `DB_PASSWORD=${c.password ? '(set)' : '(NOT set)'}`;
   let what;
   if (!c.database || !c.user) what = 'The database settings are missing. Add the environment variables DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD in hPanel, then Redeploy.';
-  else if (err.code === 'ER_ACCESS_DENIED_ERROR') what = 'The database user name or password is wrong. Copy them again from hPanel → Databases (the names start with u…_), then Redeploy.';
+  else if (err.code === 'ER_ACCESS_DENIED_ERROR') {
+    what = 'The database user name or password is wrong.';
+    const full = (v) => /^u\d+_/.test(String(v || ''));
+    if (!full(c.user) || !full(c.database)) {
+      what += ` On Hostinger the full names start with "u", your account number and "_" (for example u123456789_${c.user || 'name'}), but this app received DB_USER=${c.user || '(empty)'} and DB_NAME=${c.database || '(empty)'}.`;
+    }
+    what += ' Copy them again from hPanel → Databases (or from the billing website\'s Environment variables), then Redeploy.';
+  }
   else if (err.code === 'ER_BAD_DB_ERROR') what = 'There is no database with that name. Copy the exact database name from hPanel → Databases (it starts with u…_), then Redeploy.';
   else if (['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EHOSTUNREACH'].includes(err.code)) {
     what = 'The database server cannot be reached. In hPanel → Databases, look for "MySQL host" and put that in DB_HOST (try 127.0.0.1 if it says localhost), then Redeploy.';
   } else what = 'The database could not be prepared.';
+  if (String(process.env.SITE_ROLE || '').toLowerCase() === 'shop') {
+    what += ' This is the customers\' website: it must use exactly the same 5 database values as the billing website (the same database, not a new one).';
+  }
   return { what, seen, code: err.code || '', detail: String(err.message || '').replace(c.password || '\u0000', '***').slice(0, 300) };
 }
 
