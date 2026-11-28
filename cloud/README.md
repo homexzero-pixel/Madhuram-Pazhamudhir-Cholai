@@ -21,6 +21,10 @@ Tamil, customer, price change and discount with manager PIN, hold, cancel), cash
   **Accept → Bill & pack** (GST invoice at the counter, "Cash on delivery" or UPI) **→ Out for delivery** (delivery person's name,
   phone, tracking) or **Ready for pickup → Process completed** (stock leaves, cash on delivery goes into the drawer, the customer can
   download the invoice). Cancel before billing frees the stock; after billing a manager approves a credit note.
+  **WhatsApp is your choice at every step.** Each step shows on the customer's order page by itself (it checks every few seconds
+  and when the customer comes back to it): Order placed → Accepted by the shop → Billed & packed → Ready for pickup / Delivery agent
+  assigned → Collected / Delivered. After a step, a bar offers **Send WhatsApp** for about 20 seconds; press it to send the message,
+  or close it and nothing is sent. The order's window always has *WhatsApp the customer*, and the bill window has its WhatsApp button.
   See [ARCHITECTURE.md](ARCHITECTURE.md) for the whole design.
 - **WhatsApp bills (free):** after a sale with a customer's mobile, a "WhatsApp bill" button opens the shop's WhatsApp with the bill
   ready. The paper bill still always prints.
@@ -107,7 +111,7 @@ Owner phone: open the address in Chrome → ⋮ → **Install app** / Add to Hom
 ## Online shop look
 
 - **Opening screen:** both sites open with the shop's logo driving in, the name and a line, then the page (about 1.5 seconds; longer
-  only while a slow phone is still loading). The customers' site uses its own logo and app icon (`public/img/shop-logo.webp`,
+  only while a slow phone is still loading). The customers' site uses its own logo, the Madhuram Super Market apple (`public/img/shop-logo.webp`,
   `shop-icon-192.png`, `shop-icon-512.png`, `shop-icon-maskable-512.png`, `shop-icon-180.png`); the billing software keeps
   `logo-full.webp` and `icon-*.png`.
 - **No login needed to look around.** A first-time visitor sees *Log in* or *Continue as guest* (one tap). Logging in is asked only
@@ -120,6 +124,12 @@ Owner phone: open the address in Chrome → ⋮ → **Install app** / Add to Hom
 - The shop (`/shop/`) works on phones and PCs: home with banners, categories, offers and best sellers; search with sort and
   filters; product details with "Add to Basket"; basket with delivery or takeaway and a time; order tracking; profile with
   loyalty points and saved items.
+- **Home slides and category pictures (28 Nov 2026):** the home page slides are the shop's 4 designs (`public/photos/b/slide-1.webp`
+  to `slide-4.webp`, with a smaller `-640` copy for phones): *Shop essentials* opens Trending, *Order groceries* opens all categories
+  (shown only while home delivery is on), *Shop produce* opens Fresh Vegetables, *Shop pantry* opens Atta, Rice, Oil & Dals. Every
+  section has the owner's picture (`public/photos/s/<section>.webp`, e.g. `veg.webp`, `tea.webp`) on the home page, the categories
+  page and the section pages. To change one, replace the file with the same name and raise `PV` at the top of the pictures part of
+  `public/shop.js`, so phones load the new one. Banner photos saved in Settings and a running festival offer come after the 4 slides.
 - **Banner photos** (optional): Settings & backup → Online orders → *Banner photos*. Take a wide photo of your fresh stock or a
   festival offer, write a small line, big words and a last line, choose what the button opens, then **Save**. Without photos the
   shop shows its own banners (offers, fresh produce, free delivery, loyalty points).

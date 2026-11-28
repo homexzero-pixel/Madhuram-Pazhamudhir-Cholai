@@ -289,15 +289,17 @@ async function order(where, args) {
   return o;
 }
 
-// The four steps the customer sees: placed → billed & packed → agent assigned (or ready for pickup) → completed.
+// The steps the customer sees on the order page (it refreshes by itself, so each step the shop takes shows there at once):
+// placed → accepted → billed & packed → delivery agent assigned (or ready for pickup) → delivered (or collected).
 function steps(o) {
   const third = o.mode === 'delivery' ? ['out', 'Delivery agent assigned', o.dispatched_at] : ['ready', 'Ready for pickup', o.ready_at];
   const legacyDone = o.status === 'done';
   const list = [
     ['new', 'Order placed', o.created_at, true],
+    ['accepted', 'Accepted by the shop', o.accepted_at, !!o.accepted_at || ['accepted', 'packing', 'ready', 'out', 'done'].includes(o.status)],
     ['packing', 'Billed & packed', o.packed_at, !!o.packed_at || legacyDone || ['ready', 'out'].includes(o.status)],
     [third[0], third[1], third[2], !!third[2] || legacyDone],
-    ['done', 'Process completed', o.completed_at, legacyDone],
+    ['done', o.mode === 'delivery' ? 'Delivered' : 'Collected from the shop', o.completed_at, legacyDone],
   ];
   const cur = list.findIndex((x) => !x[3]);
   return list.map(([key, label, at, done], i) => ({ key, label, at: at || null, done: o.status !== 'cancelled' && done,

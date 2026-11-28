@@ -161,8 +161,9 @@ const SEC_ART = { veg: 'leafy-green', fruits: 'red-apple', exotics: 'avocado', d
   fragrance: 'lotion-bottle', shaving: 'razor', baby: 'baby-bottle', pharma: 'pill', cleaning: 'sponge', laundry: 'bubbles', fresheners: 'bubbles',
   pooja: 'diya-lamp', disposables: 'roll-of-paper', kids: 'teddy-bear' };
 const has = (kind, key) => !!(S.info && S.info.photos && (S.info.photos[kind] || []).includes(key));
+const PV = 1;                                   // picture version: raise it when the pictures in public/photos change
 function secImg(key) {
-  if (has('s', key)) return `<img class="ph" src="/photos/s/${key}.webp" alt="" loading="lazy">`;
+  if (has('s', key)) return `<img class="ph cut" src="/photos/s/${key}.webp?v=${PV}" alt="" loading="lazy" decoding="async" width="224" height="224">`;
   const sec = S.info && S.info.sections.find((x) => x.key === key);
   if (sec && sec.img) return `<img class="ph prod" src="${esc(sec.img)}" alt="" loading="lazy" decoding="async" data-fb="${FE(SEC_ART[key] || 'shopping-bags')}">`;
   return `<img class="art" src="${FE(SEC_ART[key] || 'shopping-bags')}" alt="" loading="lazy">`;
@@ -241,7 +242,7 @@ function card(it) {
 }
 
 // ------------------------------------------------------------------ header bits, bottom bars
-const avatar = () => `<span class="av">${S.me ? esc(S.me.name.trim().slice(0, 1).toUpperCase()) : '<img src="/img/shop-icon-192.png?v=2" alt="">'}</span>`;
+const avatar = () => `<span class="av">${S.me ? esc(S.me.name.trim().slice(0, 1).toUpperCase()) : '<img src="/img/shop-icon-192.png?v=3" alt="">'}</span>`;
 function locText() {
   const s = S.info.shop;
   if (S.mode === 'delivery') return S.me && S.me.address ? `Deliver to ${S.me.address}` : `Home delivery · ${s.online_area || 'near the shop'}`;
@@ -469,11 +470,31 @@ async function results(el, params, { auto = true, limit = 30, seed = null } = {}
 }
 
 // ------------------------------------------------------------------ home
+// The shop's own slides (public/photos/b/slide-N.webp). The second one is about home delivery: shown only while delivery is on.
+const SLIDES = [
+  { k: 'slide-1', go: '#trending', alt: 'Good food. Smart shop. Your weekly grocery essentials. Shop essentials' },
+  { k: 'slide-2', go: '#cats', alt: 'Groceries to your door. Shop Madhuram home delivery. Order groceries', delivery: true },
+  { k: 'slide-3', go: 'veg', alt: 'Fresh by nature. Fruit and veg for every meal. Shop produce' },
+  { k: 'slide-4', go: 'staples', alt: 'Stock the good stuff. Rice, dals and spices for everyday cooking. Shop pantry' },
+];
 function banners() {
   const s = S.info.shop;
   const f = S.info.festival || {};
   const o = S.info.offers || {};
   const ph = (k) => (has('b', k) ? `/photos/b/${k}.webp` : null);
+  const slides = SLIDES.filter((x) => has('b', x.k) && (!x.delivery || s.online_delivery === '1'));
+  if (slides.length) {
+    const count = (k) => (S.info.sections.find((x) => x.key === k) || {}).count || 0;
+    const list = slides.map((x) => ({ art: true, photo: `/photos/b/${x.k}.webp?v=${PV}`, small: has('b', `${x.k}-640`) ? `/photos/b/${x.k}-640.webp?v=${PV}` : '',
+      alt: x.alt, href: x.go.startsWith('#') ? x.go : count(x.go) ? `#sec=${x.go}` : '#cats' }));
+    // then the owner's banner photos (Settings) and, while offers run, the festival offers
+    for (const b of S.info.banners || []) list.push({ theme: 'owner', photo: b.img, tone: 'light', k: b.kicker, b: b.title, d: b.sub, href: b.link ? `#${b.link}` : '', go: b.link ? 'Shop Now' : '' });
+    if (o.count) {
+      list.push({ fest: true, theme: 'fest', deco: 'gift', photo: f.photo || ph(`fest_${f.style}`) || ph('fest_generic'), pics: 'offers',
+        badge: `Up to ${o.pct}% OFF`, b: f.name, d: f.line || (f.to ? `Till ${fmtDate(f.to)}` : ''), href: '#offers', go: 'Shop Now' });
+    }
+    return list.slice(0, 8);
+  }
   const first = S.info.slots[0] && S.info.slots[0].slots[0];
   const from = first ? first.l.split('–')[0] : '';
   const count = (k) => (S.info.sections.find((x) => x.key === k) || {}).count || 0;
@@ -494,11 +515,13 @@ function banners() {
   }
   return list.slice(0, 7);
 }
-// a banner on a photo, or a colour design that gets real product photos once they load
-const bnrHtml = (b) => `<a class="bnr ${b.photo ? `photo ${b.tone === 'light' ? 'light' : 'dark'}` : `type t-${b.theme}`}${b.fest ? ' fest' : ''}" ${b.href ? `href="${b.href}"` : ''} ${b.pics ? `data-pics="${b.pics}"` : ''}>
+// a banner on a photo, or a colour design that gets real product photos once they load, or one of the shop's slides (picture only)
+const bnrHtml = (b, i) => (b.art ? `<a class="bnr art" href="${b.href}" aria-label="${esc(b.alt)}"><img class="bnr-img" src="${esc(b.photo)}"${b.small
+  ? ` srcset="${esc(b.small)} 640w, ${esc(b.photo)} 1280w" sizes="(min-width: 1000px) 50vw, 100vw"` : ''} alt="${esc(b.alt)}" width="1280" height="588" decoding="async"${i ? ' loading="lazy"' : ' fetchpriority="high"'}></a>`
+  : `<a class="bnr ${b.photo ? `photo ${b.tone === 'light' ? 'light' : 'dark'}` : `type t-${b.theme}`}${b.fest ? ' fest' : ''}" ${b.href ? `href="${b.href}"` : ''} ${b.pics ? `data-pics="${b.pics}"` : ''}>
   ${b.photo ? `<img class="bnr-img" src="${esc(b.photo)}" alt="">` : `<div class="bnr-deco">${ico(b.deco || 'bag')}</div><div class="bnr-pics"></div>`}
   <div class="bnr-t">${b.badge ? `<span class="badge">${esc(b.badge)}</span>` : ''}${b.k ? `<span class="k">${esc(b.k)}</span>` : ''}${b.b ? `<b>${esc(b.b)}</b>` : ''}
-    ${b.d ? `<span class="d">${esc(b.d)}</span>` : ''}${b.go ? `<span class="go">${esc(b.go)} ${ico('right')}</span>` : ''}</div></a>`;
+    ${b.d ? `<span class="d">${esc(b.d)}</span>` : ''}${b.go ? `<span class="go">${esc(b.go)} ${ico('right')}</span>` : ''}</div></a>`);
 // real product photos for a colour banner (packaged goods photographed by the shop or found by barcode)
 function bannerPics(key, items) {
   const el = $(`.bnr.type[data-pics="${key}"]`);
@@ -569,7 +592,7 @@ async function homeView() {
     ${instCard()}
     ${catStrip()}
     ${closedNote()}
-    ${bl.length ? `<div class="bnr-wrap"><div class="bnrs" id="bnrs">${bl.map(bnrHtml).join('')}</div>
+    ${bl.length ? `<div class="bnr-wrap"><div class="bnrs${bl.some((b) => b.art) ? ' slides' : ''}" id="bnrs">${bl.map(bnrHtml).join('')}</div>
       ${bl.length > 1 ? `<div class="dots-tab">${bl.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>` : ''}
     ${railSec('secVeg', 'Fresh Vegetables', '#sec=veg')}
     ${railSec('secFruits', 'Fresh Fruits', '#sec=fruits')}
@@ -1081,10 +1104,14 @@ async function reorder(token) {
 }
 document.addEventListener('click', (e) => { const b = e.target.closest('[data-reorder]'); if (b) { e.preventDefault(); reorder(b.dataset.reorder).catch((x) => toast(x.message)); } });
 
-async function ordersView() {
-  S.page = 'orders';
-  view().innerHTML = `${appbar('Your Orders')}<div class="page narrow" id="olist"><div class="loading">Loading…</div></div>`;
-  drawBars();
+let olTimer;
+async function ordersView(quiet = false) {
+  if (quiet && (S.page !== 'orders' || !$('#olist'))) return;
+  if (!quiet) {
+    S.page = 'orders';
+    view().innerHTML = `${appbar('Your Orders')}<div class="page narrow" id="olist"><div class="loading">Loading…</div></div>`;
+    drawBars();
+  }
   let orders;
   if (S.me) orders = (await get('/account/orders')).orders;
   else {
@@ -1092,18 +1119,37 @@ async function ordersView() {
     orders = (await Promise.all(mine.map((m) => get(`/track/${m.t}`).then((r) => ({ ...r.order, token: m.t, items: r.order.lines.slice(0, 5), count: r.order.lines.length }))
       .catch(() => null)))).filter(Boolean);
   }
-  if (S.page !== 'orders') return;
+  if (S.page !== 'orders' || !$('#olist')) return;
   S.active = orders.filter((o) => OPEN.includes(o.status)).length;
   drawBars();
-  $('#olist').innerHTML = orders.map(orderCard).join('') || emptyState('package', 'No orders yet', 'Your orders and their status show here.', '<a class="btn-g" href="#" style="display:inline-flex;max-width:260px">Start shopping</a>');
-  if (!S.me) $('#olist').insertAdjacentHTML('beforeend', '<p class="small mut" style="text-align:center">Log in to see orders placed on other phones. <a class="okc" href="#login">Log in</a></p>');
+  const html = (orders.map(orderCard).join('') || emptyState('package', 'No orders yet', 'Your orders and their status show here.', '<a class="btn-g" href="#" style="display:inline-flex;max-width:260px">Start shopping</a>'))
+    + (S.me ? '' : '<p class="small mut" style="text-align:center">Log in to see orders placed on other phones. <a class="okc" href="#login">Log in</a></p>');
+  if (!quiet || S.olHtml !== html) { $('#olist').innerHTML = html; S.olHtml = html; }
+  clearTimeout(olTimer);
+  if (S.active) olTimer = setTimeout(() => { if (document.visibilityState === 'visible') ordersView(true).catch(() => {}); }, 15000);
 }
 
 let trackTimer;
 const when = (v) => (v ? new Date(`${String(v).replace(' ', 'T')}+05:30`).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '');
-async function trackView(token) {
-  S.page = 'track';
+async function trackView(token, quiet = false) {
+  if (!quiet) S.page = 'track';
   const { order: o } = await get(`/track/${token}`);
+  const again = () => {
+    clearTimeout(trackTimer);
+    if (OPEN.includes(o.status)) {
+      trackTimer = setTimeout(() => {
+        if (location.hash === `#o=${token}` && document.visibilityState === 'visible' && !(document.activeElement && document.activeElement.name === 'ref')) trackView(token, true).catch(() => {});
+      }, 10000);
+    }
+  };
+  if (quiet && (S.page !== 'track' || location.hash !== `#o=${token}`)) return;
+  const sig = `${token}|${JSON.stringify([o.status, o.status_label, o.steps, o.agent, o.bill_no, o.bill_total, o.pay_ref, o.cod_due, o.can_cancel, o.invoice,
+    o.lines.map((l) => [l.qty, l.note])])}`;
+  if (quiet && S.trackSig === sig) { again(); return; }
+  if (quiet && S.trackStatus && S.trackStatus !== `${token}|${o.status}`) { toast(`Order ${o.number}: ${o.status_label}`); if (!OPEN.includes(o.status)) loadActive(); }
+  S.trackSig = sig;
+  S.trackStatus = `${token}|${o.status}`;
+  S.page = 'track';
   const s = S.info.shop;
   const amount = paise(o.bill_total || o.est_total);
   const upi = s.upi_id ? `upi://pay?${new URLSearchParams({ pa: s.upi_id, pn: s.name, am: (amount / 100).toFixed(2), cu: 'INR', tn: `Order ${o.number}` })}` : '';
@@ -1160,9 +1206,15 @@ async function trackView(token) {
       try { await post(`/track/${token}/payref`, { ref: e.target.ref.value }); toast('Thank you! The shop will check the payment.'); trackView(token); } catch (ex) { toast(ex.message); }
     });
   }
-  clearTimeout(trackTimer);
-  if (OPEN.includes(o.status)) trackTimer = setTimeout(() => { if (location.hash === `#o=${token}` && !(document.activeElement && document.activeElement.name === 'ref')) trackView(token).catch(() => {}); }, 20000);
+  again();
 }
+// back on the page (phone unlocked, tab opened again): the latest status at once
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  const h = location.hash;
+  if (h.startsWith('#o=') && S.page === 'track' && !(document.activeElement && document.activeElement.name === 'ref')) trackView(h.slice(3), true).catch(() => {});
+  else if (S.page === 'orders') ordersView(true).catch(() => {});
+});
 
 // ------------------------------------------------------------------ "Ask the shop": answers from what is in stock now and your own orders
 function askSheet(prefill = '') {
@@ -1230,7 +1282,7 @@ function authView(kind) {
       The shop sets a new password for your mobile number.</p><a class="btn-o wide" href="#login">Back to log in</a>`,
   };
   view().innerHTML = `${appbar(kind === 'forgot' ? 'Forgot password' : kind === 'signup' ? 'Sign up' : 'Log in')}<div class="page"><div class="auth">
-    <div class="auth-head"><img src="/img/shop-icon-192.png?v=2" alt=""><h1>${kind === 'forgot' ? 'Forgot password' : kind === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
+    <div class="auth-head"><img src="/img/shop-icon-192.png?v=3" alt=""><h1>${kind === 'forgot' ? 'Forgot password' : kind === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
     <p>${esc(S.info.shop.name)}</p></div>${kind === 'forgot' ? '' : tabs}${forms[kind]}</div></div>`;
   drawBars();
   const f = $('#af');
@@ -1458,7 +1510,7 @@ function welcomeView() {
   ++S.tok;
   const s = S.info.shop;
   view().innerHTML = `<div class="wel">
-    <div class="wel-hd"><img class="wel-logo" src="/img/shop-logo.webp?v=2" alt="MPS">
+    <div class="wel-hd"><img class="wel-logo" src="/img/shop-logo.webp?v=3" alt="Madhuram Super Market">
       <h2 class="wel-name">${esc(s.name)}</h2>
       <p>${esc(String(s.tagline || 'Fresh fruits, vegetables and daily needs').replace(/^Supermarket\s*·\s*/i, ''))}</p></div>
     <div class="wel-card">
@@ -1531,7 +1583,7 @@ function drawInstall() {
   if (c) c.hidden = !on || Date.now() - Number(LS.get('mpc_inst_x', 0)) < 14 * 86400000;
   $$('[data-install]').forEach((b) => { b.hidden = !on; });
 }
-const instCard = () => `<div class="inst-card" id="instCard" hidden><img src="/img/shop-icon-192.png?v=2" alt="" width="44" height="44">
+const instCard = () => `<div class="inst-card" id="instCard" hidden><img src="/img/shop-icon-192.png?v=3" alt="" width="44" height="44">
   <div class="ic-t"><b>Get the Madhuram app</b><span>Order faster, right from your home screen</span></div>
   <button class="ic-go" type="button" data-install-go>Install</button><button class="ic-x" type="button" aria-label="Not now" data-install-x>${ico('x')}</button></div>`;
 function bindInstall(root = document) {

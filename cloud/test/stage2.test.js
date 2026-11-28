@@ -174,7 +174,7 @@ test('online order: closed, place, stock held, accept, invoice at packing, dispa
   assert.equal(sale.data.ok, true, JSON.stringify(sale.data));
   // invoiced and packed: the GST bill exists, the goods are still reserved and still counted in the shop's stock
   const packed = (await customer.get(`/api/shop/track/${r.data.token}`)).data.order;
-  assert.deepEqual([packed.status, packed.bill_no, packed.steps.map((x) => x.done)], ['packing', sale.data.bill.bill_no, [true, true, false, false]]);
+  assert.deepEqual([packed.status, packed.bill_no, packed.steps.map((x) => x.done)], ['packing', sale.data.bill.bill_no, [true, true, true, false, false]]);
   assert.equal(packed.invoice, false);
   assert.equal((await customer.get('/api/shop/items?q=ponni')).data.items[0].available, '19');
   assert.equal((await owner.get(`/api/products/${rice.id}`)).data.item.on_hand, '21');
@@ -189,7 +189,7 @@ test('online order: closed, place, stock held, accept, invoice at packing, dispa
   assert.equal(disp.data.ok, true, JSON.stringify(disp.data));
   assert.match(disp.data.whatsapp.text, /Murugan \(9876501234\)/);
   const out = (await customer.get(`/api/shop/track/${r.data.token}`)).data.order;
-  assert.deepEqual([out.status, out.agent.name, out.agent.phone, out.steps[2].label, out.steps[2].done], ['out', 'Murugan', '9876501234', 'Delivery agent assigned', true]);
+  assert.deepEqual([out.status, out.agent.name, out.agent.phone, out.steps[3].label, out.steps[3].done, out.steps[4].label], ['out', 'Murugan', '9876501234', 'Delivery agent assigned', true, 'Delivered']);
   // someone else with the tracking link sees the progress, not the name, address or payment details
   const stranger = new Browser();
   const seen = (await stranger.get(`/api/shop/track/${r.data.token}`)).data.order;

@@ -881,3 +881,14 @@ body[data-page=welcome] .bnav, body[data-page=welcome] .pcbar, body[data-page=we
 .pch.on .pck { background: var(--g); border-color: var(--g); color: #fff; }
 .pch:focus-within { outline: 2px solid var(--g-l); outline-offset: 2px; }
 @media (max-width: 360px) { .paych { grid-template-columns: 1fr; } }
+
+/* the owner's category pictures: cut-outs, shown whole on the light tiles */
+.ti { height: 92px; }
+.ti img.cut, .circ-i img.cut { object-fit: contain; padding: 4px; }
+.cs-i img.cut { padding: 2px; }
+.sr-i img.cut { padding: 2px; }
+/* the shop's own slides: the whole picture, never cut (its words and button are part of it) */
+.bnrs.slides .bnr { height: auto; aspect-ratio: 1280 / 588; }
+.bnr.art { background: #f6f1e2; display: block; }
+.bnr.art .bnr-img { object-fit: cover; }
+

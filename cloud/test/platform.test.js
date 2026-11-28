@@ -551,3 +551,27 @@ test('a restart after an update skips the table checks when nothing changed', as
   assert.equal(await db.migrate(), true);                               // something changed: tables and columns checked again
   assert.equal(await db.migrate(), false);
 });
+
+test("the customers' site has a picture for every section, the shop's 4 home slides and the apple logo", async () => {
+  process.env.SITE_ROLE = 'shop';
+  try {
+    const c = new Client();
+    const info = (await c.get('/api/shop/info')).data;
+    const keys = require('../src/sections').SECTIONS.map((x) => x[0]);
+    assert.deepEqual(keys.filter((k) => !info.photos.s.includes(k)), []);
+    for (const n of [1, 2, 3, 4]) assert.ok(info.photos.b.includes(`slide-${n}`) && info.photos.b.includes(`slide-${n}-640`), `slide ${n}`);
+    for (const p of ['/photos/s/veg.webp?v=1', '/photos/s/kids.webp?v=1', '/photos/b/slide-1.webp?v=1', '/photos/b/slide-4-640.webp?v=1',
+      '/img/shop-logo.webp?v=3', '/img/shop-icon-192.png?v=3', '/img/shop-icon-maskable-512.png?v=3']) {
+      const r = await c.get(p);
+      assert.equal(r.status, 200, p);
+      assert.match(r.headers['content-type'], /^image\/(webp|png)/, p);
+    }
+    const page = (await c.get('/')).data;
+    assert.match(page, /shop-logo\.webp\?v=3/);
+    assert.doesNotMatch(page, /shop-(logo|icon-\d+)\.(webp|png)\?v=2/);
+    const man = (await c.get('/shop.webmanifest')).data;
+    assert.match(typeof man === 'string' ? man : JSON.stringify(man), /shop-icon-512\.png\?v=3/);
+  } finally {
+    delete process.env.SITE_ROLE;
+  }
+});

@@ -138,16 +138,28 @@ function stepBar(o) {
   return `<ol class="ostep">${STEP_NAMES(o).map((n, i) => `<li class="${done[i] ? 'done' : ''}">${esc(n)}</li>`).join('')}</ol>`;
 }
 async function orderStep(kind, id) {
-  if (kind === 'accept') { const r = await api(`/orders/${id}/accept`, { method: 'POST', body: {} }); sendUpdate(r.whatsapp); route(); return; }
-  if (kind === 'ready') { const r = await api(`/orders/${id}/ready`, { method: 'POST', body: {} }); sendUpdate(r.whatsapp); route(); return; }
+  if (kind === 'accept') { const r = await api(`/orders/${id}/accept`, { method: 'POST', body: {} }); sendUpdate(r.whatsapp, 'Accepted.'); route(); return; }
+  if (kind === 'ready') { const r = await api(`/orders/${id}/ready`, { method: 'POST', body: {} }); sendUpdate(r.whatsapp, 'Ready for pickup.'); route(); return; }
   if (kind === 'bill') { await billAtCounter(id); return; }
   if (kind === 'dispatch') { dispatchDialog(id); return; }
   if (kind === 'complete') { await completeDialog(id); return; }
   if (kind === 'cancel') cancelDialog(id);
 }
-function sendUpdate(wa, text = 'Saved. Send the customer the WhatsApp update.') {
-  toast(text);
-  if (wa) window.open(waLink(wa.phone, wa.text), '_blank', 'noopener');
+// After each step the customer's order page (their tracker) shows the new status by itself. A WhatsApp message is only sent
+// when the staff choose: "Send WhatsApp" stays here for a while, and the order's window always has "WhatsApp the customer".
+function sendUpdate(wa, text = 'Saved.') {
+  const msg = `${text} The customer sees it on their order page.`;
+  if (!wa || !wa.phone) { toast(msg); return; }
+  let bar = $('#wabar');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'wabar'; bar.setAttribute('role', 'status'); document.body.appendChild(bar); }
+  bar.innerHTML = `<span>${esc(msg)}</span><a class="btn okbtn" target="_blank" rel="noopener" href="${esc(waLink(wa.phone, wa.text))}">${ico('chat')} Send WhatsApp</a>
+    <button type="button" class="wb-x" title="No message" aria-label="Close">${ico('x')}</button>`;
+  bar.className = 'show';
+  const hide = () => { bar.className = ''; clearTimeout(sendUpdate.timer); };
+  $('a', bar).addEventListener('click', () => setTimeout(hide, 300));
+  $('.wb-x', bar).addEventListener('click', hide);
+  clearTimeout(sendUpdate.timer);
+  sendUpdate.timer = setTimeout(hide, 20000);
 }
 async function billAtCounter(id) {
   if (!myCounter()) throw new Error('Choose this PC\'s counter first (Billing).');
@@ -163,7 +175,7 @@ async function billAtCounter(id) {
   location.hash = '#/bill';
 }
 function dispatchDialog(id, o = {}) {
-  const d = modal(`<h3>Out for delivery</h3><p class="muted">The customer sees the name, can call this number, and gets the WhatsApp update.</p>
+  const d = modal(`<h3>Out for delivery</h3><p class="muted">The customer sees the name on their order page and can call this number.</p>
     <form><label>Delivery person's name</label><input name="agent_name" value="${esc(o.agent_name || localStorage.getItem('mpc_agent_name') || '')}" required autofocus>
       <label>Delivery person's mobile</label><input name="agent_phone" inputmode="tel" value="${esc(o.agent_phone || localStorage.getItem('mpc_agent_phone') || '')}" required>
       <label>Tracking (optional: vehicle number, or a https:// tracking link)</label><input name="tracking" value="${esc(o.tracking || '')}" maxlength="200">
@@ -175,7 +187,7 @@ function dispatchDialog(id, o = {}) {
       const r = await api(`/orders/${id}/dispatch`, { method: 'POST', body });
       localStorage.setItem('mpc_agent_name', body.agent_name); localStorage.setItem('mpc_agent_phone', body.agent_phone);
       d.close();
-      sendUpdate(r.whatsapp, 'Out for delivery. Send the customer the WhatsApp update.');
+      sendUpdate(r.whatsapp, 'Out for delivery.');
       route();
     });
   });
@@ -263,7 +275,7 @@ async function orderDialog(id) {
   const lineChange = async (lineId, qty) => {
     const r = await api(`/orders/${id}/line`, { method: 'POST', body: { line_id: lineId, qty } });
     d.close();
-    sendUpdate(r.whatsapp, 'Order changed. Send the customer the WhatsApp update.');
+    sendUpdate(r.whatsapp, 'Order changed.');
     orderDialog(id);
   };
   $$('[data-na]', d).forEach((b) => b.addEventListener('click', () => submitting(b, () => lineChange(Number(b.dataset.na), '0'))));
