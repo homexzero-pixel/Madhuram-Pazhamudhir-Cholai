@@ -458,3 +458,22 @@ test('checkout choices reach the shop; the customer can cancel until the order i
   assert.ok((await names('vazhai')).some((n) => /banana/i.test(n)));
   assert.ok((await names('ponni arisi')).some((n) => /ponni rice/i.test(n)));
 });
+
+test("the customers' site address: a SHOP_URL that points at the billing site itself is ignored", () => {
+  const site = require('../src/site');
+  const req = (host) => ({ headers: { host }, protocol: 'https' });
+  const keep = { SITE_ROLE: process.env.SITE_ROLE, SHOP_URL: process.env.SHOP_URL };
+  try {
+    process.env.SITE_ROLE = 'billing';
+    process.env.SHOP_URL = 'https://mpc.zeravista.com';
+    assert.equal(site.shopUrl(req('mpc.zeravista.com'), { shop_url: 'https://mpccustomer.zeravista.com' }), 'https://mpccustomer.zeravista.com/');
+    process.env.SHOP_URL = 'https://shop.example.in/';
+    assert.equal(site.shopUrl(req('mpc.zeravista.com'), { shop_url: 'https://other.example' }), 'https://shop.example.in/');
+    delete process.env.SHOP_URL;
+    assert.equal(site.shopUrl(req('mpc.zeravista.com'), { shop_url: 'mpccustomer.zeravista.com' }), 'https://mpccustomer.zeravista.com/');
+    delete process.env.SITE_ROLE;
+    assert.equal(site.shopUrl(req('localhost:3456'), { shop_url: 'https://mpccustomer.zeravista.com' }), 'https://localhost:3456/shop/');
+  } finally {
+    for (const [k, v] of Object.entries(keep)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});

@@ -20,6 +20,14 @@ async function list({ q = '', owing = false } = {}) {
     FROM customers c ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY ${owing ? 'balance DESC' : 'c.name'} LIMIT 200`, args);
 }
 
+// Every customer for Excel: contact details, points, what they owe, how often and how much they buy.
+async function exportAll() {
+  return db.query(`SELECT c.name Name, c.phone Mobile, c.email Email, c.address Address, c.points Points, ${BAL} Owes,
+    (SELECT COUNT(*) FROM sales WHERE customer_id=c.id) Bills, COALESCE((SELECT SUM(total) FROM sales WHERE customer_id=c.id), 0) Spent,
+    (SELECT MAX(created_at) FROM sales WHERE customer_id=c.id) Last_visit, c.created_at Joined, IF(c.pass_hash <> '', 'yes', '') Online_account
+    FROM customers c ORDER BY c.name`);
+}
+
 async function get(id) {
   const c = await db.one(`SELECT c.*, ${BAL} balance, c.pass_hash <> '' online FROM customers c WHERE c.id=?`, [id]);
   if (!c) throw new UserError('Customer not found.', 404);
@@ -83,4 +91,4 @@ async function receivePayment(data, user) {
   });
 }
 
-module.exports = { list, get, save, receivePayment };
+module.exports = { list, get, save, receivePayment, exportAll };

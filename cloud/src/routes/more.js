@@ -54,6 +54,11 @@ r.get('/returns', need('bill'), wrap(async (req, res) => ok(res, { returns: awai
 
 // ------------------------------------------------------------------ customers and credit (udhaar)
 r.get('/customers/list', need('customers'), wrap(async (req, res) => ok(res, { customers: await customers.list({ q: req.query.q, owing: req.query.owing === '1' }) })));
+r.get('/customers/export', need('reports'), wrap(async (req, res) => {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="customers_${new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)}.csv"`);
+  res.send(reports.csv(await customers.exportAll()));
+}));
 r.get('/customers/:id', need('customers'), wrap(async (req, res) => ok(res, { customer: await customers.get(req.params.id) })));
 r.post('/customers', need('customers'), wrap(async (req, res) => ok(res, { id: await customers.save(req.body, req.user) })));
 r.post('/customers/:id/points', need('settings'), wrap(async (req, res) => {   // owner corrects points (old loyalty card, mistake)
@@ -71,6 +76,10 @@ r.get('/reports', need('reports'), wrap(async (req, res) => {
   const [from, to] = reports.range(req.query);
   ok(res, { list: reports.list(), summary: await reports.summary(from, to) });
 }));
+r.get('/reports/dashboard', need('reports'), wrap(async (req, res) => {
+  const [from, to] = reports.range(req.query);
+  ok(res, await reports.dashboard(from, to));
+}));
 r.get('/reports/:name', need('reports'), wrap(async (req, res) => {
   const out = await reports.run(req.params.name, req.query);
   if (req.query.format === 'csv') {
@@ -83,7 +92,7 @@ r.get('/reports/:name', need('reports'), wrap(async (req, res) => {
 
 // ------------------------------------------------------------------ owner tools
 r.get('/owner/prices', need('daily'), wrap(async (req, res) => ok(res, await owner.priceList(req.query))));
-r.post('/owner/prices', need('products'), wrap(async (req, res) => ok(res, { changed: await owner.savePrices(req.body.changes, req.user) })));
+r.post('/owner/prices', need('products'), wrap(async (req, res) => ok(res, await owner.savePrices(req.body.changes, req.user))));
 r.get('/owner/buylist', need('daily'), wrap(async (req, res) => {
   const out = await owner.buyList(req.query);
   for (const g of out.groups) g.message = await owner.orderMessage(g);
@@ -263,41 +272,41 @@ r.post('/expenses/:id/delete', need('reports'), wrap(async (req, res) => { await
 
 // ------------------------------------------------------------------ product photos
 const images = require('../images');
-r.post('/products/:id/image', need('products'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
+r.post('/products/:id/image', need('photos'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
   const name = await images.save(Number(req.params.id), req.body, 'upload');
   await auth.audit({ user_id: req.user.id, action: 'product_photo', summary: `Photo added for product ${req.params.id}` });
   ok(res, { image: `/img/p/${name}` });
 }));
-r.post('/products/image-by-code/:code', need('products'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
+r.post('/products/image-by-code/:code', need('photos'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
   const it = await images.saveByCode(req.params.code, req.body);
   ok(res, { id: it.id, name: it.name });
 }));
 r.post('/shop-banners/image', need('settings'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
   ok(res, { name: images.saveBanner(req.body) });
 }));
-r.post('/products/:id/image/remove', need('products'), wrap(async (req, res) => { await images.remove(Number(req.params.id)); ok(res); }));
-r.get('/images/fetch', need('products'), wrap(async (req, res) => ok(res, await images.status())));
+r.post('/products/:id/image/remove', need('photos'), wrap(async (req, res) => { await images.remove(Number(req.params.id)); ok(res); }));
+r.get('/images/fetch', need('photos'), wrap(async (req, res) => ok(res, await images.status())));
 // photos from a list of web addresses (the owner's spreadsheet, read in the browser: product code / barcode + photo link)
-r.post('/images/links', need('products'), wrap(async (req, res) => {
+r.post('/images/links', need('photos'), wrap(async (req, res) => {
   const out = await images.addLinks((req.body || {}).rows);
   await auth.audit({ user_id: req.user.id, action: 'product_photo', summary: `Photo links from a list: ${out.queued} to fetch, ${out.not_found} not found, ${out.own_photo} kept` });
   ok(res, { result: out, ...(await images.linksStatus()) });
 }));
-r.get('/images/links', need('products'), wrap(async (req, res) => ok(res, await images.linksStatus())));
-r.get('/images/links/next', need('products'), wrap(async (req, res) => ok(res, { items: await images.nextLinks(req.query.n) })));
-r.get('/images/links/:id/source', need('products'), wrap(async (req, res) => {
+r.get('/images/links', need('photos'), wrap(async (req, res) => ok(res, await images.linksStatus())));
+r.get('/images/links/next', need('photos'), wrap(async (req, res) => ok(res, { items: await images.nextLinks(req.query.n) })));
+r.get('/images/links/:id/source', need('photos'), wrap(async (req, res) => {
   const p = await images.linkSource(Number(req.params.id));
   res.setHeader('Content-Type', p.type);
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Disposition', 'attachment');           // never shown as a page of this site
   res.send(p.buf);
 }));
-r.post('/images/links/:id/photo', need('products'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
+r.post('/images/links/:id/photo', need('photos'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
   ok(res, await images.linkDone(Number(req.params.id), req.body));
 }));
-r.post('/images/links/:id/failed', need('products'), wrap(async (req, res) => { await images.linkFailed(Number(req.params.id), (req.body || {}).note); ok(res); }));
-r.post('/images/links/again', need('products'), wrap(async (req, res) => { await images.linksAgain(); ok(res, await images.linksStatus()); }));
-r.post('/images/links/clear', need('products'), wrap(async (req, res) => { await images.linksClear(); ok(res, await images.linksStatus()); }));
+r.post('/images/links/:id/failed', need('photos'), wrap(async (req, res) => { await images.linkFailed(Number(req.params.id), (req.body || {}).note); ok(res); }));
+r.post('/images/links/again', need('photos'), wrap(async (req, res) => { await images.linksAgain(); ok(res, await images.linksStatus()); }));
+r.post('/images/links/clear', need('photos'), wrap(async (req, res) => { await images.linksClear(); ok(res, await images.linksStatus()); }));
 r.post('/images/fetch', need('settings'), wrap(async (req, res) => {
   const st = req.body.action === 'stop' ? images.stop() : images.start();
   if (req.body.action !== 'stop') await auth.audit({ user_id: req.user.id, action: 'settings', summary: 'Started finding product photos by barcode' });

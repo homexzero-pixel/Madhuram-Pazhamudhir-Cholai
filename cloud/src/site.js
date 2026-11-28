@@ -31,10 +31,15 @@ function siteOf(req) {
 const split = () => !!(role() === 'shop' || role() === 'billing' || env.SHOP_HOST || env.BILLING_HOST);
 
 // The customers' site address, for QR posters, WhatsApp tracking links and redirects. Ends with '/'.
-function shopUrl(req) {
-  if (env.SHOP_URL) return `${env.SHOP_URL.replace(/\/+$/, '')}/`;
-  if (env.SHOP_HOST) return `https://${lc(env.SHOP_HOST)}/`;
-  return `${req.protocol}://${req.headers.host}/shop/`;
+// SHOP_URL / SHOP_HOST when they name another site (a SHOP_URL set to the billing site's own address is ignored),
+// else the "Customer website address" in Settings, else /shop/ on this address.
+function shopUrl(req, cfg = require('./settings').cached()) {
+  const own = lc(String(req.headers.host || '').replace(/:\d+$/, ''));
+  const other = (u) => {
+    try { const x = new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`); return x.hostname.toLowerCase() !== own ? `${x.origin}${x.pathname.replace(/\/+$/, '')}/` : null; } catch (_) { return null; }
+  };
+  return (env.SHOP_URL && other(env.SHOP_URL)) || (env.SHOP_HOST && other(env.SHOP_HOST))
+    || (siteOf(req) !== 'both' && cfg && cfg.shop_url && other(String(cfg.shop_url).trim())) || `${req.protocol}://${req.headers.host}/shop/`;
 }
 
 // The customers' site may use only these API paths (everything under /api/shop/).
@@ -59,7 +64,8 @@ function scope(req, res, next) {
   if (site === 'billing') {
     if (req.path.startsWith('/api/shop/') || req.path === '/api/shop') return res.status(404).json({ ok: false, error: 'Not found.' });
     if (req.path === '/shop' || req.path.startsWith('/shop/')) {
-      if (env.SHOP_HOST || env.SHOP_URL) return res.redirect(302, shopUrl(req));
+      const to = shopUrl(req);
+      if (new URL(to).host !== req.headers.host) return res.redirect(302, to);       // never back to this same site
       return res.status(404).type('text/plain').send('Not found.');
     }
   }

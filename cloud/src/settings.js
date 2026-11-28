@@ -12,6 +12,7 @@ const DEFAULTS = {
   fssai: '',
   invoice_prefix: 'MPC',           // bill numbers: PREFIX/MMYY/T<counter>/<number>, e.g. MU/1126/T2/107
   bill_footer: 'THANK U VISIT AGAIN',
+  shop_url: 'https://mpccustomer.zeravista.com',   // the customers' site, for the QR poster and WhatsApp tracking links
   receipt_width: '80',
   print_copies: '1',               // 2 = customer copy + shop copy
   loyalty_enabled: '0',            // 1 = customers earn points on store and online bills
@@ -142,6 +143,9 @@ async function upgrade() {
   await db.query('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v=v', [UPGRADE_KEY, '1']);
 }
 
+// the settings last read (for code that cannot wait for the database)
+const cached = () => cache || DEFAULTS;
+
 async function publicSettings() {
   const s = await load();
   return Object.fromEntries(PUBLIC.map((k) => [k, s[k]]));
@@ -158,4 +162,4 @@ async function shopSettings() {
 // "NO.1,ARCOT PETTAI\nManapakkam" → "NO.1,ARCOT PETTAI, Manapakkam" for places that show the address on one line
 const oneLine = (a) => String(a || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean).join(', ');
 
-module.exports = { festival, photoUrl, shopBanners, shopSettings, DEFAULTS, load, save, publicSettings, counters, upgrade, oneLine, reset: () => { cache = null; } };
+module.exports = { festival, photoUrl, shopBanners, shopSettings, DEFAULTS, load, save, publicSettings, counters, upgrade, oneLine, cached, reset: () => { cache = null; } };

@@ -12,10 +12,50 @@ function range(q) {
   return [from, to];
 }
 const sum = async (sql, args) => paise((await db.one(sql, args)).s || '0');
+// what a bill line cost the shop: from the stock it came out of, or (no stock entered) the product's buying price
+const LINE_COST = 'IF(l.cost > 0, l.cost, ROUND(COALESCE(i.cost, 0) * l.qty, 2))';
+
+// The Reports page: the period at a glance (sales by day, category by day, best products, payments, busy hours).
+async function dashboard(from, to) {
+  const span = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;
+  const byMonth = span > 62;
+  const key = byMonth ? "DATE_FORMAT(x.business_date, '%Y-%m')" : "DATE_FORMAT(x.business_date, '%Y-%m-%d')";
+  const R = [from, to];
+  const FROM = 'FROM sale_lines l JOIN sales x ON x.id=l.sale_id LEFT JOIN items i ON i.id=l.item_id';
+  const s = await summary(from, to);
+  const days = await db.query(`SELECT ${key} d, COUNT(*) bills, SUM(x.total) sales FROM sales x WHERE x.business_date BETWEEN ? AND ? GROUP BY d`, R);
+  const profit = new Map((await db.query(`SELECT ${key} d, SUM(l.net) - SUM(${LINE_COST}) p ${FROM} WHERE x.business_date BETWEEN ? AND ? GROUP BY d`, R))
+    .map((r) => [r.d, r.p]));
+  const cats = await db.query(`SELECT COALESCE(c.name, 'Other') cat, ${key} d, SUM(l.net) sales ${FROM} LEFT JOIN categories c ON c.id=i.category_id
+    WHERE x.business_date BETWEEN ? AND ? GROUP BY cat, d`, R);
+  const top = await db.query(`SELECT l.name, l.unit, SUM(l.qty) qty, SUM(l.net) sales, SUM(l.net) - SUM(${LINE_COST}) profit ${FROM}
+    WHERE x.business_date BETWEEN ? AND ? GROUP BY l.item_id, l.name, l.unit ORDER BY sales DESC LIMIT 10`, R);
+  const pay = await db.query(`SELECT p.method, SUM(p.amount) amount FROM payments p JOIN sales x ON x.id=p.sale_id
+    WHERE x.business_date BETWEEN ? AND ? GROUP BY p.method ORDER BY amount DESC`, R);
+  const hours = await db.query('SELECT HOUR(x.created_at) h, COUNT(*) bills, SUM(x.total) sales FROM sales x WHERE x.business_date BETWEEN ? AND ? GROUP BY h ORDER BY h', R);
+  // every day (or month) of the period, empty ones too, so the chart has no gaps
+  const keys = [];
+  const d = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  while (d <= end && keys.length < 400) {
+    const k = d.toISOString().slice(0, byMonth ? 7 : 10);
+    if (keys[keys.length - 1] !== k) keys.push(k);
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  const dayMap = new Map(days.map((r) => [r.d, r]));
+  return {
+    summary: s, by: byMonth ? 'month' : 'day',
+    days: keys.map((k) => ({ d: k, sales: (dayMap.get(k) || {}).sales || '0.00', bills: Number((dayMap.get(k) || {}).bills || 0), profit: profit.get(k) || '0.00' })),
+    cats: cats.map((r) => ({ cat: r.cat, d: r.d, sales: r.sales })),
+    top: top.map((r) => ({ ...r, qty: qtyStr(milli(r.qty)) })), pay,
+    hours: hours.map((r) => ({ h: Number(r.h), bills: Number(r.bills), sales: r.sales })),
+  };
+}
 
 async function summary(from, to) {
   const s = await db.one(`SELECT COUNT(*) n, COALESCE(SUM(total),0) total, COALESCE(SUM(discount),0) disc FROM sales WHERE business_date BETWEEN ? AND ?`, [from, to]);
-  const cost = await sum('SELECT SUM(l.cost) s FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE x.business_date BETWEEN ? AND ?', [from, to]);
+  const cost = await sum(`SELECT SUM(${LINE_COST}) s FROM sale_lines l JOIN sales x ON x.id=l.sale_id LEFT JOIN items i ON i.id=l.item_id
+    WHERE x.business_date BETWEEN ? AND ?`, [from, to]);
   const ret = await db.one(`SELECT COALESCE(SUM(rl.amount),0) amount, COALESCE(SUM(rl.cost),0) cost FROM return_lines rl
     JOIN sale_returns r ON r.id=rl.return_id WHERE r.business_date BETWEEN ? AND ?`, [from, to]);
   const tend = {};
@@ -141,4 +181,4 @@ function csv(rows) {
 
 const list = () => Object.entries(REPORTS).map(([k, v]) => ({ name: k, title: v[0] }));
 
-module.exports = { summary, run, csv, list, range };
+module.exports = { summary, dashboard, run, csv, list, range };

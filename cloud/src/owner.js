@@ -19,30 +19,57 @@ async function priceList({ cat = '', q = '' } = {}) {
   const args = [];
   if (cat) { where.push('c.name=?'); args.push(cat); } else if (!q) where.push("i.unit='kg'");
   if (q) { where.push('(i.name LIKE ? OR i.name_ta LIKE ? OR i.sku=? OR i.id IN (SELECT item_id FROM barcodes WHERE code=?))'); args.push(`%${q}%`, `%${q}%`, q, q); }
-  const items = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, i.price, i.mrp, i.cost, i.on_hand, i.active, c.name cat
-    FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE ${where.join(' AND ')} ORDER BY c.name, i.name LIMIT 300`, args);
+  const today = todayIST();
+  const items = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, i.price, i.mrp, i.on_hand, i.reserved, i.active, c.name cat,
+      IF(i.offer_price IS NOT NULL AND ? BETWEEN COALESCE(i.offer_from, '2000-01-01') AND COALESCE(i.offer_to, '2999-12-31'), i.offer_price, NULL) offer
+    FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE ${where.join(' AND ')} ORDER BY c.name, i.name LIMIT 400`, [today, ...args]);
   const cats = await db.query(`SELECT DISTINCT c.name FROM categories c JOIN items i ON i.category_id=c.id WHERE i.active=1 ORDER BY c.name`);
-  return { items: items.map((i) => ({ ...i, on_hand: qtyStr(milli(i.on_hand)) })), cats: cats.map((c) => c.name) };
+  return { items: items.map(({ reserved, ...i }) => ({ ...i, on_hand: qtyStr(milli(i.on_hand)),
+    online: !!(i.active && Number(i.price) > 0 && milli(i.on_hand) - milli(reserved) > 0) })), cats: cats.map((c) => c.name) };
 }
 
+// Each change: { id, price?, offer?, stock? }. Price and offer per kg (or piece); the offer is for today only ('' removes it);
+// stock is what is on the shelf now, in kg (or pieces). Fruit and vegetables with a price and stock show in the online shop at once.
 async function savePrices(changes, user) {
-  if (!Array.isArray(changes) || !changes.length) throw new UserError('No price was changed.');
+  if (!Array.isArray(changes) || !changes.length) throw new UserError('Nothing was changed.');
+  const has = (v) => v !== undefined && v !== null && String(v).trim() !== '';
   let n = 0;
+  const counts = [];
   await db.tx(async (q) => {
     const now = nowIST();
+    const today = todayIST();
     for (const ch of changes.slice(0, 500)) {
-      const price = paise(ch.price, 'price');
-      if (price === null || price < 0) throw new UserError('A price is empty or negative.');
-      const it = await q.one('SELECT id, name, price, mrp FROM items WHERE id=? FOR UPDATE', [ch.id]);
+      const it = await q.one('SELECT id, name, unit, price, mrp, offer_price, offer_from, offer_to FROM items WHERE id=? FOR UPDATE', [ch.id]);
       if (!it) continue;
-      if (it.mrp !== null && price > paise(it.mrp)) throw new UserError(`${it.name}: ₹${rs(price)} is more than MRP ₹${it.mrp}.`);
-      if (it.price !== null && paise(it.price) === price) continue;
-      await q('UPDATE items SET price=?, active=1, updated_at=? WHERE id=?', [rs(price), now, it.id]);
-      await audit({ user_id: user.id, action: 'price_change', summary: `${it.name}: ₹${it.price ?? '-'} → ₹${rs(price)} (today's prices)` }, q);
-      n += 1;
+      let price = it.price === null ? null : paise(it.price);
+      if (has(ch.price)) {
+        const p = paise(ch.price, 'price');
+        if (p === null || p <= 0) throw new UserError(`${it.name}: enter a price above zero.`);
+        if (it.mrp !== null && Number(it.mrp) > 0 && p > paise(it.mrp)) throw new UserError(`${it.name}: ₹${rs(p)} is more than MRP ₹${it.mrp}.`);
+        if (price !== p) {
+          await q('UPDATE items SET price=?, active=1, updated_at=? WHERE id=?', [rs(p), now, it.id]);
+          await audit({ user_id: user.id, action: 'price_change', summary: `${it.name}: ₹${it.price ?? '-'} → ₹${rs(p)} (today's prices)` }, q);
+          n += 1;
+        }
+        price = p;
+      }
+      if (ch.offer !== undefined) {
+        if (!has(ch.offer)) {
+          if (it.offer_price !== null) { await q('UPDATE items SET offer_price=NULL, offer_from=NULL, offer_to=NULL, updated_at=? WHERE id=?', [now, it.id]); n += 1; }
+        } else {
+          const o = paise(ch.offer, 'offer price');
+          if (o === null || o <= 0 || price === null || o >= price) throw new UserError(`${it.name}: the offer price must be below the price.`);
+          await q('UPDATE items SET offer_price=?, offer_from=?, offer_to=?, updated_at=? WHERE id=?', [rs(o), today, today, now, it.id]);
+          await audit({ user_id: user.id, action: 'offer', summary: `${it.name}: today's offer ₹${rs(o)} (price ₹${rs(price)})` }, q);
+          n += 1;
+        }
+      }
+      if (has(ch.stock)) counts.push({ item_id: it.id, count: String(ch.stock) });
     }
   });
-  return n;
+  // shelf counts after the prices are saved (each one is its own stock entry with its reason)
+  for (const c of counts) await require('./catalog').setCount(c, user);
+  return { changed: n, stock: counts.length };
 }
 
 // ------------------------------------------------------------------ buy list: what to order, from what really sold

@@ -369,6 +369,32 @@ async function receipt(saleId) {
   };
 }
 
+// The customer asks for the bill after paying: they are added to today's saved bill, with the points they would have earned.
+async function setCustomer(saleId, cu, user) {
+  await db.tx(async (q) => {
+    const s = await q.one('SELECT id, bill_no, customer_id, total, business_date FROM sales WHERE id=? FOR UPDATE', [saleId]);
+    if (!s) throw new UserError('Bill not found.', 404);
+    if (s.customer_id) throw new UserError('This bill already has a customer.');
+    if (String(s.business_date).slice(0, 10) !== todayIST()) throw new UserError('A customer can be added only to today\'s bills.');
+    let customerId = null;
+    if (cu && cu.id) customerId = (await q.one('SELECT id FROM customers WHERE id=?', [cu.id]))?.id || null;
+    else if (cu && cu.phone) {
+      const phone = String(cu.phone).replace(/\D/g, '').slice(-10);
+      if (phone.length !== 10) throw new UserError('Customer mobile number must have 10 digits.');
+      const found = await q.one('SELECT id FROM customers WHERE phone=?', [phone]);
+      customerId = found ? found.id : (await q('INSERT INTO customers (name, phone, created_at) VALUES (?,?,?)',
+        [String(cu.name || 'Customer').trim().slice(0, 100) || 'Customer', phone, nowIST()])).insertId;
+    }
+    if (!customerId) throw new UserError('Choose the customer.');
+    const lr = loyalty.rules(await settings.load());
+    const pts = loyalty.pointsFor(paise(s.total), lr);
+    await q('UPDATE sales SET customer_id=?, points_earned=? WHERE id=?', [customerId, pts, s.id]);
+    if (pts) await loyalty.post(q, { customerId, kind: 'earn', points: pts, ref: s.bill_no, saleId: s.id, userId: user.id, at: nowIST() });
+    await audit({ user_id: user.id, action: 'bill_customer', summary: `${s.bill_no}: customer added after the sale` }, q);
+  });
+  return receipt(saleId);
+}
+
 async function markPrinted(saleId, user, reprint) {
   const s = await db.one('SELECT id, bill_no, print_count FROM sales WHERE id=?', [saleId]);
   if (!s) throw new UserError('Bill not found.', 404);
@@ -398,5 +424,5 @@ async function findCustomers(text) {
     ORDER BY name LIMIT 15`, digits.length >= 3 ? [`%${text}%`, `%${digits}%`] : [`%${text}%`]);
 }
 
-module.exports = { lastClosed, checkout, receipt, markPrinted, recentBills, openShift, startShift, closeShift, cashSummary, cashMove, findCustomers,
+module.exports = { setCustomer, lastClosed, checkout, receipt, markPrinted, recentBills, openShift, startShift, closeShift, cashSummary, cashMove, findCustomers,
   cleanCounter, METHODS, DELIVERY_SKU };

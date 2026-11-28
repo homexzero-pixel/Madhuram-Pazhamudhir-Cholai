@@ -275,3 +275,47 @@ test("the shop's details from its printed bill are filled in once, and the owner
   await db.query('DELETE FROM settings WHERE k IN (?)', [keys]);
   for (const [k, v] of Object.entries(before)) await settings.save({ [k]: v });
 });
+
+test('counter changes: customer added after the sale, today\'s prices with offer and stock, reports at a glance, customer download, low stock', async () => {
+  // a counter person can count stock and add product photos now (but not change products)
+  assert.equal((await cashier.post('/api/stock/count', { item_id: apple.id, count: '4' })).data.ok, true);
+  assert.equal((await cashier.post('/api/products', { name: 'X', price: '10' })).status, 403);
+  // a bill without a customer; the customer asks for it afterwards
+  const r = await cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 2', lines: [{ id: rice.id, qty: 1 }], payments: [{ method: 'cash', amount: '75' }] });
+  assert.equal(r.data.ok, true, JSON.stringify(r.data));
+  const after = await cashier.post(`/api/bills/${r.data.bill.id}/customer`, { customer: { phone: '98400 55566', name: 'Ravi' } });
+  assert.equal(after.data.ok, true, JSON.stringify(after.data));
+  assert.equal(after.data.bill.customer.phone, '9840055566');
+  assert.match((await cashier.post(`/api/bills/${r.data.bill.id}/customer`, { customer: { phone: '9840055567' } })).data.error, /already has a customer/);
+  // today's prices: price per kg, today's offer and the stock on the shelf in one save
+  const saved = await owner.post('/api/owner/prices', { changes: [{ id: apple.id, price: '200', offer: '180', stock: '2.5' }] });
+  assert.equal(saved.data.ok, true, JSON.stringify(saved.data));
+  assert.equal(saved.data.stock, 1);
+  let a = (await owner.get(`/api/products/${apple.id}`)).data.item;
+  assert.deepEqual([a.price, a.offer_price, a.on_hand], ['200.00', '180.00', '2.5']);
+  assert.match((await owner.post('/api/owner/prices', { changes: [{ id: apple.id, offer: '250' }] })).data.error, /below the price/);
+  await owner.post('/api/owner/prices', { changes: [{ id: apple.id, offer: '' }] });
+  a = (await owner.get(`/api/products/${apple.id}`)).data.item;
+  assert.equal(a.offer_price, null);
+  // the buying price can be changed on the product
+  const edit = await owner.post('/api/products', { id: apple.id, name: a.name, unit: 'kg', price: '200', cost: '150', active: true });
+  assert.equal(edit.data.ok, true, JSON.stringify(edit.data));
+  assert.equal(Number((await owner.get(`/api/products/${apple.id}`)).data.item.cost), 150);
+  // reports at a glance
+  const dash = (await owner.get('/api/reports/dashboard?period=month')).data;
+  assert.equal(dash.by, 'day');
+  assert.equal(dash.days[dash.days.length - 1].d, new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10));
+  assert.ok(dash.days.some((x) => Number(x.sales) > 0));
+  assert.ok(dash.top.length && dash.pay.length && dash.cats.length && dash.hours.length);
+  assert.equal((await cashier.get('/api/reports/dashboard')).status, 403);
+  // every customer for Excel (owner only)
+  const csv = await fetch(`${base}/api/customers/export`, { headers: { Cookie: owner.cookie } });
+  assert.match(csv.headers.get('content-disposition'), /customers_/);
+  const text = await csv.text();
+  assert.match(text, /^﻿?Name,Mobile,Email,Address,Points,Owes,Bills,Spent/);
+  assert.match(text, /Ravi,9840055566/);
+  assert.equal((await fetch(`${base}/api/customers/export`, { headers: { Cookie: cashier.cookie } })).status, 403);
+  // low stock: below the alert level, and selling with no stock
+  await owner.post('/api/products', { id: apple.id, name: a.name, unit: 'kg', price: '200', reorder_level: '5', active: true });
+  assert.ok((await owner.get('/api/products?status=alert')).data.items.some((x) => x.id === apple.id));
+});

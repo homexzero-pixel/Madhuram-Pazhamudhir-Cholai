@@ -27,7 +27,7 @@ async function loadCatalogue(force = false) {
     if (it.cat) count.set(it.cat, (count.get(it.cat) || 0) + 1 + it.sold * 5);
   }
   for (const [code, id, per] of data.barcodes) POS.byCode.set(code, { id, per: Money.milli(per) || 1000 });
-  POS.cats = [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 16).map((x) => x[0]);
+  POS.cats = [...count.entries()].sort((a, b) => b[1] - a[1]).map((x) => x[0]);
 }
 // Stock shown on the tiles is refreshed every minute (billing is never stopped by stock).
 async function refreshStock() {
@@ -282,12 +282,14 @@ function priceDialog() {
 }
 
 // ------------------------------------------------------------------ customer (F7)
-function customerDialog() {
+function customerDialog({ onPick, after } = {}) {
+  const pick = (c) => { if (onPick) onPick(c); else { POS.bill.customer = c; saveBill(); renderBill(); } };
   const d = modal(`<h3>Customer</h3><input id="cq" placeholder="Search name or mobile number" autofocus>
     <div class="results" id="cr" style="margin-top:8px"></div>
     <h3 style="margin-top:14px">New customer</h3><form class="grid2"><div><label>Mobile (10 digits)</label><input name="phone" inputmode="tel" required></div>
     <div><label>Name</label><input name="name"></div><div class="actions" style="grid-column:1/-1">
-    ${POS.bill.customer ? '<button type="button" id="cnone">Remove customer</button>' : ''}<button type="button" data-close>Close</button><button class="primary">Use this customer</button></div></form>`);
+    ${POS.bill.customer && !onPick ? '<button type="button" id="cnone">Remove customer</button>' : ''}<button type="button" data-close>Close</button><button class="primary">Use this customer</button></div></form>`,
+  { onClose: () => { if (after) after(); } });
   let t;
   $('#cq', d).addEventListener('input', (e) => {
     clearTimeout(t);
@@ -297,8 +299,8 @@ function customerDialog() {
         '<div class="muted">No match. Add as a new customer below.</div>';
       $$('#cr div[data-id]', d).forEach((row) => row.addEventListener('click', () => {
         const c = customers.find((x) => x.id === Number(row.dataset.id));
-        POS.bill.customer = { id: c.id, name: c.name, phone: c.phone, balance: c.balance, points: c.points };
-        saveBill(); renderBill(); d.close();
+        pick({ id: c.id, name: c.name, phone: c.phone, balance: c.balance, points: c.points });
+        d.close();
       }));
     }, 250);
   });
@@ -307,8 +309,8 @@ function customerDialog() {
     const f = formData(e.target);
     const phone = f.phone.replace(/\D/g, '').slice(-10);
     if (phone.length !== 10) { toast('Mobile number must have 10 digits.', true); return; }
-    POS.bill.customer = { phone, name: f.name.trim() || 'Customer' };
-    saveBill(); renderBill(); d.close();
+    pick({ phone, name: f.name.trim() || 'Customer' });
+    d.close();
   });
   if ($('#cnone', d)) $('#cnone', d).addEventListener('click', () => { POS.bill.customer = null; saveBill(); renderBill(); d.close(); });
 }
@@ -325,33 +327,55 @@ function holdCurrent() {
   POS.bill = newBill(); POS.sel = -1; saveBill(); renderBill();
   return t;
 }
-// F8: with items on the bill it is put on hold at once and a new bill starts; on an empty bill it shows the held bills.
+// F10: the bill goes on hold at once and a new bill starts (on an empty bill it shows the held bills).
 function holdKey() {
   if (POS.bill.lines.length) {
     const t = holdCurrent();
-    toast(`Bill held (${t.items} items, ${inr(t.total)}). Press F8 on an empty bill to recall it.`);
+    toast(`Bill ${heldList().length} on hold (${t.items} items, ${inr(t.total)}). F11 brings it back.`);
     return;
   }
-  holdDialog();
+  recallDialog();
 }
-function holdDialog() {
+const heldName = (b) => (b.customer && b.customer.name ? b.customer.name : '');
+function recall(i) {
+  const list = heldList();
+  const [b] = list.splice(i, 1);
+  if (!b) return;
+  localStorage.setItem(heldKey(), JSON.stringify(list));
+  if (POS.bill.lines.length) holdCurrent();
+  delete b.at; delete b.total; delete b.names;
+  POS.bill = b; POS.sel = b.lines.length - 1; saveBill(); renderBill();
+  toast(`Bill brought back${heldName(b) ? ` (${heldName(b)})` : ''}. Scan to add more.`);
+}
+// F11: the held bills, numbered 1, 2, 3…; the first is selected; press its number (or Enter) to bring it back.
+function recallDialog() {
   const held = heldList();
-  const d = modal(`<h3>Bills on hold (${held.length})</h3>
-    ${POS.bill.lines.length ? '<button class="primary" id="hold">Hold this bill and start a new one</button>' : ''}
-    <div class="results" style="margin-top:10px">${held.map((b, i) => `<div data-i="${i}"><span><b>${esc(b.at)}</b> · ${b.lines.length} items · <b>${inr(b.total || 0)}</b>
-      ${b.customer ? ` · ${esc(b.customer.name)}` : ''}<div class="held-lines">${(b.names || []).map((n) => `<div>${esc(n)}</div>`).join('')}</div></span>
-      <b>Recall ›</b></div>`).join('') || '<div class="muted">No bills on hold.</div>'}</div>
-    <p class="small muted">Recalling while a bill is open puts the open bill on hold first, so nothing is lost.</p>
-    <div class="actions"><button data-close>Close</button></div>`);
-  if ($('#hold', d)) $('#hold', d).addEventListener('click', () => { holdCurrent(); d.close(); toast('Bill held.'); });
-  $$('[data-i]', d).forEach((row) => row.addEventListener('click', () => {
-    const list = heldList();
-    const [b] = list.splice(Number(row.dataset.i), 1);
-    localStorage.setItem(heldKey(), JSON.stringify(list));
-    if (POS.bill.lines.length) holdCurrent();
-    delete b.at; delete b.total; delete b.names;
-    POS.bill = b; POS.sel = b.lines.length - 1; saveBill(); renderBill(); d.close();
-  }));
+  if (!held.length) { toast('No bills on hold. F10 holds the bill on screen.'); return; }
+  let sel = 0;
+  const d = modal(`<h3>Bills on hold</h3><p class="small muted">Press the number, or ↑ ↓ and Enter. The bill on screen is held first, so nothing is lost.</p>
+    <div class="results held-pick">${held.map((b, i) => `<div data-i="${i}" class="${i === 0 ? 'sel' : ''}"><span><span class="hnum">${i + 1}</span>
+      <b>${esc(heldName(b) || inr(b.total || 0))}</b>${heldName(b) ? ` · ${inr(b.total || 0)}` : ''} · ${b.lines.length} item${b.lines.length === 1 ? '' : 's'} · ${esc(b.at || '')}
+      <div class="held-lines">${(b.names || []).slice(0, 4).map((n) => `<div>${esc(n)}</div>`).join('')}${(b.names || []).length > 4 ? `<div>… ${b.names.length - 4} more</div>` : ''}</div></span>
+      <b>Bring back ›</b></div>`).join('')}</div>
+    <div class="actions"><button data-close>Close (Esc)</button></div>`);
+  d.tabIndex = -1;
+  const draw = () => $$('[data-i]', d).forEach((r, i) => r.classList.toggle('sel', i === sel));
+  $$('[data-i]', d).forEach((row) => row.addEventListener('click', () => { d.close(); recall(Number(row.dataset.i)); }));
+  d.addEventListener('keydown', (e) => {
+    if (/^[1-9]$/.test(e.key) && Number(e.key) <= held.length) { e.preventDefault(); d.close(); recall(Number(e.key) - 1); } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + held.length) % held.length; draw();
+    } else if (e.key === 'Enter' || e.key === 'F11') { e.preventDefault(); d.close(); recall(sel); }
+  });
+  setTimeout(() => d.focus(), 40);
+}
+// the held bills as small numbered chips in the top bar: tap one to bring it back
+function renderHeld() {
+  const box = $('#held');
+  if (!box) return;
+  const held = heldList();
+  box.innerHTML = held.map((b, i) => `<button type="button" class="hchip" data-h="${i}" title="Bring back (F11, then ${i + 1})"><span class="hnum">${i + 1}</span>
+    ${heldName(b) ? `<b>${esc(heldName(b))}</b> ` : ''}${inr(b.total || 0)}</button>`).join('');
+  $$('[data-h]', box).forEach((b) => b.addEventListener('click', () => recall(Number(b.dataset.h))));
 }
 function cancelBill() {
   if (!POS.bill.lines.length) return;
@@ -384,7 +408,9 @@ function payDialog() {
       ${B.order_ref ? `Customer paid by UPI, ref <b>${esc(B.order_ref)}</b> (check it in your UPI app).` : 'The customer pays when they get the order.'}
       <div class="row" style="margin-top:8px"><button type="button" class="primary" id="codB">Cash on delivery – collect later</button>
       ${B.order_ref ? '<button type="button" id="upiPaid">Paid by UPI (ref above)</button>' : ''}</div></div>` : '';
-  const d = modal(`<h3>Payment · <span style="color:var(--brand)">${inr(total)}</span></h3>${online}
+  const d = modal(`<div class="pay-head"><h3>Payment · <span style="color:var(--brand)">${inr(total)}</span></h3>
+      <button type="button" class="pay-cust" id="pcu">${C ? `${ico('user')} <b>${esc(C.name)}</b> ${esc(C.phone || '')} · change <kbd>F7</kbd>`
+    : `${ico('user')} Add customer <kbd>F7</kbd>`}</button></div>${online}
     <form><label>Cash given by customer ₹</label>
       <div class="row"><input name="cash" inputmode="decimal" autofocus style="flex:1;font-size:1.3rem">
         <button type="button" id="exact" class="primary">Exact ${inr(total)}</button></div>
@@ -427,6 +453,9 @@ function payDialog() {
     return { upi, card, credit, pts, cashUsed, given, remaining, nonCash };
   };
   if ($('#allpts', d)) $('#allpts', d).addEventListener('click', () => { f.points.value = Money.rs(ptsMax); calc(); f.cash.focus(); });
+  const toCustomer = () => { d.close('customer'); customerDialog({ after: () => { if (POS.bill.lines.length) payDialog(); } }); };
+  $('#pcu', d).addEventListener('click', toCustomer);
+  d.addEventListener('keydown', (e) => { if (e.key === 'F7') { e.preventDefault(); toCustomer(); } });
   if ($('#codB', d)) $('#codB', d).addEventListener('click', () => { d.close('ok'); complete([{ method: 'cod', amount: Money.rs(total) }]); });
   if ($('#upiPaid', d)) $('#upiPaid', d).addEventListener('click', () => { d.close('ok'); complete([{ method: 'upi', amount: Money.rs(total), reference: B.order_ref }]); });
   ['upi', 'card', 'cash', 'credit', 'points'].forEach((n) => f[n] && f[n].addEventListener('input', calc));
@@ -465,20 +494,26 @@ function billPreview(bill, { reprint = false } = {}) {
     <div class="actions" style="justify-content:space-between">
       <button class="primary big" id="bp"><kbd>P</kbd> Print</button>
       ${phone ? `<a class="btn big" id="bw" target="_blank" rel="noopener" href="${esc(waLink(phone, billText(bill)))}"><kbd>W</kbd> WhatsApp</a>`
-        : '<button class="big" id="bwc"><kbd>W</kbd> WhatsApp…</button>'}
+        : '<button class="big" id="bwc"><kbd>F7</kbd> Add customer</button>'}
       <button class="big" data-close><kbd>Enter</kbd> Next bill</button></div>`);
   d.classList.add('wide');
   const print = () => printBill(bill, reprint || bill.print_count > 0).then(() => { bill.print_count = (bill.print_count || 0) + 1; });
   $('#bp', d).addEventListener('click', print);
-  const wa = () => {
-    if (phone) { window.open(waLink(phone, billText(bill)), '_blank', 'noopener'); return; }
-    const p = prompt('Customer mobile number for the WhatsApp bill:');
-    if (p && p.replace(/\D/g, '').length >= 10) window.open(waLink(p, billText(bill)), '_blank', 'noopener');
-  };
-  if ($('#bwc', d)) $('#bwc', d).addEventListener('click', wa);
+  // the customer asks for the bill after paying: add them to this saved bill, then W sends it on WhatsApp
+  const addCustomer = () => customerDialog({ onPick: async (c) => {
+    try {
+      const r = await api(`/bills/${bill.id}/customer`, { method: 'POST', body: { customer: c } });
+      if (POS.last && POS.last.id === r.bill.id) POS.last = r.bill;
+      d.close();
+      billPreview(r.bill, { reprint });
+      toast(`${r.bill.customer.name} added to ${r.bill.bill_no}. Press W to send the bill on WhatsApp.`);
+    } catch (e) { toast(e.message, true); }
+  } });
+  const wa = () => { if (phone) window.open(waLink(phone, billText(bill)), '_blank', 'noopener'); else addCustomer(); };
+  if ($('#bwc', d)) $('#bwc', d).addEventListener('click', addCustomer);
   d.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
-    if (k === 'p') { e.preventDefault(); print(); } else if (k === 'w') { e.preventDefault(); wa(); } else if (k === 'enter' || k === 'n') { e.preventDefault(); d.close(); }
+    if (e.key === 'F7') { e.preventDefault(); if (!bill.customer) addCustomer(); } else if (k === 'p') { e.preventDefault(); print(); } else if (k === 'w') { e.preventDefault(); wa(); } else if (k === 'enter' || k === 'n') { e.preventDefault(); d.close(); }
   });
   setTimeout(() => $('#bp', d).focus(), 30);
   d.addEventListener('close', () => { const sc = $('#scan'); if (sc) sc.focus(); });
@@ -541,10 +576,16 @@ function moveResult(step) {
   return true;
 }
 
+// The category tabs in the order the shop works: best sellers, loose items, then its main categories, then the rest by sales.
+const CAT_ORDER = [/^food/i, /^veg/i, /^clean/i, /^shampoo/i, /^(flour|floor)/i, /^medicine/i, /^face ?cream/i, /^paste/i, /^tea ?powder/i];
+function orderedCats() {
+  const rank = (c) => { const i = CAT_ORDER.findIndex((re) => re.test(c)); return i < 0 ? CAT_ORDER.length : i; };
+  return POS.cats.map((c, i) => [c, rank(c), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).map((x) => x[0]);
+}
 function renderTiles() {
   const box = $('#tiles');
   if (!box) return;
-  $('#cats').innerHTML = [['', 'Best sellers'], ['_loose', 'Loose & no MRP'], ...POS.cats.map((c) => [c, c])].map(([v, l]) =>
+  $('#cats').innerHTML = [['', 'Best sellers'], ['_loose', 'Loose & no MRP'], ...orderedCats().map((c) => [c, c])].map(([v, l]) =>
     `<button data-c="${esc(v)}" class="${POS.tileCat === v ? 'on' : ''}">${esc(l)}</button>`).join('');
   $$('#cats button').forEach((b) => b.addEventListener('click', () => { POS.tileCat = b.dataset.c; renderTiles(); $('#scan').focus(); }));
   const all = [...POS.byId.values()];
@@ -579,6 +620,7 @@ function renderBill() {
   const t = totals();
   const hn = heldList().length;
   if ($('#heldn')) $('#heldn').textContent = hn ? String(hn) : '';
+  renderHeld();
   $('#total').textContent = inr(t.total);
   $('#count').textContent = `${t.items} item${t.items === 1 ? '' : 's'}${t.saved ? ` · saves ${inr(t.saved)} on MRP` : ''}`;
   $('#cust').innerHTML = (b.order_no ? `<span class="pill">Online order ${esc(b.order_no)}</span> ` : '') +
@@ -590,7 +632,7 @@ function renderShift() {
   const box = $('#shiftbox');
   if (!box) return;
   if (POS.shift) {
-    box.innerHTML = `<span class="pill">Shift open · ${esc(POS.shift.cashier)} · opening ${inr(POS.shift.opening_float)}</span>`;
+    box.innerHTML = `<span class="pill">${esc(POS.shift.cashier)}</span>`;
     return;
   }
   const last = POS.lastClosed;
@@ -611,19 +653,27 @@ function renderShift() {
   }); });
 }
 async function refreshShift() {
-  const { shift, last_closed: lastClosed } = await api(`/shift?counter=${encodeURIComponent(myCounter())}`);
+  let { shift, last_closed: lastClosed } = await api(`/shift?counter=${encodeURIComponent(myCounter())}`);
+  if (!shift && can('cash') && !POS.opening) {          // open it at once, carrying on from the last closing count
+    POS.opening = true;
+    try {
+      await api('/shift/open', { method: 'POST', body: { counter: myCounter(), float: lastClosed ? String(lastClosed.counted) : '0' } });
+      ({ shift, last_closed: lastClosed } = await api(`/shift?counter=${encodeURIComponent(myCounter())}`));
+    } catch (e) { toast(e.message, true); } finally { POS.opening = false; }
+  }
   POS.shift = shift;
   POS.lastClosed = lastClosed;
   renderShift();
 }
 
+const exactCash = () => { const t = Money.rs(totals().total); complete([{ method: 'cash', amount: t, tendered: t }]); };
 function keys(e) {
   if ($('dialog[open]')) return;
   const inScan = e.target.id === 'scan';
   const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) && !inScan;
   const fk = { F2: () => $('#scan').focus(), F3: () => complete([{ method: 'upi', amount: Money.rs(totals().total) }]), F4: changeQty,
-    F5: priceDialog, F7: customerDialog, F8: holdKey, F9: cancelBill,
-    F10: () => { const t = Money.rs(totals().total); complete([{ method: 'cash', amount: t, tendered: t }]); }, F12: payDialog };
+    F5: priceDialog, F6: exactCash, F7: () => customerDialog(), F8: () => toast('Hold is F10 now, and the bills on hold are F11.'), F9: cancelBill,
+    F10: holdKey, F11: recallDialog, F12: payDialog };
   if (fk[e.key]) { e.preventDefault(); if (!typing) fk[e.key](); return; }
   if (typing) return;
   if (inScan && e.key === 'ArrowDown' && moveResult(1)) { e.preventDefault(); return; }
@@ -653,8 +703,8 @@ App.views.bill = async (main) => {
   POS.sel = POS.bill.lines.length - 1;
   main.innerHTML = `<div class="pos">
     <div class="pos-left">
-      <div class="pos-head"><button class="counter-btn" id="pc">${esc(myCounter())}</button><span id="shiftbox"></span>
-        <span class="muted small" id="status" style="flex:1"></span></div>
+      <div class="pos-head"><button class="counter-btn" id="pc" title="Change counter">${esc(myCounter())}</button><span id="shiftbox"></span>
+        <div class="held-strip" id="held"></div><span class="muted small" id="status"></span></div>
       <input id="scan" class="scan" placeholder="Scan barcode, or type name / PLU / code and press Enter" autocomplete="off" autofocus>
       <div class="results" id="results" hidden></div>
       <div class="cats" id="cats"></div>
@@ -664,13 +714,13 @@ App.views.bill = async (main) => {
       <div class="row cust"><span id="cust" style="flex:1"></span><button id="cbtn">Customer F7</button></div>
       <div class="bill"><div class="bill-lines" id="lines"></div>
         <div class="bill-total"><span class="muted" id="count"></span><span class="t" id="total">₹0.00</span></div></div>
-      <div class="pay-row"><button class="primary big paybtn" id="pcash">Cash exact F10</button><button class="primary big paybtn" id="pupi">UPI F3</button>
+      <div class="pay-row"><button class="primary big paybtn" id="pcash">Cash exact F6</button><button class="primary big paybtn" id="pupi">UPI F3</button>
         <button class="big paybtn" id="pany">Payment F12</button></div>
       <div class="row"><button id="bqty">Qty F4</button><button id="bprice">Price/Disc F5</button><button id="bdel">Remove Del</button>
-        <button id="bhold">Hold F8 <span class="pill" id="heldn"></span></button><button class="danger" id="bcancel">Cancel F9</button>
-        <button id="blast" ${POS.last ? '' : 'disabled'}>Last bill</button></div>
+        <button id="bhold">Hold F10</button><button id="brecall">On hold F11 <span class="pill" id="heldn"></span></button>
+        <button class="danger" id="bcancel">Cancel F9</button><button id="blast" ${POS.last ? '' : 'disabled'}>Last bill</button></div>
       <div class="keys"><span><kbd>F2</kbd> scan box</span><span><kbd>↑↓</kbd> select line</span><span><kbd>+</kbd>/<kbd>−</kbd> qty</span>
-        <span><kbd>3*code</kbd> = 3 pieces</span></div>
+        <span><kbd>3*code</kbd> = 3 pieces</span><span><kbd>F10</kbd> hold</span><span><kbd>F11</kbd> bills on hold</span></div>
     </div></div>`;
   const scan = $('#scan');
   scan.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); onScan(e); } });
@@ -679,14 +729,15 @@ App.views.bill = async (main) => {
     if (v.length >= 2 && !/^\d+$/.test(v)) showResults(search(v.replace(/^\d+(\.\d+)?\s*[*xX]\s*/, ''))); else showResults([]);
   });
   $('#pc').addEventListener('click', () => pickCounter(route));
-  $('#cbtn').addEventListener('click', customerDialog);
-  $('#pcash').addEventListener('click', () => { const t = Money.rs(totals().total); complete([{ method: 'cash', amount: t, tendered: t }]); });
+  $('#cbtn').addEventListener('click', () => customerDialog());
+  $('#pcash').addEventListener('click', exactCash);
   $('#pupi').addEventListener('click', () => complete([{ method: 'upi', amount: Money.rs(totals().total) }]));
   $('#pany').addEventListener('click', payDialog);
   $('#bqty').addEventListener('click', changeQty);
   $('#bprice').addEventListener('click', priceDialog);
   $('#bdel').addEventListener('click', removeLine);
-  $('#bhold').addEventListener('click', () => (POS.bill.lines.length ? holdKey() : holdDialog()));
+  $('#bhold').addEventListener('click', holdKey);
+  $('#brecall').addEventListener('click', recallDialog);
   $('#bcancel').addEventListener('click', cancelBill);
   $('#blast').addEventListener('click', () => POS.last && billPreview(POS.last, { reprint: true }));
   renderTiles();
@@ -699,8 +750,16 @@ App.views.bill = async (main) => {
     setTimeout(() => { if (!$('dialog[open]') && document.activeElement !== scan) scan.focus(); }, 0);
   };
   document.addEventListener('click', keepFocus);
+  const refocus = (e) => {
+    if (e.target.tagName !== 'DIALOG') return;
+    setTimeout(() => { if (!$('dialog[open]') && document.activeElement !== scan && scan.isConnected) scan.focus(); }, 0);
+  };
+  document.addEventListener('close', refocus, true);
   const refresh = setInterval(() => loadCatalogue().then(renderTiles).catch(() => {}), 60000);
   const stockTimer = setInterval(() => { if (document.visibilityState === 'visible') refreshStock().then(() => { if (!$('dialog[open]')) renderTiles(); }).catch(() => {}); }, 60000);
-  App.leave = () => { document.removeEventListener('keydown', keys); document.removeEventListener('click', keepFocus); clearInterval(refresh); clearInterval(stockTimer); };
+  App.leave = () => {
+    document.removeEventListener('keydown', keys); document.removeEventListener('click', keepFocus); document.removeEventListener('close', refocus, true);
+    clearInterval(refresh); clearInterval(stockTimer);
+  };
   scan.focus();
 };

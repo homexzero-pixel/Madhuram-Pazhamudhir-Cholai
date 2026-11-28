@@ -330,7 +330,7 @@ function pickCounter(after) {
 const MENU = [
   ['bill', 'Billing', 'bill', 'bill', 'Sales'], ['orders', 'Online orders', 'orders', 'bag', 'Sales'], ['bills', 'Bills', 'bill', 'file', 'Sales'],
   ['returns', 'Returns', 'bill', 'undo', 'Sales'], ['cash', 'Cash closing', 'cash', 'wallet', 'Sales'],
-  ['products', 'Products & stock', 'stock_view', 'box', 'Stock'], ['purchases', 'Purchases', 'purchase', 'truck', 'Stock'],
+  ['products', 'Products & stock', 'stock_view', 'box', 'Stock'], ['lowstock', 'Low stock', 'stock_view', 'alert', 'Stock'],
   ['customers', 'Customers', 'customers', 'users', 'People'], ['staff', 'Staff', 'users', 'user', 'People'],
   ['dashboard', 'Dashboard', 'reports', 'chart', 'Reports'], ['reports', 'Reports', 'reports', 'pie', 'Reports'], ['owner', 'Daily tools', 'daily', 'tools', 'Reports'],
   ['settings', 'Settings & backup', 'settings', 'settings', 'Admin'], ['install', 'Install on this PC', null, 'download', 'Admin'],
@@ -393,11 +393,24 @@ async function route() {
   $('#side').classList.remove('open');
   if (App.leave) { App.leave(); App.leave = null; }
   const main = $('#main');
-  main.innerHTML = '<div class="loading">Loading…</div>';
+  const tok = (App.routeTok = (App.routeTok || 0) + 1);
+  main.classList.add('routing');
+  document.body.classList.add('routing');
+  const slow = setTimeout(() => { if (App.routeTok === tok && main.classList.contains('routing')) main.innerHTML = '<div class="loading">Loading…</div>'; }, 6000);
+  const box = {
+    get innerHTML() { return main.innerHTML; },
+    set innerHTML(v) { if (App.routeTok === tok) main.innerHTML = v; },
+    get classList() { return main.classList; },
+    querySelector: (q) => main.querySelector(q),
+    querySelectorAll: (q) => main.querySelectorAll(q),
+  };
   try {
-    await App.views[target](main);
+    await App.views[target](box);
   } catch (e) {
-    main.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    if (App.routeTok === tok) main.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  } finally {
+    clearTimeout(slow);
+    if (App.routeTok === tok) { main.classList.remove('routing'); document.body.classList.remove('routing'); }
   }
 }
 window.addEventListener('hashchange', route);
@@ -700,14 +713,16 @@ App.views.products = async (main) => {
       <input id="pq" placeholder="Scan barcode or search name / code" style="max-width:380px" autofocus>
       <select id="ps" style="max-width:200px"><option value="all">All products</option><option value="active">Selling now</option>
         <option value="inactive">Not selling (no price)</option><option value="low">Low stock</option><option value="nophoto">No photo (best sellers first)</option></select>
-      ${can('products') ? `<button class="primary" id="padd">+ Add product</button><button id="pimp">Import CSV</button>
-        <button id="pbulk">${ico('image')} Bulk photos</button><button id="pmode">${ico('camera')} Photo mode</button>` : ''}
+      ${can('products') ? '<button class="primary" id="padd">+ Add product</button><button id="pimp">Import CSV</button>' : ''}
+      ${can('receive') ? `<button id="pcount">${ico('scan')} Stock count (scan)</button>` : ''}
+      ${can('photos') ? `<button id="pbulk">${ico('image')} Bulk photos</button><button id="pmode">${ico('camera')} Photo mode</button>` : ''}
     </div><div id="plist"></div><div id="pmore"></div>`;
   let offset = 0;
   const load = async (more = false) => {
     offset = more ? offset + 50 : 0;
     const qs = new URLSearchParams({ q: $('#pq').value, status: $('#ps').value, offset });
     const { items, total } = await api(`/products?${qs}`);
+    if (!$('#plist')) return;                     // another screen is open now
     const rows = items.map((i) => `<tr class="click" data-id="${i.id}"><td><div class="row" style="flex-wrap:nowrap;gap:8px">
       ${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy">` : '<span class="thumb none"></span>'}
       <span>${esc(i.name)}${i.name_ta ? `<div class="small ta muted">${esc(i.name_ta)}</div>` : ''}</span></div></td>
@@ -718,31 +733,81 @@ App.views.products = async (main) => {
     if (!more) $('#plist').innerHTML = `<p class="small muted">${total} products</p><table><tbody id="ptb"><tr><th>Product</th><th class="hide-sm">Codes</th>
       <th class="r">Price</th><th class="r">Stock</th><th class="hide-sm"></th></tr></tbody></table>`;
     $('#ptb').insertAdjacentHTML('beforeend', rows);
-    $$('#ptb tr[data-id]:not([data-b])').forEach((tr) => { tr.dataset.b = 1; tr.addEventListener('click', () => productDialog(Number(tr.dataset.id), () => load())); });
+    $$('#ptb tr[data-id]:not([data-b])').forEach((tr) => { tr.dataset.b = 1; tr.addEventListener('click', () => productDialog(Number(tr.dataset.id), () => load(), { after: refocus })); });
     $('#pmore').innerHTML = offset + 50 < total ? '<button id="more" style="margin-top:10px">Show more</button>' : '';
     if ($('#more')) $('#more').addEventListener('click', () => load(true));
   };
   let t;
   $('#pq').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => load(), 300); });
   $('#ps').addEventListener('change', () => load());
-  if ($('#padd')) $('#padd').addEventListener('click', () => productDialog(null, () => load()));
-  // Scan or type + Enter: open the product; a new barcode opens "Add product" with the barcode filled in
+  // after any window closes, the search box is ready for the next scan
+  const refocus = () => setTimeout(() => { const q = $('#pq'); if (q && !$('dialog[open]')) { q.focus(); q.select(); } }, 0);
+  if ($('#padd')) $('#padd').addEventListener('click', () => productDialog(null, () => load(), { after: refocus }));
+  if ($('#pcount')) $('#pcount').addEventListener('click', () => countByScan(() => load()));
+  // Scan or type + Enter: open the product; a barcode that is not in the list opens "Add product" with it filled in
+  const looksLikeCode = (v) => /^[0-9A-Za-z-]{4,32}$/.test(v) && /\d{4}/.test(v);
   $('#pq').addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
+    clearTimeout(t);
     const v = $('#pq').value.trim();
     if (!v) return;
     const { items } = await api(`/products?q=${encodeURIComponent(v)}`);
     const exact = items.find((i) => i.codes.includes(v) || i.sku === v || i.plu === v) || (items.length === 1 ? items[0] : null);
-    if (exact) { productDialog(exact.id, () => load()); return; }
-    if (/^\d{6,14}$/.test(v) && can('products')) { productDialog(null, () => load(), { barcode: v }); return; }
+    if (exact) { productDialog(exact.id, () => load(), { after: refocus }); return; }
+    if (looksLikeCode(v)) {
+      if (can('products')) { toast(`Barcode ${v} is new: add the product.`); productDialog(null, () => load(), { barcode: v, after: refocus }); return; }
+      toast(`No product has barcode ${v}. Ask the owner to add it.`, true); $('#pq').select(); return;
+    }
     load();
   });
   if ($('#pimp')) $('#pimp').addEventListener('click', () => importDialog(() => load()));
   if ($('#pbulk')) $('#pbulk').addEventListener('click', () => bulkPhotos(() => load()));
   if ($('#pmode')) $('#pmode').addEventListener('click', () => photoMode(() => load()));
   await load();
+  $('#pq').focus();
 };
+
+// Stock count by scanning: scan a pack, type how many are on the shelf, Enter, scan the next. A new barcode can be added as a product.
+function countByScan(onDone) {
+  const d = modal(`<h3>Stock count</h3><p class="small muted">Scan a product (or type its name or code and press Enter), type the quantity on the shelf, press Enter.</p>
+    <input id="csq" placeholder="Scan barcode" autocomplete="off" autofocus>
+    <div id="csbox" style="margin-top:10px"></div><div id="cslog" class="small" style="margin-top:10px;max-height:180px;overflow:auto"></div>
+    <div class="actions"><button data-close>Done</button></div>`, { onClose: () => { if (onDone) onDone(); } });
+  const box = $('#csbox', d);
+  const q = $('#csq', d);
+  const show = (it) => {
+    box.innerHTML = `<div class="card"><b>${esc(it.name)}</b> <span class="muted small">${esc(it.sku)}</span>
+      <div class="small">Stock in the computer: <b>${esc(it.on_hand)} ${esc(it.unit)}</b></div>
+      <form id="csf" class="row" style="margin-top:8px"><input name="count" inputmode="decimal" placeholder="Counted ${it.unit === 'kg' ? 'kg' : 'pieces'}" required style="max-width:180px">
+        <button class="primary">Save count</button></form></div>`;
+    const f = $('#csf', box);
+    f.count.focus();
+    f.addEventListener('submit', (e) => { e.preventDefault(); submitting($('button', f), async () => {
+      const r = await api('/stock/count', { method: 'POST', body: { item_id: it.id, count: f.count.value } });
+      $('#cslog', d).insertAdjacentHTML('afterbegin', `<div>${esc(it.name)}: <b>${esc(r.on_hand)} ${esc(it.unit)}</b></div>`);
+      box.innerHTML = '';
+      q.value = ''; q.focus();
+    }); });
+  };
+  q.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const v = q.value.trim();
+    if (!v) return;
+    const { items } = await api(`/products?q=${encodeURIComponent(v)}`);
+    const it = items.find((i) => i.codes.includes(v) || i.sku === v || i.plu === v) || (items.length === 1 ? items[0] : null);
+    if (it) { show(it); return; }
+    if (items.length > 1) {
+      box.innerHTML = `<div class="results">${items.slice(0, 8).map((i) => `<div data-id="${i.id}"><span>${esc(i.name)}</span><span class="small muted">${esc(i.on_hand)} ${esc(i.unit)}</span></div>`).join('')}</div>`;
+      $$('[data-id]', box).forEach((r) => r.addEventListener('click', () => show(items.find((i) => i.id === Number(r.dataset.id)))));
+      return;
+    }
+    box.innerHTML = `<div class="card"><b class="bad">No product has ${esc(v)}.</b>
+      ${can('products') ? ' <button class="primary" id="csnew">Add it as a new product</button>' : ' Ask the owner to add it.'}</div>`;
+    if ($('#csnew', box)) $('#csnew', box).addEventListener('click', () => productDialog(null, (item) => { if (item) show({ ...item, codes: [v] }); }, { barcode: v }));
+  });
+}
 
 // Add / edit a product. Also used at the counter for an unknown barcode (`preset.barcode`). onSaved(item) is called after saving.
 async function productDialog(id, onSaved, preset = {}) {
@@ -756,7 +821,7 @@ async function productDialog(id, onSaved, preset = {}) {
   const d = modal(`<h3>${id ? 'Product' : 'Add product'}</h3>
     <form id="pf">
       ${id ? `<div class="photo-row"><div class="photo" id="ph">${item.image ? `<img src="${esc(item.image)}" alt="">` : '<span>No photo</span>'}</div>
-        ${can('products') ? `<div><label class="btn" for="phf">${ico('camera')} Take or choose photo</label><input id="phf" type="file" accept="image/*" capture="environment" hidden>
+        ${can('photos') ? `<div><label class="btn" for="phf">${ico('camera')} Take or choose photo</label><input id="phf" type="file" accept="image/*" capture="environment" hidden>
           ${item.image ? '<button type="button" class="danger" id="phx">Remove photo</button>' : ''}
           <div class="small muted">${item.image_source === 'openfoodfacts' ? 'Photo: Open Food Facts' : 'Shown in the online shop and on the billing tiles.'}</div></div>` : ''}</div>` : ''}
       <label>Name (English)</label><input name="name" value="${esc(item.name)}" required ${id ? '' : 'autofocus'}>
@@ -769,14 +834,16 @@ async function productDialog(id, onSaved, preset = {}) {
         <div><label>HSN</label><input name="hsn" value="${esc(item.hsn)}"></div></div>
       <div class="grid3"><div><label>Category</label><input name="cat" value="${esc(item.cat)}" list="catlist"></div>
         <div><label>PLU (loose items)</label><input name="plu" inputmode="numeric" value="${esc(item.plu)}"></div>
-        <div><label>Reorder when stock ≤</label><input name="reorder_level" inputmode="decimal" value="${esc(item.reorder_level)}"></div></div>
+        <div><label>Low stock alert when stock ≤</label><input name="reorder_level" inputmode="decimal" value="${esc(item.reorder_level)}"></div></div>
+      <div class="grid2"><div><label>Buying price ₹ (<span id="cper">${item.unit === 'kg' ? 'per kg' : 'per piece'}</span>)</label>
+        <input name="cost" inputmode="decimal" value="${esc(Number(item.cost) ? Number(item.cost).toFixed(2) : '')}" placeholder="What the shop pays"></div>
+        <div><label>Profit</label><div id="cprofit" class="small" style="padding:10px 0"></div></div></div>
       ${secs.length ? `<label>Section in the online shop</label><select name="shop_section"><option value="">Automatic (from the name)</option>
         ${secs.map((x) => `<option value="${x.key}" ${item.shop_section === x.key ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : ''}
       <label>Barcodes (click and scan)</label>
       <div class="row"><input id="bcscan" placeholder="Scan the barcode here" autocomplete="off" style="flex:1"><button type="button" id="bcadd">Add</button></div>
       <div id="bclist" class="chips-list"></div><input type="hidden" name="codes" value="${esc(item.codes.join(','))}">
-      ${id ? '' : `<div class="grid2"><div><label>Stock now (opening)</label><input name="opening_qty" inputmode="decimal" placeholder="0"></div>
-        <div><label>Purchase cost ₹ (per piece / kg)</label><input name="cost" inputmode="decimal"></div></div>`}
+      ${id ? '' : '<div class="grid2"><div><label>Stock now (opening)</label><input name="opening_qty" inputmode="decimal" placeholder="0"></div><div></div></div>'}
       <label class="row" style="font-weight:400"><input type="checkbox" name="active" style="width:auto" ${item.active ? 'checked' : ''}> Selling (shows at the counter)</label>
       ${id ? `<p>Stock now: <b>${esc(item.on_hand)} ${esc(item.unit)}</b> · SKU ${esc(item.sku)}</p>` : ''}
       <div class="actions">
@@ -787,6 +854,17 @@ async function productDialog(id, onSaved, preset = {}) {
     ${moves.length ? `<h3 style="margin-top:14px">Stock history</h3><div style="max-height:200px;overflow:auto"><table>${moves.map((m) => `<tr><td class="small">${esc(m.at.slice(0, 16))}</td>
       <td>${esc(m.kind)}</td><td class="r">${esc(Number(m.qty))}</td><td class="small">${esc(m.ref)} ${esc(m.reason)}</td><td class="small">${esc(m.who || '')}</td></tr>`).join('')}</table></div>` : ''}`);
   if (!editable) $$('input, select', $('#pf', d)).forEach((el) => { el.disabled = true; });
+  if (preset.after) d.addEventListener('close', preset.after);
+  // profit per kg / piece from the buying and selling price
+  const pf = $('#pf', d);
+  const profit = () => {
+    const sell = Money.paise(pf.price.value); const buy = Money.paise(pf.cost.value);
+    $('#cper', d).textContent = pf.unit.value === 'kg' ? 'per kg' : 'per piece';
+    $('#cprofit', d).innerHTML = sell && buy ? `<b class="${sell - buy >= 0 ? 'ok' : 'bad'}">${inr(sell - buy)} ${pf.unit.value === 'kg' ? 'per kg' : 'per piece'}</b>
+      (${Math.round(((sell - buy) / sell) * 100)}% of the selling price)` : '<span class="muted">Type both prices to see it.</span>';
+  };
+  ['price', 'cost', 'unit'].forEach((n) => pf[n].addEventListener(n === 'unit' ? 'change' : 'input', profit));
+  profit();
   if ($('#phf', d)) $('#phf', d).addEventListener('change', (e) => submitting(null, async () => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1018,22 +1096,24 @@ App.views.dashboard = async (main) => {
 };
 
 // ================================================================== Staff logins
+const ROLE_NAMES = { owner: 'Owner', manager: 'Manager', cashier: 'Counter person', purchaser: 'Purchaser', auditor: 'Auditor' };
 App.views.staff = async (main) => {
   const { users, roles } = await api('/users');
   main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Staff logins</h1><button class="primary" id="uadd">+ Add login</button></div>
     <p class="muted small">One login per person. Owner and manager PINs approve discounts and price changes at the counter.</p>
     <table><tr><th>Name</th><th>Login name</th><th>Role</th><th>PIN</th><th>Status</th></tr>${users.map((u) => `<tr class="click" data-id="${u.id}">
-      <td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td>${u.has_pin ? 'set' : '-'}</td>
+      <td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${esc(ROLE_NAMES[u.role] || u.role)}</td><td>${u.has_pin ? 'set' : '-'}</td>
       <td>${u.active ? '<span class="pill">active</span>' : '<span class="pill off">disabled</span>'}</td></tr>`).join('')}</table>
-    <div class="card small" style="margin-top:14px"><b>Roles:</b> Owner: everything. Manager: everything except settings and staff.
-      Cashier: billing, own cash drawer, customers. Purchaser: products and stock. Auditor: reports only.</div>`;
+    <div class="card small" style="margin-top:14px"><b>Counter person:</b> billing, their own cash drawer, customers, online orders, stock updates
+      (add stock, stock count) and product photos. They cannot change prices. <b>Owner:</b> everything.</div>`;
   const edit = (u) => {
     const d = modal(`<h3>${u ? 'Edit login' : 'Add login'}</h3><form>
       <div class="grid2"><div><label>Name</label><input name="name" value="${esc(u ? u.name : '')}" required autofocus></div>
       <div><label>Login name</label><input name="username" value="${esc(u ? u.username : '')}" ${u ? 'readonly' : ''} required autocomplete="off"></div></div>
-      <div class="grid2"><div><label>Role</label><select name="role">${roles.map((r) => `<option ${u && u.role === r ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+      <div class="grid2"><div><label>Role</label>${u && u.role !== 'cashier' ? `<select name="role">${roles.map((r) => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${esc(ROLE_NAMES[r] || r)}</option>`).join('')}</select>`
+    : '<input value="Counter person" readonly><input type="hidden" name="role" value="cashier">'}</div>
       <div><label>${u ? 'New password (empty = keep)' : 'Password'}</label><input name="password" type="text" autocomplete="new-password" ${u ? '' : 'required minlength="6"'}></div></div>
-      <div class="grid2"><div><label>Approval PIN (4–6 digits${u ? ', empty = keep' : ', managers/owner'})</label><input name="pin" inputmode="numeric" autocomplete="off"></div>
+      <div class="grid2"><div><label>Approval PIN (4–6 digits${u ? ', empty = keep' : ', not needed for a counter person'})</label><input name="pin" inputmode="numeric" autocomplete="off"></div>
       <div><label>&nbsp;</label><label class="row" style="font-weight:400"><input type="checkbox" name="active" style="width:auto" ${!u || u.active ? 'checked' : ''}> Active (can log in)</label></div></div>
       <div class="actions"><button type="button" data-close>Cancel</button><button class="primary">Save</button></div></form>`);
     $('form', d).addEventListener('submit', (e) => { e.preventDefault(); submitting($('button.primary', d), async () => {
@@ -1087,6 +1167,7 @@ App.views.settings = async (main) => {
       <h2>Online orders (customers order from their phone)</h2>
       <label class="row" style="font-weight:400"><input type="checkbox" name="online_enabled" style="width:auto" ${s.online_enabled === '1' ? 'checked' : ''}>
         <b>Take online orders</b> (customer site: <a href="${esc(App.shopUrl || '/shop/')}" target="_blank" rel="noopener">${esc(App.shopUrl || `${location.origin}/shop/`)}</a>)</label>
+      <div class="grid2">${f('shop_url', 'Customer website address (QR poster, WhatsApp tracking links)', 'placeholder="https://mpccustomer.zeravista.com"')}<div></div></div>
       <div class="grid3"><div><label class="row" style="font-weight:400"><input type="checkbox" name="online_pickup" style="width:auto" ${s.online_pickup === '1' ? 'checked' : ''}> Takeaway (customer collects)</label></div>
         <div><label class="row" style="font-weight:400"><input type="checkbox" name="online_delivery" style="width:auto" ${s.online_delivery === '1' ? 'checked' : ''}> Home delivery</label></div>
         ${f('online_area', 'Delivery area', 'placeholder="Within 3 km of the shop"')}</div>

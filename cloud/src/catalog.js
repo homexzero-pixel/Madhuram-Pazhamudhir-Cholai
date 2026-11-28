@@ -127,12 +127,15 @@ async function search({ q = '', status = 'all', limit = 50, offset = 0 }) {
   if (status === 'active') where.push('i.active=1');
   if (status === 'inactive') where.push('i.active=0');
   if (status === 'low') where.push('i.active=1 AND i.on_hand <= i.reorder_level');
+  if (status === 'alert') where.push('i.active=1 AND i.reorder_level > 0 AND i.on_hand <= i.reorder_level');   // below the low stock alert
+  if (status === 'out') where.push('i.active=1 AND i.price IS NOT NULL AND i.on_hand <= 0');
   if (status === 'noprice') where.push('i.price IS NULL');
   if (status === 'nophoto') where.push('i.active=1 AND i.image IS NULL');
   const sql = `SELECT i.*, c.name cat, (SELECT GROUP_CONCAT(code) FROM barcodes WHERE item_id=i.id) codes
      FROM items i LEFT JOIN categories c ON c.id=i.category_id ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
      ORDER BY ${status === 'nophoto' ? `(SELECT COUNT(*) FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE l.item_id=i.id
-       AND x.business_date > DATE_SUB(CURDATE(), INTERVAL 60 DAY)) DESC, i.on_hand > 0 DESC,` : ''} i.active DESC, i.name LIMIT ? OFFSET ?`;
+       AND x.business_date > DATE_SUB(CURDATE(), INTERVAL 60 DAY)) DESC, i.on_hand > 0 DESC,` : ''}
+       ${['alert', 'out'].includes(status) ? 'COALESCE((SELECT sold_30d FROM item_stats WHERE item_id=i.id), 0) DESC,' : ''} i.active DESC, i.name LIMIT ? OFFSET ?`;
   const rows = await db.query(sql, [...args, Math.min(Number(limit) || 50, 200), Number(offset) || 0]);
   const total = (await db.one(`SELECT COUNT(*) n FROM items i ${where.length ? `WHERE ${where.join(' AND ')}` : ''}`, args)).n;
   return { total: Number(total), items: rows.map(itemOut) };
@@ -210,6 +213,14 @@ async function save(data, user) {
           reorder_level=?, active=?, plu=?, updated_at=? WHERE id=?`, [...fields, id]);
         if (old.price !== fields[4]) {
           await audit({ user_id: user.id, action: 'price_change', summary: `${name}: ₹${old.price ?? '-'} → ₹${fields[4] ?? '-'}` }, q);
+        }
+        const cost = data.cost === undefined || String(data.cost).trim() === '' ? null : paise(data.cost, 'buying price');
+        if (cost !== null) {                     // the buying price per kg / piece, for profit
+          if (cost < 0) throw new UserError('Buying price cannot be negative.');
+          if (rs(cost) !== Number(old.cost || 0).toFixed(2)) {
+            await q('UPDATE items SET cost=? WHERE id=?', [rs(cost), id]);
+            await audit({ user_id: user.id, action: 'cost_change', summary: `${name}: buying price ₹${Number(old.cost || 0).toFixed(2)} → ₹${rs(cost)}` }, q);
+          }
         }
       } else {
         const sku = await nextSku(q);

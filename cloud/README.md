@@ -50,6 +50,14 @@ Tamil, customer, price change and discount with manager PIN, hold, cancel), cash
    total, tax, net total, the amount in words, the GST table, the payment, "THANK U VISIT AGAIN" and the bill number between stars.
    Bill numbers look like `MU/1126/T2/107`: prefix / month and year / counter / number, and each counter starts again at 1 every
    month. Set the prefix to `MU` from the 1st of the month you stop using the old billing machine, so no two bills share a number.
+   **At the counter:** the shift opens by itself (no opening cash to type; the drawer is counted at closing). Keys: F6 cash exact,
+   F3 UPI, F12 payment, F7 customer (also inside the payment window, and after the sale to send the bill on WhatsApp), F10 hold,
+   F11 bills on hold (numbered 1, 2, 3; press the number to bring one back; they also show as chips at the top), F9 cancel.
+   New logins are **counter persons**: billing, their drawer, customers, online orders, stock updates and product photos, not prices.
+   **Low stock** (menu) lists products at or below their low stock alert (set in each product) and best sellers with no stock.
+   **Daily tools, Today's prices**: price per kg or per 250 g, today's offer, and the stock on the shelf in kg or g, saved together.
+   **Offers**: after a festival offer, "Tell your customers" shares the message on WhatsApp. **Customers**: download all (Excel).
+   **Reports**: sales by day, categories by day, best products, payments and busy hours for any period; detailed reports below.
    **Product photos from a list:** Settings, Product photos, *Photos from a list (Excel or CSV)*: choose a sheet with `Product code` (or
    `Barcodes`) and `Image URL`, such as `Madhuram_Product_Images.xlsx`. The billing server downloads each photo (internet addresses
    only), the PC makes it small and it becomes the product's photo; prices, stock and photos you took yourself are not changed.

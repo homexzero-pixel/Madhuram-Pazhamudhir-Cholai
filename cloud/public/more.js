@@ -383,11 +383,13 @@ App.views.returns = async (main) => {
 
 // ================================================================== Customers & credit (udhaar)
 App.views.customers = async (main) => {
-  main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Customers & credit</h1><button class="primary" id="cadd">+ Add customer</button></div>
+  main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Customers & credit</h1><div class="row">
+    ${can('reports') ? `<a class="btn" href="/api/customers/export">${ico('download')} Download all (Excel)</a>` : ''}<button class="primary" id="cadd">+ Add customer</button></div></div>
     <div class="row" style="margin-bottom:10px"><input id="cq" placeholder="Name or mobile" style="max-width:300px">
     <label class="row" style="font-weight:400;margin:0"><input type="checkbox" id="cown" style="width:auto"> Only those who owe money</label></div><div id="clist"></div>`;
   const load = async () => {
     const { customers } = await api(`/customers/list?q=${encodeURIComponent($('#cq').value)}&owing=${$('#cown').checked ? 1 : 0}`);
+    if (!$('#clist')) return;
     $('#clist').innerHTML = customers.length ? `<table><tr><th>Name</th><th>Mobile</th><th class="r hide-sm">Bills</th><th class="r hide-sm">Spent</th><th class="hide-sm">Last visit</th><th class="r">Owes</th></tr>
       ${customers.map((c) => `<tr class="click" data-id="${c.id}"><td>${esc(c.name)}</td><td>${esc(c.phone || '')}</td><td class="r hide-sm">${c.bills}</td>
       <td class="r hide-sm">${c.spent ? inr(c.spent) : ''}</td><td class="hide-sm">${esc((c.last_visit || '').slice(0, 10))}</td>
@@ -565,33 +567,74 @@ function supplierList(body, suppliers) {
 }
 
 // ================================================================== Reports
+// The Reports page: one look tells what is happening in the shop. Pick a period; sales by day, categories by day (pivot),
+// best products, payments and busy hours. The detailed reports (Excel) are below.
+const PAY_LABEL = { cash: 'Cash', upi: 'UPI', card: 'Card', credit: 'Credit (udhaar)', cod: 'Cash on delivery', points: 'Points' };
+const rupees = (v) => { const r = Math.round((Money.paise(String(v)) || 0) / 100); return `₹${r.toLocaleString('en-IN')}`; };
 App.views.reports = async (main) => {
-  const period = hashParam('period');
   const name = hashParam('r') || '';
-  let from = hashParam('from');
-  let to = hashParam('to');
-  if (!from || period) {
-    const r0 = await api(`/reports?period=${period || 'month'}`);
-    from = r0.summary.from; to = r0.summary.to;
+  const period = hashParam('period') || (hashParam('from') ? '' : 'month');
+  const d = await api(`/reports/dashboard?${period ? `period=${period}` : `from=${hashParam('from')}&to=${hashParam('to')}`}`);
+  const s = d.summary;
+  const from = s.from;
+  const to = s.to;
+  const P = (v) => Money.paise(String(v ?? 0)) || 0;
+  const maxDay = Math.max(1, ...d.days.map((x) => P(x.sales)));
+  const label = (k) => (d.by === 'month' ? new Date(`${k}-01T00:00:00Z`).toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' })
+    : `${Number(k.slice(8))}`);
+  const week = (k) => (d.by === 'month' ? '' : new Date(`${k}T00:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' }));
+  // pivot: the busiest categories, every day of the period
+  const catTotal = new Map();
+  for (const c of d.cats) catTotal.set(c.cat, (catTotal.get(c.cat) || 0) + P(c.sales));
+  const cats = [...catTotal.entries()].sort((x, y) => y[1] - x[1]);
+  const shown = cats.slice(0, 10).map((x) => x[0]);
+  const cell = new Map();
+  for (const c of d.cats) {
+    const row = shown.includes(c.cat) ? c.cat : 'Others';
+    const key = `${row}|${c.d}`;
+    cell.set(key, (cell.get(key) || 0) + P(c.sales));
   }
-  const { list, summary: s } = await api(`/reports?from=${from}&to=${to}`);
+  const rows = cats.length > 10 ? [...shown, 'Others'] : shown;
+  const maxCell = Math.max(1, ...cell.values());
+  const rowTotal = (r) => (r === 'Others' ? cats.slice(10).reduce((t, x) => t + x[1], 0) : catTotal.get(r));
+  const payTotal = d.pay.reduce((t, x) => t + P(x.amount), 0) || 1;
+  const hours = d.hours.filter((h) => h.bills);
+  const maxHour = Math.max(1, ...hours.map((h) => P(h.sales)));
+  const best = hours.slice().sort((x, y) => P(y.sales) - P(x.sales))[0];
+  const netProfit = P(s.net_profit);
   main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Reports</h1><form id="rr" class="row">
       <input type="date" name="from" value="${from}" style="width:160px"> to <input type="date" name="to" value="${to}" style="width:160px">
       <button class="primary">Show</button></form></div>
-    ${periodChips(period || '', `reports${name ? `?r=${name}` : ''}`)}
-    <div class="card plain" style="margin-bottom:12px">From <b>${esc(from)}</b> to <b>${esc(to)}</b> the shop sold <b>${inr(s.sales)}</b> in <b>${s.bills}</b> bills
-      (on average <b>${inr(s.avg_bill)}</b> per bill). After returns of ${inr(s.returns)} the sales are <b>${inr(s.net)}</b>.
-      The goods sold cost ${inr(s.cost)}, so the gross profit is <b class="ok">${inr(s.margin)}</b> (${s.margin_pct}%).
-      Expenses were ${inr(s.expenses)}, leaving a net profit of <b class="${Number(s.net_profit) < 0 ? 'bad' : 'ok'}">${inr(s.net_profit)}</b>.</div>
-    <div class="cards">
-      <div class="card stat"><div class="l">Net sales (after returns)</div><div class="v">${inr(s.net)}</div><div class="l">${s.bills} bills · avg ${inr(s.avg_bill)}</div></div>
-      <div class="card stat"><div class="l">Gross margin</div><div class="v">${inr(s.margin)}</div><div class="l">${s.margin_pct}% of sales</div></div>
-      <div class="card stat"><div class="l">Cash · UPI · Card · Credit</div><div class="small">${inr(s.cash)} · ${inr(s.upi)} · ${inr(s.card)} · ${inr(s.credit)}</div>
-        ${Number(s.cod) ? `<div class="small muted">Online orders, cash on delivery: ${inr(s.cod)}</div>` : ''}
-        <div class="l">Returns ${inr(s.returns)} · Discounts ${inr(s.discount)}</div></div>
-      <div class="card stat"><div class="l">Purchases · Written off</div><div class="small">${inr(s.purchases)} · ${inr(s.wastage)}</div></div></div>
-    <div class="cats">${list.map((x) => `<a class="btn ${x.name === name ? 'primary' : ''}" href="#/reports?from=${from}&to=${to}&r=${x.name}">${esc(x.title)}</a>`).join('')}</div>
-    <div id="rout" style="margin-top:12px"></div>`;
+    ${periodChips(period, 'reports')}
+    <p class="dash-say">From <b>${esc(from)}</b> to <b>${esc(to)}</b> the shop sold <b>${inr(s.net)}</b> in <b>${s.bills}</b> bills.
+      Profit on the goods: <b class="ok">${inr(s.margin)}</b> (${s.margin_pct}%). After expenses of ${inr(s.expenses)}:
+      <b class="${netProfit < 0 ? 'bad' : 'ok'}">${inr(s.net_profit)}</b>.${best ? ` Busiest hour: <b>${best.h}:00–${best.h + 1}:00</b>.` : ''}</p>
+    <div class="dash-kpis">
+      <div class="kpi"><span>Sales</span><b>${rupees(s.net)}</b><small>${s.bills} bills · ${inr(s.avg_bill)} a bill</small></div>
+      <div class="kpi"><span>Profit</span><b class="ok">${rupees(s.margin)}</b><small>${s.margin_pct}% of sales</small></div>
+      <div class="kpi"><span>Expenses</span><b>${rupees(s.expenses)}</b><small>Net profit ${inr(s.net_profit)}</small></div>
+      <div class="kpi"><span>Returns · discounts</span><b>${rupees(s.returns)}</b><small>Discounts ${inr(s.discount)}</small></div></div>
+    <section class="dash-card"><h2>Sales by ${d.by}</h2>
+      <div class="vbars" style="--n:${d.days.length}">${d.days.map((x) => `<div class="vb" title="${esc(x.d)}: ${inr(x.sales)} · ${x.bills} bills · profit ${inr(x.profit)}">
+        <em>${P(x.sales) && d.days.length <= 14 ? rupees(x.sales) : ''}</em><i style="height:${Math.round((P(x.sales) / maxDay) * 100)}%"></i><span>${esc(label(x.d))}<br><small>${esc(week(x.d))}</small></span></div>`).join('')}</div></section>
+    <section class="dash-card"><h2>Categories by ${d.by}</h2>
+      ${rows.length ? `<div class="scroll"><table class="pivot"><tr><th>Category</th>${d.days.map((x) => `<th class="r">${esc(label(x.d))}</th>`).join('')}<th class="r">Total</th></tr>
+      ${rows.map((r) => `<tr><td>${esc(r)}</td>${d.days.map((x) => { const v = cell.get(`${r}|${x.d}`) || 0;
+    return `<td class="r" style="background:rgba(30,155,38,${v ? (0.08 + 0.55 * (v / maxCell)).toFixed(2) : 0})">${v ? rupees(Money.rs(v)) : ''}</td>`; }).join('')}
+        <td class="r"><b>${rupees(Money.rs(rowTotal(r)))}</b></td></tr>`).join('')}
+      <tr class="tot"><td>All</td>${d.days.map((x) => `<td class="r">${P(x.sales) ? rupees(x.sales) : ''}</td>`).join('')}<td class="r"><b>${rupees(s.sales)}</b></td></tr></table></div>`
+    : '<p class="muted">No sales in this period.</p>'}</section>
+    <div class="dash-two">
+      <section class="dash-card"><h2>Best products</h2>${d.top.length ? `<table><tr><th>Product</th><th class="r">Sold</th><th class="r">Sales</th><th class="r">Profit</th></tr>
+        ${d.top.map((t) => `<tr><td>${esc(t.name)}</td><td class="r">${esc(t.qty)} ${t.unit === 'kg' ? 'kg' : ''}</td><td class="r">${rupees(t.sales)}</td>
+        <td class="r ${P(t.profit) < 0 ? 'bad' : 'ok'}">${rupees(t.profit)}</td></tr>`).join('')}</table>` : '<p class="muted">No sales.</p>'}</section>
+      <section class="dash-card"><h2>How customers paid</h2>${d.pay.map((x) => `<div class="hbar"><span>${esc(PAY_LABEL[x.method] || x.method)}</span>
+        <i><u style="width:${Math.round((P(x.amount) / payTotal) * 100)}%"></u></i><b>${rupees(x.amount)}</b></div>`).join('') || '<p class="muted">No payments.</p>'}
+        <h2 style="margin-top:18px">Busy hours</h2>${hours.length ? `<div class="vbars hours" style="--n:${hours.length}">${hours.map((h) => `<div class="vb" title="${h.h}:00: ${inr(h.sales)} · ${h.bills} bills">
+          <em></em><i style="height:${Math.round((P(h.sales) / maxHour) * 100)}%"></i><span>${h.h}</span></div>`).join('')}</div>` : '<p class="muted">No bills.</p>'}</section></div>
+    <section class="dash-card"><h2>Detailed reports (Excel)</h2>
+      <div class="cats">${(await api('/reports?period=today')).list.map((x) => `<a class="btn ${x.name === name ? 'primary' : ''}" href="#/reports?from=${from}&to=${to}&r=${x.name}">${esc(x.title)}</a>`).join('')}</div>
+      <div id="rout" style="margin-top:12px"></div></section>`;
   const go = (f, t) => { location.hash = `#/reports?from=${f}&to=${t}${name ? `&r=${name}` : ''}`; };
   $('#rr').addEventListener('submit', (e) => { e.preventDefault(); go(e.target.from.value, e.target.to.value); });
   if (!name) return;
@@ -607,10 +650,9 @@ App.views.reports = async (main) => {
 
 // ================================================================== Owner tools
 App.views.owner = async (main) => {
-  const tab = hashParam('tab') || 'day';
-  const T = [['day', 'Summary on WhatsApp'], ['prices', "Today's prices"], ['offers', 'Offers'], ['expenses', 'Expenses'], ['board', 'Price board'],
-    ['labels', 'Barcode labels'], ['buy', 'Buy list']];
-  if (can('reports')) T.push(['loss', 'Loss watch']);
+  const tab = hashParam('tab') || 'prices';
+  const T = [['prices', "Today's prices"], ['offers', 'Offers'], ['expenses', 'Expenses'], ['board', 'Price board'],
+    ['labels', 'Barcode labels'], ['day', 'Day summary (WhatsApp)']];
   main.innerHTML = `<h1>Daily tools</h1>${tabs(T, tab, 'owner')}<div id="obody"></div>`;
   const body = $('#obody');
   if (tab === 'day') {
@@ -624,37 +666,7 @@ App.views.owner = async (main) => {
     $('#dph').addEventListener('input', upd); upd();
     $('#dcopy').addEventListener('click', async () => { await navigator.clipboard.writeText(text); toast('Copied.'); });
   }
-  if (tab === 'prices') {
-    const cat = decodeURIComponent(hashParam('cat') || '');
-    const q = decodeURIComponent(hashParam('q') || '');
-    const { items, cats } = await api(`/owner/prices?cat=${encodeURIComponent(cat)}&q=${encodeURIComponent(q)}`);
-    body.innerHTML = `<div class="row" style="margin-bottom:10px">
-      <input id="pfind" placeholder="Scan barcode or type a name, Enter" value="${esc(q)}" style="max-width:280px">
-      <select id="pcat" style="max-width:240px"><option value="">Loose items (sold by kg)</option>${cats.map((c) => `<option ${c === cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
-      ${can('products') ? '<button id="padd2">+ Add product</button>' : ''}
-      <button class="primary" id="psave">Save changes</button></div>
-      <p class="small muted">Type the new rate and press Enter for the next. A changed price turns <b class="bad">red</b> until you press Save; saved prices turn <b class="ok">green</b>.</p>
-      <div class="tablewrap"><table><tr><th>Product</th><th class="r hide-sm">Cost</th><th class="r hide-sm">Stock</th><th>Price ₹</th></tr>${items.map((i) => `<tr><td>${esc(i.name)}<div class="small ta muted">${esc(i.name_ta)}</div></td>
-      <td class="r hide-sm">${Number(i.cost) ? inr(Money.paise(Number(i.cost).toFixed(2))) : ''}</td><td class="r hide-sm">${esc(i.on_hand)} ${esc(i.unit)}</td>
-      <td><input class="price-in" data-id="${i.id}" data-old="${esc(i.price ?? '')}" value="${esc(i.price ?? '')}" inputmode="decimal" style="width:110px"> ${i.unit === 'kg' ? '/kg' : ''}</td></tr>`).join('')
-        || '<tr><td class="muted">Nothing found.</td></tr>'}</table></div>`;
-    $('#pcat').addEventListener('change', (e) => { location.hash = `#/owner?tab=prices&cat=${encodeURIComponent(e.target.value)}`; });
-    $('#pfind').addEventListener('keydown', (e) => { if (e.key === 'Enter') location.hash = `#/owner?tab=prices&q=${encodeURIComponent(e.target.value.trim())}`; });
-    if ($('#padd2')) $('#padd2').addEventListener('click', () => productDialog(null, () => route()));
-    const inputs = $$('input[data-id]', body);
-    const mark = (inp) => { inp.classList.toggle('changed', inp.value !== inp.dataset.old); inp.classList.remove('saved'); };
-    inputs.forEach((inp, i) => {
-      inp.addEventListener('input', () => mark(inp));
-      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); (inputs[i + 1] || $('#psave')).focus(); } });
-    });
-    $('#psave').addEventListener('click', () => submitting($('#psave'), async () => {
-      const changed = inputs.filter((i) => i.value !== i.dataset.old);
-      if (!changed.length) throw new Error('No price was changed.');
-      const r = await api('/owner/prices', { method: 'POST', body: { changes: changed.map((i) => ({ id: Number(i.dataset.id), price: i.value })) } });
-      changed.forEach((i) => { i.dataset.old = i.value; i.classList.remove('changed'); i.classList.add('saved'); });
-      toast(`${r.changed} prices saved. Counters get them within 5 minutes.`);
-    }));
-  }
+  if (tab === 'prices') await todaysPrices(body);
   if (tab === 'board') {
     // Price board: every product as a big card; tick the ones to print; they print one after another on the bill printer.
     const cat = decodeURIComponent(hashParam('cat') || '');
@@ -697,42 +709,115 @@ App.views.owner = async (main) => {
   if (tab === 'offers') await offersTab(body);
   if (tab === 'expenses') await expensesTab(body);
   if (tab === 'labels') await labelsTab(body);
-  if (tab === 'buy') {
-    const days = hashParam('days') || '7';
-    const { groups } = await api(`/owner/buylist?days=${days}`);
-    body.innerHTML = `<div class="row" style="margin-bottom:10px">Based on sales of the last <select id="bdays" style="width:90px">${[3, 7, 14, 30].map((n) => `<option ${String(n) === days ? 'selected' : ''}>${n}</option>`).join('')}</select> days.
-      <span class="small muted">Fresh items: stock for 1 day; packed goods: 7 days. Never below the reorder level.</span></div>
-      ${groups.length ? groups.map((g, gi) => `<div class="card" style="margin-bottom:12px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(g.supplier)}</h2>
-        <div class="row"><b>≈ ${inr(g.value)}</b>${g.phone ? `<a class="btn primary" target="_blank" rel="noopener" href="${esc(waLink(g.phone, g.message))}">WhatsApp order</a>` : ''}
-        <button data-print="${gi}">Print</button></div></div>
-        <table><tr><th>Product</th><th class="r">Stock</th><th class="r">Sells / day</th><th class="r">Days left</th><th class="r">Buy</th></tr>
-        ${g.rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="r">${esc(r.stock)}</td><td class="r">${esc(r.per_day)}</td>
-        <td class="r ${r.days_left !== null && Number(r.days_left) < 1 ? 'bad' : ''}">${esc(r.days_left ?? '-')}</td><td class="r"><b>${esc(r.qty)} ${esc(r.unit)}</b></td></tr>`).join('')}</table></div>`).join('')
-      : '<p class="muted">Nothing to buy: stock covers the expected sales.</p>'}`;
-    $('#bdays').addEventListener('change', (e) => { location.hash = `#/owner?tab=buy&days=${e.target.value}`; });
-    $$('[data-print]').forEach((b) => b.addEventListener('click', () => {
-      const g = groups[Number(b.dataset.print)];
-      $('#print-area').innerHTML = `<div class="receipt"><pre style="white-space:pre-wrap;font-family:inherit">${esc(g.message)}</pre></div>`;
-      setTimeout(() => window.print(), 50);
-    }));
-  }
-  if (tab === 'loss') {
-    const from = hashParam('from') || today();
-    const to = hashParam('to') || today();
-    const { rows } = await api(`/owner/losswatch?from=${from}&to=${to}`);
-    body.innerHTML = `<form id="lf" class="row" style="margin-bottom:10px"><input type="date" name="from" value="${from}" style="width:160px"> to
-      <input type="date" name="to" value="${to}" style="width:160px"><button class="primary">Show</button></form>
-      <p class="small muted">Actions that can hide a loss, per person. A flag is not proof. Check the bill, the reason and the CCTV time.</p>
-      ${rows.length ? `<table><tr><th>Staff</th><th class="r">Bills</th><th class="r">Sales</th><th class="r">Cancelled</th><th class="r">Price changes</th><th class="r">Discounts</th>
-        <th class="r">Refunds</th><th class="r">Reprints</th><th class="r">Cash diff.</th><th>Needs a look</th></tr>
-        ${rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="r">${r.bills}</td><td class="r">${inr(r.sales)}</td><td class="r">${r.bill_cancel}</td>
-        <td class="r">${r.overrides}</td><td class="r">${inr(r.discounts_value)}</td><td class="r">${inr(r.refunds_value)}</td><td class="r">${r.reprint}</td>
-        <td class="r ${Number(r.variance) < 0 ? 'bad' : ''}">${inr(r.variance)}</td>
-        <td>${r.flags.length ? r.flags.map((f) => `<div class="bad small">${esc(f)}</div>`).join('') : '<span class="ok small">OK</span>'}</td></tr>`).join('')}</table>` : '<p class="muted">No activity.</p>'}`;
-    $('#lf').addEventListener('submit', (e) => { e.preventDefault(); location.hash = `#/owner?tab=loss&from=${e.target.from.value}&to=${e.target.to.value}`; });
-  }
 };
 
+
+// ================================================================== Today's prices: the price, today's offer and the stock on the shelf
+// The list loads once per category and switches in place (no page reload). What is typed is kept until Save, even when the
+// category is changed. Fruit and vegetables with a price and stock show in the online shop at once.
+const PER = { kg: [[1000, 'per kg'], [500, 'per 500 g'], [250, 'per 250 g'], [100, 'per 100 g']], pcs: [[1, 'per piece']] };
+async function todaysPrices(body) {
+  const cache = new Map();
+  const pending = new Map();                     // id → { unit, name, per, price, offer, stock, su }
+  const saved = new Set();
+  const state = { cat: '', q: '' };
+  let catsShown = false;
+  body.innerHTML = `<div class="row tp-bar">
+      <input id="pfind" placeholder="Scan barcode or type a name, Enter" style="max-width:260px">
+      <select id="pcat" style="max-width:250px"><option value="">Fruit & vegetables (sold by kg)</option></select>
+      ${can('products') ? '<button id="padd2">+ Add product</button>' : ''}
+      <button class="primary" id="psave">Save changes <span id="pn"></span></button><span id="pmsg" class="small muted"></span></div>
+    <p class="small muted">Type the price (choose per kg or per 250 g), today's offer if any, and the stock on the shelf (kg or g). Enter goes to the next box.
+      Changed boxes turn <b class="bad">red</b>; after Save they turn <b class="ok">green</b>.</p>
+    <div id="ptable" class="tablewrap"></div>`;
+  const perKg = (v, g, unit) => { const x = Money.paise(v); return x === null ? null : unit === 'kg' ? Math.round((x * 1000) / g) : x; };
+  const show = (paiseKg, g, unit) => (paiseKg === null || paiseKg === undefined ? '' : Money.rs(unit === 'kg' ? Math.round((paiseKg * g) / 1000) : paiseKg));
+  const count = () => { $('#pn').textContent = pending.size ? `(${pending.size})` : ''; };
+  const draw = (items) => {
+    if (!$('#ptable')) return;
+    $('#ptable').innerHTML = `<table class="tp"><tr><th>Product</th><th>Price ₹</th><th>Today's offer ₹</th><th>Stock on the shelf</th></tr>
+      ${items.map((i) => {
+    const p = pending.get(i.id) || {};
+    const per = Number(p.per || (i.unit === 'kg' ? 1000 : 1));
+    const opts = PER[i.unit === 'kg' ? 'kg' : 'pcs'];
+    const price = p.price !== undefined ? p.price : show(Money.paise(i.price), per, i.unit);
+    const offer = p.offer !== undefined ? p.offer : show(i.offer === null ? null : Money.paise(i.offer), per, i.unit);
+    return `<tr data-id="${i.id}" class="${saved.has(i.id) ? 'saved' : ''}"><td><b>${esc(i.name)}</b><div class="small ta muted">${esc(i.name_ta)}</div>
+        <div class="small">${i.online ? '<span class="ok">In the online shop</span>' : '<span class="muted">Not online yet (needs price and stock)</span>'}</div></td>
+      <td><div class="tp-in"><input class="tpi ${p.price !== undefined ? 'changed' : ''}" data-k="price" inputmode="decimal" value="${esc(price)}">
+        <select data-k="per" ${opts.length < 2 ? 'disabled' : ''}>${opts.map(([g, l]) => `<option value="${g}" ${g === per ? 'selected' : ''}>${l}</option>`).join('')}</select></div></td>
+      <td><input class="tpi ${p.offer !== undefined ? 'changed' : ''}" data-k="offer" inputmode="decimal" value="${esc(offer)}" placeholder="none"></td>
+      <td><div class="tp-in"><input class="tpi ${p.stock !== undefined ? 'changed' : ''}" data-k="stock" inputmode="decimal" value="${esc(p.stock ?? '')}" placeholder="${esc(i.on_hand)}">
+        ${i.unit === 'kg' ? `<select data-k="su"><option value="kg">kg</option><option value="g" ${p.su === 'g' ? 'selected' : ''}>g</option></select>` : '<span class="small">pcs</span>'}</div>
+        <div class="small muted">now ${esc(i.on_hand)} ${i.unit === 'kg' ? 'kg' : 'pcs'}</div></td></tr>`;
+  }).join('') || '<tr><td colspan="4" class="muted">Nothing found.</td></tr>'}</table>`;
+    const inputs = $$('.tpi', body);
+    inputs.forEach((inp, n) => inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); (inputs[n + 1] || $('#psave')).focus(); } }));
+    $$('tr[data-id]', body).forEach((tr) => {
+      const id = Number(tr.dataset.id);
+      const it = items.find((x) => x.id === id);
+      const entry = () => { if (!pending.has(id)) pending.set(id, { unit: it.unit, name: it.name }); saved.delete(id); tr.classList.remove('saved'); return pending.get(id); };
+      $$('.tpi', tr).forEach((inp) => inp.addEventListener('input', () => { entry()[inp.dataset.k] = inp.value; inp.classList.add('changed'); count(); }));
+      const per = $('[data-k=per]', tr);
+      if (per) per.addEventListener('change', () => {        // the same price shown for the new weight (₹80 per kg = ₹20 per 250 g)
+        const e = entry();
+        const old = Number(e.per || 1000);
+        const g = Number(per.value);
+        for (const k of ['price', 'offer']) {
+          const inp = $(`[data-k=${k}]`, tr);
+          const v = perKg(inp.value, old, it.unit);
+          if (v !== null) { inp.value = show(v, g, it.unit); e[k] = inp.value; inp.classList.add('changed'); }
+        }
+        e.per = g; count();
+      });
+      const su = $('[data-k=su]', tr);
+      if (su) su.addEventListener('change', () => { entry().su = su.value; count(); });
+    });
+  };
+  const load = async () => {
+    const key = `${state.cat}|${state.q}`;
+    if (!cache.has(key)) {
+      $('#pmsg').textContent = 'Loading…';
+      try {
+        const r = await api(`/owner/prices?cat=${encodeURIComponent(state.cat)}&q=${encodeURIComponent(state.q)}`);
+        cache.set(key, r.items);
+        if (!$('#pcat')) return;
+        if (!catsShown) { catsShown = true; $('#pcat').insertAdjacentHTML('beforeend', r.cats.map((c) => `<option>${esc(c)}</option>`).join('')); }
+      } finally { if ($('#pmsg')) $('#pmsg').textContent = ''; }
+    }
+    draw(cache.get(key));
+  };
+  $('#pcat').addEventListener('change', (e) => { state.cat = e.target.value; state.q = ''; $('#pfind').value = ''; load(); });
+  $('#pfind').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); state.q = e.target.value.trim(); load(); } });
+  if ($('#padd2')) $('#padd2').addEventListener('click', () => productDialog(null, () => { cache.clear(); load(); }));
+  $('#psave').addEventListener('click', () => submitting($('#psave'), async () => {
+    if (!pending.size) throw new Error('Nothing was changed.');
+    const changes = [];
+    for (const [id, p] of pending) {
+      const g = Number(p.per || (p.unit === 'kg' ? 1000 : 1));
+      const ch = { id };
+      for (const k of ['price', 'offer']) {
+        if (p[k] === undefined) continue;
+        if (String(p[k]).trim() === '') { if (k === 'offer') ch.offer = ''; continue; }
+        const v = perKg(p[k], g, p.unit);
+        if (v === null) throw new Error(`Check the ${k === 'price' ? 'price' : 'offer'} of ${p.name}.`);
+        ch[k] = Money.rs(v);
+      }
+      if (p.stock !== undefined && String(p.stock).trim() !== '') {
+        const q = Money.milli(p.stock);
+        if (q === null) throw new Error(`Check the stock of ${p.name}.`);
+        ch.stock = Money.qty(p.unit === 'kg' && p.su === 'g' ? Math.round(q / 1000) : q);
+      }
+      changes.push(ch);
+    }
+    const r = await api('/owner/prices', { method: 'POST', body: { changes } });
+    for (const id of pending.keys()) saved.add(id);
+    pending.clear(); cache.clear(); count();
+    await load();
+    toast(`Saved: ${r.changed} prices / offers${r.stock ? `, ${r.stock} stock counts` : ''}. The counters and the online shop have them.`);
+  }));
+  await load();
+}
 
 // ================================================================== Offers: a special price between two dates
 async function pickProduct(input, onPick) {
@@ -753,7 +838,15 @@ async function pickProduct(input, onPick) {
 
 async function offersTab(body) {
   const [{ offers }, info] = await Promise.all([api('/offers'), api('/shop-categories').catch(() => ({ cats: [] }))]);
-  body.innerHTML = `<div class="card" style="margin-bottom:12px"><h2 style="margin-top:0">Offer on a whole category (festival offer)</h2>
+  const msg = sessionStorage.getItem('mpc_offer_msg') || `*${App.settings.name}*\nThis week's offers are on! Fresh fruits, vegetables and daily needs at the best price.` +
+    `\nOrder online: ${App.shopUrl || ''}\nOr visit the shop${App.settings.phone ? ` · ${App.settings.phone}` : ''}`;
+  body.innerHTML = `<div class="card share-card" style="margin-bottom:12px"><h2 style="margin-top:0">${ico('share')} Tell your customers</h2>
+      <p class="small muted" style="margin-top:0">Send the offer to everyone: <b>Share on WhatsApp</b> opens WhatsApp, where you choose a broadcast list, a group or your status.
+        To make a broadcast list, download the customers' numbers and add them in WhatsApp (New broadcast).</p>
+      <textarea id="omsg" rows="5">${esc(msg)}</textarea>
+      <div class="row" style="margin-top:8px"><a class="btn primary" id="oshare" target="_blank" rel="noopener">Share on WhatsApp</a><button id="ocopy">Copy message</button>
+        ${can('reports') ? `<a class="btn" href="/api/customers/export">${ico('download')} Customers' numbers (Excel)</a>` : ''}</div></div>
+    <div class="card" style="margin-bottom:12px"><h2 style="margin-top:0">Offer on a whole category (festival offer)</h2>
       <p class="small muted" style="margin-top:0">Every product in the category gets this discount on its selling price for these dates, at the counters and online.
         The selling price comes back by itself after the last day.</p>
       <div class="grid3"><div><label>Category</label><select id="bcat"><option value="">All products</option>
@@ -776,7 +869,11 @@ async function offersTab(body) {
     const label = cat.value ? cat.options[cat.selectedIndex].text : 'ALL products';
     if (!confirm(`Give ${$('#bpct').value || '?'}% off on ${label}?`)) return;
     const r = await api('/offers/bulk', { method: 'POST', body: { category_id: cat.value, percent: $('#bpct').value, offer_from: $('#bfrom').value, offer_to: $('#bto').value } });
-    toast(`Offer set on ${r.count} products.`);
+    toast(`Offer set on ${r.count} products. Now tell your customers.`);
+    const when = (v) => (v ? new Date(`${v}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '');
+    sessionStorage.setItem('mpc_offer_msg', `*${App.settings.name}*\n${$('#bpct').value}% OFF on ${cat.value ? label : 'everything in the shop'}` +
+      `${$('#bfrom').value ? ` from ${when($('#bfrom').value)}` : ''}${$('#bto').value ? ` till ${when($('#bto').value)}` : ''}!` +
+      `\nOrder online: ${App.shopUrl || ''}\nOr visit the shop${App.settings.phone ? ` · ${App.settings.phone}` : ''}`);
     route();
   }));
   $('#bclear').addEventListener('click', () => submitting($('#bclear'), async () => {
@@ -786,6 +883,14 @@ async function offersTab(body) {
     toast(`Offers removed from ${r.count} products.`);
     route();
   }));
+  const shareLink = () => {
+    const t = encodeURIComponent($('#omsg').value);
+    $('#oshare').href = /Android|iPhone|iPad/i.test(navigator.userAgent) ? `https://wa.me/?text=${t}`
+      : App.settings.whatsapp_open === 'web' ? `https://web.whatsapp.com/send?text=${t}` : `whatsapp://send?text=${t}`;
+  };
+  $('#omsg').addEventListener('input', () => { sessionStorage.setItem('mpc_offer_msg', $('#omsg').value); shareLink(); });
+  shareLink();
+  $('#ocopy').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('#omsg').value); toast('Copied. Paste it in WhatsApp.'); } catch (_) { toast('Select the text and copy it.', true); } });
   let item = null;
   pickProduct($('#ofind'), (it) => { item = it; $('#opick').innerHTML = `<b>${esc(it.name)}</b> · normal price ${inr(it.price || 0)}`; $('#oprice').focus(); });
   $('#osave').addEventListener('click', () => submitting($('#osave'), async () => {
@@ -892,3 +997,27 @@ async function labelsTab(body) {
   };
   draw();
 }
+
+// ================================================================== Low stock (instead of purchases)
+App.views.lowstock = async (main) => {
+  const [alert, out] = await Promise.all([api('/products?status=alert&limit=200'), api('/products?status=out&limit=100')]);
+  const table = (items) => `<table><tr><th>Product</th><th class="r">Stock</th><th class="r hide-sm">Alert at</th><th></th></tr>
+    ${items.map((i) => `<tr class="click" data-id="${i.id}"><td>${esc(i.name)}<div class="small ta muted">${esc(i.name_ta)}</div></td>
+      <td class="r ${Number(i.on_hand) <= 0 ? 'bad' : 'warn'}"><b>${esc(i.on_hand)}</b> ${i.unit === 'kg' ? 'kg' : 'pcs'}</td>
+      <td class="r hide-sm">${Number(i.reorder_level) ? `${esc(i.reorder_level)} ${i.unit === 'kg' ? 'kg' : 'pcs'}` : ''}</td>
+      <td class="r">${can('receive') ? '<button class="small" data-add>Add stock</button>' : ''}</td></tr>`).join('')}</table>`;
+  main.innerHTML = `<h1>Low stock</h1>
+    <p class="muted small">Products at or below their <b>low stock alert</b>. Set the alert in each product (Products & stock, open the product,
+      "Low stock alert when stock ≤"). Tap a product to add stock or count it.</p>
+    <h2>Below the alert (${alert.total})</h2>
+    ${alert.items.length ? table(alert.items) : '<p class="muted">Nothing is below its alert.</p>'}
+    <h2 style="margin-top:18px">Selling, but no stock (${out.total})</h2>
+    <p class="small muted">Best sellers first${out.total > out.items.length ? `; the first ${out.items.length} are shown` : ''}. These do not show in the online shop until stock is added.</p>
+    ${out.items.length ? table(out.items) : '<p class="muted">Every selling product has stock.</p>'}`;
+  const all = [...alert.items, ...out.items];
+  $$('tr[data-id]', main).forEach((tr) => tr.addEventListener('click', (e) => {
+    const it = all.find((x) => x.id === Number(tr.dataset.id));
+    if (e.target.closest('[data-add]') || can('receive')) stockDialog(it, 'in', () => route());
+    else productDialog(it.id, () => route());
+  }));
+};

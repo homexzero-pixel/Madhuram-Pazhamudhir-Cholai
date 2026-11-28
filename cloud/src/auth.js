@@ -9,12 +9,12 @@ const scrypt = promisify(crypto.scrypt);
 
 const PERMISSIONS = ['bill', 'price_override', 'discount_approve', 'cancel_bill', 'stock_view', 'products', 'receive',
   'cash', 'reopen_shift', 'reports', 'settings', 'users', 'backup', 'customers', 'refund', 'credit_sale', 'purchase', 'supplier_pay',
-  'orders', 'daily'];
+  'orders', 'daily', 'photos'];
 const ROLE_PERMS = {
   owner: new Set(PERMISSIONS),
   manager: new Set(PERMISSIONS.filter((p) => !['settings', 'users'].includes(p))),
-  cashier: new Set(['bill', 'cancel_bill', 'cash', 'stock_view', 'customers', 'orders']),
-  purchaser: new Set(['stock_view', 'products', 'receive', 'purchase', 'daily']),
+  cashier: new Set(['bill', 'cancel_bill', 'cash', 'stock_view', 'customers', 'orders', 'receive', 'photos']),
+  purchaser: new Set(['stock_view', 'products', 'receive', 'purchase', 'daily', 'photos']),
   auditor: new Set(['stock_view', 'reports', 'daily']),
 };
 const ROLES = Object.keys(ROLE_PERMS);

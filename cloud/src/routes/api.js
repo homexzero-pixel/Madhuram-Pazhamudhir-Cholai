@@ -121,6 +121,7 @@ r.get('/bills', need('bill'), wrap(async (req, res) => {
     counter: mine ? String(req.query.counter || '') || '-' : String(req.query.counter || '') }) });
 }));
 r.get('/bills/:id', need('bill'), wrap(async (req, res) => ok(res, { bill: await billing.receipt(req.params.id) })));
+r.post('/bills/:id/customer', need('bill'), wrap(async (req, res) => ok(res, { bill: await billing.setCustomer(Number(req.params.id), (req.body || {}).customer, req.user) })));
 r.post('/bills/:id/printed', need('bill'), wrap(async (req, res) => {
   await billing.markPrinted(req.params.id, req.user, !!req.body.reprint);
   ok(res);
