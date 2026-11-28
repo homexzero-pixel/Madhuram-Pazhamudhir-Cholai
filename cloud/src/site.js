@@ -51,7 +51,7 @@ function billingUrl(cfg = require('./settings').cached()) {
 // The customers' site may use only these API paths (everything under /api/shop/).
 const SHOP_API = /^\/shop(\/|$)/;
 // Files the customers' site serves (the staff screens' files are not served there).
-const SHOP_FILES = /^\/(shop\.css|shop\.js|icons\.js|sw\.js|manifest\.webmanifest|fe\/|img\/|photos\/|print\.js)/;
+const SHOP_FILES = /^\/(shop\.css|shop\.js|icons\.js|splash\.js|shop-sw\.js|shop\.webmanifest|sw\.js|manifest\.webmanifest|fe\/|img\/|photos\/|fonts\/|print\.js)/;
 
 function scope(req, res, next) {
   const site = siteOf(req);

@@ -138,6 +138,25 @@ test('stock reaching zero at the counter hides the product from list, search, se
   assert.equal((await available(c, 'banana chips'))[0].available, '4');
 });
 
+test('the shop home page comes in one call, with only what is available now', async () => {
+  const c = await customer('Jaya', '9000000011', '10.1.0.11');
+  const h = (await c.get('/api/shop/home')).data;
+  assert.equal(h.ok, true, JSON.stringify(h));
+  for (const k of ['veg', 'fruits', 'fresh', 'exotics', 'offers', 'staples', 'trend', 'feed']) assert.ok(Array.isArray(h.rails[k]), k);
+  assert.ok(h.rails.feed.length > 0);
+  assert.ok(h.rails.feed.every((i) => Number(i.available) > 0));
+  assert.ok(h.rails.trend.length <= 6 && h.rails.feed.length <= 20);
+  assert.ok(Array.isArray(h.suggest) && Array.isArray(h.again));
+  const guest = new Client('127.0.0.1', '10.1.0.12');
+  const g = (await guest.get('/api/shop/home')).data;
+  assert.equal(g.ok, true);
+  assert.deepEqual(g.again, []);
+  await owner.post('/api/settings', { online_enabled: '0' });
+  try {
+    assert.equal((await guest.get('/api/shop/home')).data.closed, true);
+  } finally { await owner.post('/api/settings', { online_enabled: '1' }); }
+});
+
 test('cancel before and after the invoice: held stock goes back, a credit note reverses the GST bill, cash on delivery settles in the drawer', async () => {
   const c = await customer('Devi', '9000000004', '10.1.0.4');
   const id = products.rollback.id;
@@ -246,6 +265,10 @@ test('the billing site and the customers\' site are kept apart', async () => {
     assert.equal((await shopper.post('/api/shop/account/login', { phone: '9000000004', password: 'secret-12' })).data.ok, true);
     // pages: each address opens its own site
     assert.match((await shopper.get('/')).data, /shop\.js/);
+    for (const f of ['/shop-sw.js', '/shop.webmanifest', '/splash.js', '/fonts/poppins-400.woff2']) assert.equal((await shopper.get(f)).status, 200, f);
+    assert.match((await shopper.get('/fonts/poppins-600.woff2')).headers['cache-control'], /immutable/);
+    assert.match((await shopper.get('/shop.js?v=1')).headers['cache-control'], /immutable/);
+    assert.match((await shopper.get('/shop-sw.js')).headers['cache-control'], /no-cache/);
     assert.match((await staff.get('/')).data, /app\.js/);
     assert.equal((await shopper.get('/app.js')).status, 404);
     assert.equal((await staff.get('/shop/')).status, 302);

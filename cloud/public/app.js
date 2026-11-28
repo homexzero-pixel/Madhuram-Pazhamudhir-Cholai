@@ -381,6 +381,10 @@ function markBackup() {
   a.innerHTML = backupDoneToday() ? '<span class="dot ok-dot" title="Backup downloaded today"></span>' : '<span class="dot bad-dot" title="Download today\'s backup"></span>';
 }
 
+// the outline of a screen, shown at once while its figures load
+const SKELETON = `<div class="skel" aria-busy="true" aria-label="Loading"><div class="sk sk-h"></div>
+  <div class="sk-cards"><div class="sk sk-c"></div><div class="sk sk-c"></div><div class="sk sk-c"></div></div>
+  <div class="sk sk-l"></div><div class="sk sk-l"></div><div class="sk sk-l"></div><div class="sk sk-l short"></div></div>`;
 async function route() {
   if (!App.me) return;
   if (!$('#main')) frame();
@@ -394,12 +398,11 @@ async function route() {
   if (App.leave) { App.leave(); App.leave = null; }
   const main = $('#main');
   const tok = (App.routeTok = (App.routeTok || 0) + 1);
-  main.classList.add('routing');
-  document.body.classList.add('routing');
-  const slow = setTimeout(() => { if (App.routeTok === tok && main.classList.contains('routing')) main.innerHTML = '<div class="loading">Loading…</div>'; }, 6000);
+  let drawn = false;
+  const wait = setTimeout(() => { if (App.routeTok === tok && !drawn) main.innerHTML = SKELETON; }, 120);
   const box = {
     get innerHTML() { return main.innerHTML; },
-    set innerHTML(v) { if (App.routeTok === tok) main.innerHTML = v; },
+    set innerHTML(v) { if (App.routeTok === tok) { drawn = true; main.innerHTML = v; } },
     get classList() { return main.classList; },
     querySelector: (q) => main.querySelector(q),
     querySelectorAll: (q) => main.querySelectorAll(q),
@@ -409,11 +412,22 @@ async function route() {
   } catch (e) {
     if (App.routeTok === tok) main.innerHTML = `<div class="error">${esc(e.message)}</div>`;
   } finally {
-    clearTimeout(slow);
-    if (App.routeTok === tok) { main.classList.remove('routing'); document.body.classList.remove('routing'); }
+    clearTimeout(wait);
   }
 }
 window.addEventListener('hashchange', route);
+// a product photo missing on the server: the screen shows "no photo" instead of a broken picture
+document.addEventListener('error', (e) => {
+  const t = e.target;
+  if (!t || t.tagName !== 'IMG' || t.dataset.gone || !/\/img\/p\//.test(t.getAttribute('src') || '')) return;
+  t.dataset.gone = '1';
+  const tile = t.closest('.tile');
+  if (tile) { tile.classList.remove('has-img'); t.remove(); return; }
+  const none = document.createElement('span');
+  none.className = t.classList.contains('thumb') ? 'thumb none' : 'small muted';
+  if (!t.classList.contains('thumb')) none.textContent = 'No photo';
+  t.replaceWith(none);
+}, true);
 
 async function start() {
   try {
@@ -425,11 +439,13 @@ async function start() {
     await loadMe();
     counterFromUrl();
     frame();
-    route();
+    await route();
   } catch (e) {
     $('#app').innerHTML = `<div class="login card"><h1>Cannot reach the store server</h1><p>${esc(e.message)}</p>
       <button class="primary" id="retry">Try again</button></div>`;
     $('#retry').addEventListener('click', () => location.reload());
+  } finally {
+    if (window.Splash) Splash.done();
   }
 }
 async function loadMe() {

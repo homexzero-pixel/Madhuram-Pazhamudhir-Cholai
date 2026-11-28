@@ -454,6 +454,15 @@ CREATE TABLE IF NOT EXISTS ai_logs (
 
 -- Product photos from a list of web addresses (the owner's spreadsheet: product code + photo link). A staff browser works
 -- through the waiting ones: the server downloads the photo, the browser makes it small, and it becomes the product's photo.
+-- Product and shop photos kept in the database as well as on the app's disk: a redeploy, a new domain or a new hosting
+-- folder cannot lose them, and the customers' site reads them from here (two copies of the app share one database).
+CREATE TABLE IF NOT EXISTS photo_files (
+  name VARCHAR(40) PRIMARY KEY,
+  data MEDIUMBLOB NOT NULL,
+  bytes INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS photo_links (
   item_id INT PRIMARY KEY,
   url VARCHAR(1000) NOT NULL,

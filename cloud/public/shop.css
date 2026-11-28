@@ -1,11 +1,16 @@
 /* Madhuram online shop */
+/* Poppins, kept with the shop (fast, no other website); Tamil words use the phone's own Tamil font */
+@font-face { font-family: Poppins; font-style: normal; font-weight: 400; font-display: swap; src: url(/fonts/poppins-400.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+20B9, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: Poppins; font-style: normal; font-weight: 500; font-display: swap; src: url(/fonts/poppins-500.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+20B9, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: Poppins; font-style: normal; font-weight: 600; font-display: swap; src: url(/fonts/poppins-600.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+20B9, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: Poppins; font-style: normal; font-weight: 700; font-display: swap; src: url(/fonts/poppins-700.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+20B9, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 :root {
   --g: #1e9b26; --g-d: #178420; --g-s: #ebf7ec; --g-l: #cfe9d1;
   --blue: #4357e6; --blue-d: #2c3db8; --red: #e5484d; --amber: #c27400;
   --ink: #141414; --ink2: #333; --mut: #737373; --mut2: #8c8c8c; --line: #eeeeee; --soft: #f6f6f6; --soft2: #f2f2f2;
   --sh: 0 6px 24px rgba(20, 20, 20, .07); --sh2: 0 2px 12px rgba(20, 20, 20, .09);
   --m: 18px; --gut: 16px; --r: 16px;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, "Nirmala UI", "Noto Sans Tamil", sans-serif;
+  font-family: Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Nirmala UI", "Noto Sans Tamil", sans-serif;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
@@ -19,7 +24,8 @@ img { display: block; }
 .ico { width: 22px; height: 22px; flex: none; }
 .ta { font-family: "Nirmala UI", "Noto Sans Tamil", "Latha", sans-serif; }
 .mut { color: var(--mut); } .small { font-size: .85rem; } .bad { color: var(--red); } .okc { color: var(--g); }
-.loading { padding: 60px 20px; text-align: center; color: var(--mut); }
+.loading { color: transparent; margin: 18px var(--m); height: 120px; border-radius: 16px; overflow: hidden;
+  background: linear-gradient(90deg, #eef1ee 0%, #f7f9f7 40%, #eef1ee 80%) 0 0 / 300% 100%; animation: skm 1.2s linear infinite; }
 #view { max-width: 1200px; margin: 0 auto; }
 .page { padding: 0 var(--m); }
 
@@ -720,7 +726,8 @@ body[data-page=detail] .ask-fab, body[data-page=cart] .ask-fab, body[data-page=a
 
 /* product card: real stock left, never invented */
 .pc-img { position: relative; }
-.lowx { position: absolute; left: 8px; bottom: 8px; background: #fff4e5; color: #8a4f00; font-size: .7rem; font-weight: 700; padding: 3px 7px; border-radius: 8px; }
+.lowx { position: absolute; left: 8px; bottom: 8px; max-width: calc(100% - 58px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: #fff4e5; color: #8a4f00; font-size: .68rem; font-weight: 600; padding: 3px 7px; border-radius: 8px; }
 
 /* product page: weight choices and when it arrives */
 .ab-btn.ab-fav.on { color: var(--red); }
@@ -783,3 +790,75 @@ body[data-page=detail] .ask-fab, body[data-page=cart] .ask-fab, body[data-page=a
 
 .appbar .srch { min-width: 0; }
 .srch input { width: 100%; min-width: 0; }
+
+/* ---------------------------------------------------------------- grey outlines while a page loads (no "Loading…" text, no bar) */
+.sk { background: linear-gradient(90deg, #eef1ee 0%, #f7f9f7 40%, #eef1ee 80%) 0 0 / 300% 100%; animation: skm 1.2s linear infinite; border-radius: 12px; }
+@keyframes skm { to { background-position: -150% 0; } }
+.sk-home { padding: 16px var(--m); }
+.sk-bar { height: 46px; width: 70%; border-radius: 14px; }
+.sk-srch { height: 52px; margin-top: 16px; border-radius: 26px; }
+.sk-row { display: flex; gap: 14px; margin-top: 18px; overflow: hidden; }
+.sk-dot { width: 64px; height: 64px; border-radius: 50%; flex: none; }
+.sk-bnr { height: 168px; margin-top: 18px; border-radius: 20px; }
+.sk-card { flex: 0 0 calc(50% - 7px); height: 210px; border-radius: 16px; }
+.sk-pc { pointer-events: none; }
+.sk-pc .sk-img { aspect-ratio: 1 / 1; border-radius: 16px; }
+.sk-pc .sk-t { height: 14px; margin-top: 12px; width: 82%; border-radius: 7px; }
+.sk-pc .sk-t.short { width: 52%; margin-top: 8px; }
+.sk-more { display: flex; justify-content: center; gap: 8px; padding: 22px; }
+.sk-more i { width: 8px; height: 8px; border-radius: 50%; background: var(--g-l); animation: skd 1s ease-in-out infinite; }
+.sk-more i:nth-child(2) { animation-delay: .15s; } .sk-more i:nth-child(3) { animation-delay: .3s; }
+@keyframes skd { 0%, 100% { transform: none; opacity: .5; } 50% { transform: translateY(-5px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sk, .loading, .sk-more i { animation: none; } }
+@media (min-width: 1000px) {
+  .sk-home { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .sk-bar { display: none; }
+  .sk-dot { width: 88px; height: 88px; }
+  .sk-bnr { height: 260px; }
+  .sk-card { flex-basis: calc(25% - 11px); height: 280px; }
+}
+
+/* ---------------------------------------------------------------- welcome (first visit): log in, or continue as a guest */
+body[data-page=welcome] { padding-bottom: 0; background: #f2f6ec; }
+body[data-page=welcome] .bnav, body[data-page=welcome] .pcbar, body[data-page=welcome] #cartbar { display: none !important; }
+.wel { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+.wel-hd { padding: calc(36px + env(safe-area-inset-top)) 24px 56px; text-align: center; background: radial-gradient(120% 90% at 50% 0%, #e3f2cf 0%, #f2f6ec 70%); }
+.wel-logo { width: min(78vw, 330px); height: auto; margin: 0 auto; animation: welIn .6s cubic-bezier(.2, .8, .2, 1) both; }
+.wel-hd p { margin: 12px 0 0; color: #5f6f57; font-size: .92rem; }
+.wel-card { flex: 1; width: 100%; max-width: 520px; margin: -28px auto 0; background: #fff; border-radius: 28px 28px 0 0;
+  padding: 26px 22px calc(26px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px rgba(31, 122, 46, .08); animation: welUp .5s .1s cubic-bezier(.2, .8, .2, 1) both; }
+.wel-card h1 { margin: 0 0 4px; font-size: 1.6rem; font-weight: 600; letter-spacing: -.2px; }
+.wel-form .btn-g { width: 100%; margin-top: 18px; }
+.wel-or { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--mut2); font-size: .85rem; }
+.wel-or::before, .wel-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.wel-guest { gap: 8px; }
+.wel-guest .ico { width: 20px; height: 20px; }
+.wel-new { text-align: center; margin: 18px 0 0; color: var(--mut); }
+@keyframes welIn { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes welUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@media (min-width: 1000px) {
+  .wel { justify-content: center; align-items: center; padding: 30px 0; }
+  .wel-hd { background: none; padding: 0 24px 26px; }
+  .wel-card { flex: none; margin-top: 0; border-radius: 24px; box-shadow: 0 10px 40px rgba(31, 122, 46, .10); }
+}
+
+/* ---------------------------------------------------------------- "Get the app" (phones: card on the home page; PCs: button in the top bar) */
+.inst-card { display: flex; align-items: center; gap: 12px; margin: 14px var(--m) 0; padding: 12px 10px 12px 14px; border-radius: 18px;
+  background: linear-gradient(100deg, #eaf6e3, #f6fbf2); border: 1px solid #d8ecd0; }
+.inst-card img { width: 44px; height: 44px; border-radius: 12px; flex: none; box-shadow: var(--sh2); background: #fff; }
+.ic-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ic-t b { font-weight: 600; font-size: .95rem; }
+.ic-t span { font-size: .8rem; color: var(--mut); }
+.ic-go { flex: none; height: 38px; padding: 0 16px; border-radius: 20px; background: var(--g); color: #fff; font-weight: 600; font-size: .88rem; }
+.ic-x { flex: none; width: 30px; height: 30px; display: grid; place-items: center; color: var(--mut); }
+.ic-x .ico { width: 18px; height: 18px; }
+.pc-inst { display: none; }
+.ios-steps { margin: 6px 0 18px; padding-left: 22px; line-height: 1.8; }
+.ios-steps .ios-i { display: inline-grid; vertical-align: middle; }
+.ios-steps .ios-i .ico { width: 18px; height: 18px; color: var(--blue); }
+@media (min-width: 1000px) {
+  .pc-inst { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 16px; border-radius: 24px; border: 1.5px solid var(--g); color: var(--g);
+    font-weight: 600; font-size: .88rem; flex: none; }
+  .pc-inst .ico { width: 18px; height: 18px; }
+  .inst-card { margin: 18px 24px 0; }
+}

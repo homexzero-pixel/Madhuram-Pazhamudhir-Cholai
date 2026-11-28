@@ -235,6 +235,19 @@ function changeQty() {
   if (!l || l.delivery) return;
   weightDialog(POS.byId.get(l.id) || { name: 'Item', price: lineCalc(l).rate, unit: 'pcs' }, POS.sel);
 }
+// plus / minus on a bill line: one piece, or 250 g of a loose item; minus on the last one takes the line off the bill
+function stepLine(i, dir) {
+  const l = POS.bill.lines[i];
+  if (!l || l.delivery) return;
+  const it = POS.byId.get(l.id);
+  const unit = it && it.unit === 'kg' ? 250 : 1000;
+  POS.sel = i;
+  const next = l.qty + dir * unit;
+  if (next <= 0) { removeLine(); return; }
+  l.qty = next;
+  saveBill();
+  renderBill();
+}
 function posEvent(action, value, summary) {
   api('/pos/event', { method: 'POST', body: { action, value: Money.rs(value || 0), summary, counter: myCounter() } }).catch(() => {});
 }
@@ -611,11 +624,22 @@ function renderBill() {
   box.innerHTML = b.lines.length ? `<table>${b.lines.map((l, i) => {
     const c = lineCalc(l);
     const name = l.delivery ? l.name : c.it ? c.it.name : '(product removed, delete this line)';
+    const kg = !!(c.it && c.it.unit === 'kg');
+    const last = l.qty - (kg ? 250 : 1000) <= 0;
     return `<tr data-i="${i}" class="click ${i === POS.sel ? 'sel' : ''}"><td><div class="nm">${esc(name)}</div>
-      <div class="sub">${Money.qty(l.qty)} ${c.it && c.it.unit === 'kg' ? 'kg' : ''} × ${inr(c.rate)}${l.rate != null ? ' (price changed)' : ''}
-      ${l.disc ? ` · discount ${inr(l.disc)}` : ''}</div></td><td class="r"><b>${inr(c.net)}</b></td></tr>`;
+      <div class="sub">${inr(c.rate)}${kg ? ' per kg' : ' each'}${l.rate != null ? ' (price changed)' : ''}${l.disc ? ` · discount ${inr(l.disc)}` : ''}</div></td>
+      <td class="qc">${l.delivery ? `<span class="muted small">${Money.qty(l.qty)}</span>` : `<div class="stp">
+        <button type="button" class="dn${last ? ' rm' : ''}" data-dn="${i}" aria-label="${last ? 'Remove' : 'One less'}" title="${last ? 'Remove from the bill' : 'One less (minus key)'}">${last ? ico('trash') : ico('minus')}</button>
+        <button type="button" class="q" data-q="${i}" title="Tap to type the quantity (F4)">${Money.qty(l.qty)}${kg ? '<small>kg</small>' : ''}</button>
+        <button type="button" class="up" data-up="${i}" aria-label="One more" title="One more (plus key)">${ico('plus')}</button></div>`}</td>
+      <td class="r"><b>${inr(c.net)}</b></td></tr>`;
   }).join('')}</table>` : '<div class="empty-bill">Scan a barcode, type a name, or tap a product.</div>';
   $$('tr[data-i]', box).forEach((tr) => tr.addEventListener('click', () => { POS.sel = Number(tr.dataset.i); renderBill(); }));
+  // after plus / minus the cursor goes back to the scan box, so the next barcode goes straight onto the bill
+  const back = () => setTimeout(() => { const s = $('#scan'); if (s && !$('dialog[open]')) s.focus(); }, 0);
+  $$('[data-up]', box).forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); stepLine(Number(b.dataset.up), 1); back(); }));
+  $$('[data-dn]', box).forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); stepLine(Number(b.dataset.dn), -1); back(); }));
+  $$('[data-q]', box).forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); POS.sel = Number(b.dataset.q); changeQty(); }));
   const sel = $('tr.sel', box); if (sel) sel.scrollIntoView({ block: 'nearest' });
   const t = totals();
   const hn = heldList().length;
@@ -684,11 +708,13 @@ function keys(e) {
     const n = POS.bill.lines.length; if (!n) return;
     POS.sel = Math.max(0, Math.min(n - 1, POS.sel + (e.key === 'ArrowDown' ? 1 : -1))); renderBill();
   } else if (e.key === 'Delete') { e.preventDefault(); removeLine(); }
-  else if ((e.key === '+' || e.key === '-') && POS.sel >= 0) {
+  else if ((e.key === '+' || e.key === '-') && POS.sel >= 0 && POS.bill.lines[POS.sel]) {
     e.preventDefault();
-    const l = POS.bill.lines[POS.sel]; const it = POS.byId.get(l.id);
-    if (it && it.unit === 'kg') { changeQty(); return; }
-    l.qty = Math.max(1000, l.qty + (e.key === '+' ? 1000 : -1000)); saveBill(); renderBill();
+    const l = POS.bill.lines[POS.sel];
+    const it = POS.byId.get(l.id);
+    // the minus key never takes a line off (Delete does that); plus / minus change it by one piece or 250 g
+    if (e.key === '-' && l.qty - (it && it.unit === 'kg' ? 250 : 1000) <= 0) return;
+    stepLine(POS.sel, e.key === '+' ? 1 : -1);
   }
 }
 

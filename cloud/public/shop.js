@@ -14,6 +14,16 @@ const S = {
   recent: LS.get('mpc_recent', []), active: 0, page: 'home', tok: 0, rtok: 0, hist: [], addresses: null, addrId: 0, pay: LS.get('mpc_pay', 'cash'),
   sub: LS.get('mpc_sub', 'call'), drop: LS.get('mpc_drop', []), note: '', liveOrd: null,
 };
+// the signed-in customer, also kept on this phone so the next visit opens at once (the shop's answer replaces it a moment later)
+const INFO_KEY = 'mpc_info_v2';
+const HOME_KEY = 'mpc_home_v2';
+const ME_KEY = 'mpc_me_v1';
+let meNow = null;
+Object.defineProperty(S, 'me', {
+  enumerable: true,
+  get: () => meNow,
+  set: (v) => { meNow = v || null; try { if (meNow) LS.set(ME_KEY, meNow); else localStorage.removeItem(ME_KEY); } catch (_) { /* private mode */ } },
+});
 
 async function get(path) {
   const r = await fetch(`/api/shop${path}`);
@@ -148,12 +158,12 @@ const has = (kind, key) => !!(S.info && S.info.photos && (S.info.photos[kind] ||
 function secImg(key) {
   if (has('s', key)) return `<img class="ph" src="/photos/s/${key}.webp" alt="" loading="lazy">`;
   const sec = S.info && S.info.sections.find((x) => x.key === key);
-  if (sec && sec.img) return `<img class="ph prod" src="${esc(sec.img)}" alt="" loading="lazy">`;
+  if (sec && sec.img) return `<img class="ph prod" src="${esc(sec.img)}" alt="" loading="lazy" decoding="async" data-fb="${FE(SEC_ART[key] || 'shopping-bags')}">`;
   return `<img class="art" src="${FE(SEC_ART[key] || 'shopping-bags')}" alt="" loading="lazy">`;
 }
 function pic(it, cls = '') {
-  if (it.image) return `<img class="ph ${cls}" src="${esc(it.image)}" alt="" loading="lazy">`;
   const art = artFor(it.name, it.cat);
+  if (it.image) return `<img class="ph ${cls}" src="${esc(it.image)}" alt="" loading="lazy" decoding="async" data-fb="${FE(art)}">`;
   if (has('p', art)) return `<img class="ph real ${cls}" src="/photos/p/${art}.webp" alt="" loading="lazy">`;
   return `<img class="art ${cls}" src="${FE(art)}" alt="" loading="lazy">`;
 }
@@ -225,7 +235,7 @@ function card(it) {
 }
 
 // ------------------------------------------------------------------ header bits, bottom bars
-const avatar = () => `<span class="av">${S.me ? esc(S.me.name.trim().slice(0, 1).toUpperCase()) : '<img src="/img/logo.webp" alt="">'}</span>`;
+const avatar = () => `<span class="av">${S.me ? esc(S.me.name.trim().slice(0, 1).toUpperCase()) : '<img src="/img/shop-icon-192.png" alt="">'}</span>`;
 function locText() {
   const s = S.info.shop;
   if (S.mode === 'delivery') return S.me && S.me.address ? `Deliver to ${S.me.address}` : `Home delivery · ${s.online_area || 'near the shop'}`;
@@ -238,6 +248,7 @@ function drawBars() {
   $$('[data-orddot]').forEach((b) => { b.hidden = !S.active; });
   const bar = $('#cartbar');
   bar.hidden = !c.n || !['home', 'cats', 'list', 'search'].includes(S.page);
+  if (S.page === 'welcome') bar.hidden = true;
   if (S.info && c.n) {
     const free = paise(S.info.shop.online_free_delivery_above);
     const need = free - c.total;
@@ -346,13 +357,14 @@ function modeSheet() {
     ${first ? `<p class="small mut">Earliest time: ${esc(S.info.slots[0].label)}, ${esc(first.l)}</p>` : ''}`);
   $$('[data-m]', c).forEach((b) => b.addEventListener('click', () => { setMode(b.dataset.m); closeSheet(); }));
 }
-function setMode(m) {
+function setMode(m, quiet = false) {
   const s = S.info.shop;
   if (m === 'delivery' && s.online_delivery !== '1') m = 'pickup';
   if (m === 'pickup' && s.online_pickup !== '1') m = 'delivery';
   S.mode = m;
   localStorage.setItem('mpc_mode', m);
   $$('.loc span').forEach((el) => { el.textContent = locText(); });
+  if (quiet) return;
   if (S.page === 'cart') cartView();
   if (S.page === 'home') homeView();
   drawBars();
@@ -395,27 +407,32 @@ document.addEventListener('click', (e) => {
 function goBack() { if (S.hist.length > 1) history.back(); else location.hash = '#'; }
 
 // ------------------------------------------------------------------ product grids that load more by themselves near the end
-async function results(el, params, { auto = true, limit = 30 } = {}) {
+const skelCards = (n) => Array.from({ length: n }, () => '<div class="pc sk-pc" aria-hidden="true"><div class="sk sk-img"></div><div class="sk sk-t"></div><div class="sk sk-t short"></div></div>').join('');
+async function results(el, params, { auto = true, limit = 30, seed = null } = {}) {
   const tok = ++S.rtok;                   // a newer grid (other filters, another page) replaces this one
   let offset = 0;
   let count = 0;
   let busy = false;
   let done = false;
-  el.innerHTML = '<div class="grid"></div><div class="more"></div>';
+  el.innerHTML = `<div class="grid">${seed ? '' : skelCards(window.innerWidth > 760 ? 8 : 6)}</div><div class="more"></div>`;
+  const show = (items) => {
+    remember(items);
+    if (!count) $('.grid', el).innerHTML = '';
+    offset += items.length; count += items.length;
+    $('.grid', el).insertAdjacentHTML('beforeend', items.map(card).join(''));
+  };
   const load = async () => {
     if (busy || done || tok !== S.rtok) return [];
     busy = true;
     const more = $('.more', el);
-    more.innerHTML = '<div class="loading-more">Loading more…</div>';
+    if (count) more.innerHTML = '<div class="sk-more" aria-label="Loading more"><i></i><i></i><i></i></div>';
     try {
       const q = new URLSearchParams({ ...params, sort: params.sort || S.sort, limit, offset });
       if (S.only && !params.only) q.set('only', S.only);
       if (S.instock) q.set('instock', '1');
       const { items } = await get(`/items?${q}`);
       if (tok !== S.rtok) return [];
-      remember(items);
-      offset += items.length; count += items.length;
-      $('.grid', el).insertAdjacentHTML('beforeend', items.map(card).join(''));
+      show(items);
       done = items.length < limit;
       if (!count) $('.grid', el).outerHTML = emptyState('shopping-cart', 'Nothing here yet', 'Try another word, or look in the categories.', '<a class="btn-o" href="#cats">See categories</a>');
       more.innerHTML = done ? (count > 8 ? '<div class="end-note">That\'s all for now</div>' : '') : '<button class="more-btn">Show more</button>';
@@ -425,7 +442,16 @@ async function results(el, params, { auto = true, limit = 30 } = {}) {
       return items;
     } catch (err) { more.innerHTML = `<div class="err">${esc(err.message)}</div>`; return []; } finally { busy = false; }
   };
-  const first = await load();
+  let first;
+  if (seed) {
+    show(seed);
+    done = seed.length < limit;
+    const more = $('.more', el);
+    more.innerHTML = done ? '' : '<button class="more-btn">Show more</button>';
+    const b = $('button', more);
+    if (b) b.addEventListener('click', () => load());
+    first = seed;
+  } else first = await load();
   if (auto && 'IntersectionObserver' in window) {
     const io = new IntersectionObserver((ents) => {
       if (!document.body.contains(el) || tok !== S.rtok || done) { io.disconnect(); return; }
@@ -534,6 +560,7 @@ async function homeView() {
     <div class="home-srch"><a class="srch" href="#search">${ico('search')}<span class="ph-t">Search "${HINTS[0]}"</span></a>
       ${canVoice() ? `<button class="mic-b" type="button" data-mic aria-label="Search by voice">${ico('mic')}</button>` : ''}</div>
     <div id="liveOrd"></div>
+    ${instCard()}
     ${catStrip()}
     ${closedNote()}
     ${bl.length ? `<div class="bnr-wrap"><div class="bnrs" id="bnrs">${bl.map(bnrHtml).join('')}</div>
@@ -554,38 +581,66 @@ async function homeView() {
   rotateHint();
   drawBars();
   drawLive();
+  bindInstall(view());
   const PICS = { secVeg: 'veg', secFruits: 'fruits', secExotic: 'exotics', secFest: 'offers' };
   const fillRail = (id, items) => {
     const sec = live() && $(`#${id}`);
-    if (!sec || !items.length) return;
-    sec.hidden = false;
+    if (!sec) return;
+    sec.hidden = !items.length;
+    if (!items.length) return;
     $('.rail', sec).innerHTML = remember(items).map(card).join('');
     if (PICS[id]) bannerPics(PICS[id], items);
   };
-  const rail = (id, qs) => get(`/items?${qs}`).then(({ items }) => fillRail(id, items)).catch(() => {});
-  const jobs = [
-    rail('secVeg', 'sec=veg&sort=popular&limit=12'),
-    rail('secFruits', 'sec=fruits&sort=popular&limit=12'),
-    rail('secNew', 'fresh=1&sort=new&limit=12'),
-    rail('secExotic', 'sec=exotics&sort=popular&limit=12'),
-    rail('secFest', 'only=offers&sort=offers&limit=12'),
-    get('/items?sec=staples&sort=popular&limit=12').then(({ items }) => { if (live()) bannerPics('staples', remember(items)); }).catch(() => {}),
-    get('/account/suggest').then(({ items }) => fillRail('secSuggest', items)).catch(() => {}),
-  ];
-  if (S.me) jobs.push(get('/account/again').then(({ items }) => fillRail('secAgain', items)).catch(() => {}));
+  let store = 0;
+  const storeGrid = (items) => {
+    if (live() && $('#stGrid')) $('#stGrid').innerHTML = remember(items).map(card).join('') || '<p class="mut small">Nothing in this store right now.</p>';
+  };
+  let feedFirst = true;
+  const fill = (d, fresh) => {
+    if (!live() || !d || !d.rails) return;
+    const r = d.rails;
+    fillRail('secVeg', r.veg || []);
+    fillRail('secFruits', r.fruits || []);
+    fillRail('secNew', r.fresh || []);
+    fillRail('secExotic', r.exotics || []);
+    fillRail('secFest', r.offers || []);
+    if ((r.staples || []).length) bannerPics('staples', remember(r.staples));
+    if (fresh) { fillRail('secSuggest', d.suggest || []); fillRail('secAgain', d.again || []); }
+    if (stores.length && !store) storeGrid(r.trend || []);
+    // the "More for you" grid: started from this first page; a fresher first page replaces it until the customer loads more
+    const feed = $('#feed');
+    if (feed && r.feed && (feedFirst || $$('.pc', feed).length <= 20)) {
+      feedFirst = false;
+      results(feed, { sort: 'popular' }, { limit: 20, seed: r.feed });
+    }
+  };
   if (stores.length) {
     const showStore = async (n) => {
+      store = n;
       $$('.st-tabs button').forEach((b) => b.classList.toggle('on', Number(b.dataset.st) === n));
       $('#stAll').href = n ? `#store=${n}` : '#trending';
       $('#stAll').innerHTML = `${n ? `See all in ₹${n} Store` : 'See all trending'} ${ico('right')}`;
+      if (!n && S.homeRails) { storeGrid(S.homeRails.trend || []); return; }
       const { items } = await get(`/items?${new URLSearchParams({ sort: 'popular', limit: 6, instock: '1', ...(n ? { max_price: n } : {}) })}`);
-      if (live() && $('#stGrid')) $('#stGrid').innerHTML = remember(items).map(card).join('') || '<p class="mut small">Nothing in this store right now.</p>';
+      if (store === n) storeGrid(items);
     };
     $$('.st-tabs button').forEach((b) => b.addEventListener('click', () => showStore(Number(b.dataset.st)).catch(() => {})));
-    jobs.push(showStore(0).catch(() => {}));
   }
-  await Promise.allSettled(jobs);
-  if (live() && $('#feed')) results($('#feed'), { sort: 'popular' }, { limit: 20 });
+  const saved = LS.get(HOME_KEY, null);
+  if (saved && saved.rails) { S.homeRails = saved.rails; fill(saved, false); } else {
+    // first visit: grey outlines where the products will be
+    for (const id of ['secVeg', 'secFruits']) { const sec = $(`#${id}`); if (sec) { sec.hidden = false; $('.rail', sec).innerHTML = skelCards(5); } }
+    if ($('#stGrid')) $('#stGrid').innerHTML = skelCards(3);
+  }
+  try {
+    const d = await get('/home');
+    if (!live()) return;
+    S.homeRails = d.rails;
+    try { LS.set(HOME_KEY, { rails: d.rails, at: Date.now() }); } catch (_) { /* storage full */ }
+    fill(d, true);
+  } catch (_) {
+    if (!saved) for (const id of ['secVeg', 'secFruits']) { const sec = $(`#${id}`); if (sec && $('.sk-pc', sec)) sec.hidden = true; }
+  }
 }
 
 // ------------------------------------------------------------------ categories, sections, price stores, lists, search
@@ -1168,7 +1223,7 @@ function authView(kind) {
       The shop sets a new password for your mobile number.</p><a class="btn-o wide" href="#login">Back to log in</a>`,
   };
   view().innerHTML = `${appbar(kind === 'forgot' ? 'Forgot password' : kind === 'signup' ? 'Sign up' : 'Log in')}<div class="page"><div class="auth">
-    <div class="auth-head"><img src="/img/logo.webp" alt=""><h1>${kind === 'forgot' ? 'Forgot password' : kind === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
+    <div class="auth-head"><img src="/img/shop-icon-192.png" alt=""><h1>${kind === 'forgot' ? 'Forgot password' : kind === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
     <p>${esc(S.info.shop.name)}</p></div>${kind === 'forgot' ? '' : tabs}${forms[kind]}</div></div>`;
   drawBars();
   const f = $('#af');
@@ -1233,10 +1288,13 @@ function accountView() {
       ${row('data-edit', 'user', 'Edit profile', 'Name, mobile number and email')}
       ${row('data-pw', 'lock', 'Change password')}
       ${row('href="#help"', 'help', 'Help & support', 'Call or WhatsApp the shop')}
+      ${row('data-install hidden', 'download', 'Install the app', 'Order faster, right from your home screen')}
       ${row('data-out', 'logout', 'Log out', '', 'red')}
     </div></div>`;
   drawBars();
   $$('[data-edit]').forEach((b) => b.addEventListener('click', editProfile));
+  $$('[data-install]').forEach((b) => b.addEventListener('click', install));
+  drawInstall();
   $('[data-pw]').addEventListener('click', () => {
     const c = sheet(`<h2>Change password</h2><form><div class="field"><label>Current password</label><input name="password" type="password" autocomplete="current-password" required></div>
       <div class="field"><label>New password (at least 6 letters or numbers)</label><input name="new_password" type="password" autocomplete="new-password" minlength="6" required></div>
@@ -1376,6 +1434,104 @@ async function loadActive() {
   drawBars();
   drawLive();
 }
+// ------------------------------------------------------------------ first visit: log in with one tap, or look around as a guest
+// Nobody has to log in to look around; logging in is asked only when the order is placed.
+const WELCOME_SKIP = /^#(o=|p=|cart|login|signup|forgot|q=|code=|sec=|cat=|offers|store=|help|orders|new|trending|saved|search)/;
+function welcomeFirst() {
+  if (S.me || LS.get('mpc_guest', 0) || WELCOME_SKIP.test(location.hash)) return;
+  history.replaceState(null, '', '#welcome');
+}
+function leaveWelcome(to = '') {
+  S.hist = [];
+  history.replaceState(null, '', to || location.pathname + location.search);
+  route();
+}
+function welcomeView() {
+  S.page = 'welcome';
+  ++S.tok;
+  const s = S.info.shop;
+  view().innerHTML = `<div class="wel">
+    <div class="wel-hd"><img class="wel-logo" src="/img/shop-logo.webp" alt="${esc(s.name)}">
+      <p>${esc(String(s.tagline || 'Fresh fruits, vegetables and daily needs').replace(/^Supermarket\s*·\s*/i, ''))}</p></div>
+    <div class="wel-card">
+      <h1>Welcome</h1>
+      <p class="mut small">Log in with your mobile number, or look around first. You only need to log in when you place an order.</p>
+      <form id="wf" class="wel-form">
+        <div class="field"><label>Mobile number</label><input name="phone" inputmode="tel" autocomplete="tel" required placeholder="10-digit mobile number"></div>
+        <div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div>
+        <div id="werr"></div>
+        <button class="btn-g wide">Log in</button>
+      </form>
+      <div class="wel-or"><span>or</span></div>
+      <button class="btn-o wide wel-guest" type="button" id="wguest">${ico('user')}Continue as guest</button>
+      <p class="wel-new small">New here? <a href="#signup" class="okc" id="wsign">Create an account</a> · <a href="#forgot" class="okc" id="wforgot">Forgot password?</a></p>
+    </div></div>`;
+  drawBars();
+  const f = $('#wf');
+  $('#wguest').addEventListener('click', () => { LS.set('mpc_guest', Date.now()); leaveWelcome(); });
+  $('#wsign').addEventListener('click', () => { LS.set('mpc_guest', Date.now()); S.after = '#'; });
+  $('#wforgot').addEventListener('click', () => { LS.set('mpc_guest', Date.now()); });
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('button', f); btn.disabled = true;
+    $('#werr').innerHTML = '';
+    try {
+      const r = await post('/account/login', { phone: f.phone.value, password: f.password.value });
+      S.me = r.me; S.addresses = null;
+      toast(`Welcome, ${r.me.name}!`);
+      leaveWelcome();
+      loadActive();
+    } catch (ex) { $('#werr').innerHTML = `<div class="err">${esc(ex.message)}</div>`; } finally { btn.disabled = false; }
+  });
+}
+
+// ------------------------------------------------------------------ the shop as an app on the phone or PC ("Get the app")
+const INST = { ev: null };
+const standalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const canInstall = () => !standalone() && !!(INST.ev || isIOS());
+function installSetup() {
+  if ('serviceWorker' in navigator && location.pathname === '/' && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('/shop-sw.js').catch(() => {});
+  }
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); INST.ev = e; drawInstall(); });
+  window.addEventListener('appinstalled', () => { INST.ev = null; drawInstall(); toast('Installed. Open Madhuram from your home screen.'); });
+}
+async function install() {
+  if (INST.ev) {
+    const ev = INST.ev;
+    INST.ev = null;
+    ev.prompt();
+    await ev.userChoice.catch(() => null);
+    drawInstall();
+    return;
+  }
+  if (isIOS()) {
+    sheet(`<h2>Add Madhuram to your iPhone</h2><ol class="ios-steps">
+      <li>Tap the <b>Share</b> button <span class="ios-i">${ico('share')}</span> at the bottom of Safari.</li>
+      <li>Scroll and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>. Madhuram opens like an app from your home screen.</li></ol>
+      <button class="btn-g wide" data-close>OK</button>`);
+    return;
+  }
+  toast('Open this page in Chrome or Edge to install the app.');
+}
+function drawInstall() {
+  const on = canInstall();
+  const pc = $('#pcInst');
+  if (pc) pc.hidden = !on;
+  const c = $('#instCard');
+  if (c) c.hidden = !on || Date.now() - Number(LS.get('mpc_inst_x', 0)) < 14 * 86400000;
+  $$('[data-install]').forEach((b) => { b.hidden = !on; });
+}
+const instCard = () => `<div class="inst-card" id="instCard" hidden><img src="/img/shop-icon-192.png" alt="" width="44" height="44">
+  <div class="ic-t"><b>Get the Madhuram app</b><span>Order faster, right from your home screen</span></div>
+  <button class="ic-go" type="button" data-install-go>Install</button><button class="ic-x" type="button" aria-label="Not now" data-install-x>${ico('x')}</button></div>`;
+function bindInstall(root = document) {
+  $$('[data-install-go]', root).forEach((b) => b.addEventListener('click', install));
+  $$('[data-install-x]', root).forEach((b) => b.addEventListener('click', () => { LS.set('mpc_inst_x', Date.now()); drawInstall(); }));
+  drawInstall();
+}
+
 const NEEDS_LOGIN = ['#refer', '#addresses'];
 async function route() {
   const h = decodeURIComponent(location.hash);
@@ -1390,6 +1546,7 @@ async function route() {
   if (!h.startsWith('#q=') && document.activeElement !== $('#pcq')) $('#pcq').value = '';
   try {
     if (NEEDS_LOGIN.includes(h) && !S.me) { needLogin(); return; }
+    if (h === '#welcome') { if (S.me) leaveWelcome(); else welcomeView(); return; }
     if (h.startsWith('#o=')) await trackView(h.slice(3));
     else if (h === '#orders') await ordersView();
     else if (h === '#account') (S.me ? accountView() : authView('login'));
@@ -1418,22 +1575,70 @@ async function route() {
   drawBars();
 }
 
-(async () => {
-  const ref = new URLSearchParams(location.search).get('ref');
-  if (ref && /^[A-Za-z0-9]{4,12}$/.test(ref)) LS.set('mpc_ref', ref.toUpperCase());
-  try {
-    S.info = await get('/info');
-  } catch (e) { view().innerHTML = `<div class="page">${emptyState('package', 'Could not open the shop', e.message, '<a class="btn-o" href="/shop/">Try again</a>')}</div>`; return; }
+// ------------------------------------------------------------------ start
+// The shop opens at once from what this phone saw last time; the shop's newest details replace it a moment later (usually
+// while the opening screen is still showing). A first visit waits for the shop's answer: everything is asked at the same time.
+function applyInfo() {
   const s = S.info.shop;
   document.title = `${s.name} | Order online`;
   $('#pcName').textContent = s.name;
+}
+let begun = false;
+async function begin() {
+  applyInfo();
   fillIcons();
-  try { const a = await get('/account'); S.me = a.me; S.sms = a.sms; } catch (_) { /* browse without an account */ }
-  if (!S.mode) S.mode = s.online_delivery === '1' ? 'delivery' : 'pickup';
-  setMode(S.mode);
+  if (!S.mode) S.mode = S.info.shop.online_delivery === '1' ? 'delivery' : 'pickup';
+  setMode(S.mode, true);
+  if (!begun) { begun = true; listen(); }
+  welcomeFirst();
+  await route();
+  drawInstall();
+  if (window.Splash) Splash.done();
+}
+(async () => {
+  const ref = new URLSearchParams(location.search).get('ref');
+  if (ref && /^[A-Za-z0-9]{4,12}$/.test(ref)) LS.set('mpc_ref', ref.toUpperCase());
+  installSetup();
+  const saved = LS.get(INFO_KEY, null);
+  const infoP = get('/info');
+  const acctP = get('/account').catch(() => null);
   // prices in the basket always come from the shop, never from what was saved on the phone
-  await refreshCart();
+  const cartP = refreshCart();
+  if (saved && saved.shop && saved.sections) {
+    S.info = saved;
+    try { meNow = LS.get(ME_KEY, null); } catch (_) { meNow = null; }
+    await begin();
+    const [fresh, acct] = await Promise.all([infoP.catch(() => null), acctP]);
+    let redo = false;
+    if (fresh) {
+      try { LS.set(INFO_KEY, fresh); } catch (_) { /* storage full */ }
+      if (JSON.stringify(fresh) !== JSON.stringify(saved)) { S.info = fresh; applyInfo(); redo = true; }
+    }
+    if (acct) {
+      if (JSON.stringify(acct.me || null) !== JSON.stringify(S.me)) redo = true;
+      S.me = acct.me; S.sms = acct.sms;
+    }
+    if (redo && ['home', 'cats', 'account', 'welcome'].includes(S.page)) route(); else drawBars();
+  } else {
+    try {
+      const [fresh, acct] = await Promise.all([infoP, acctP]);
+      S.info = fresh;
+      try { LS.set(INFO_KEY, fresh); } catch (_) { /* storage full */ }
+      if (acct) { S.me = acct.me; S.sms = acct.sms; }
+    } catch (e) {
+      view().innerHTML = `<div class="page">${emptyState('package', 'Could not open the shop', e.message, '<a class="btn-o" href="/">Try again</a>')}</div>`;
+      if (window.Splash) Splash.done();
+      return;
+    }
+    await begin();
+  }
+  await cartP;
+  if (S.page === 'cart') cartView(); else drawBars();
+  loadActive();
+})();
+function listen() {
   $('#pcLoc').addEventListener('click', modeSheet);
+  $('#pcInst').addEventListener('click', install);
   let t;
   $('#pcq').addEventListener('input', (e) => {
     clearTimeout(t);
@@ -1445,6 +1650,13 @@ async function route() {
   });
   $('#pcq').addEventListener('keydown', (e) => { if (e.key === 'Enter') addRecent(e.target.value); });
   window.addEventListener('hashchange', route);
-  await route();
-  loadActive();
-})();
+  // a photo that cannot be loaded (missing on the server) shows the product's picture instead of a broken image
+  document.addEventListener('error', (e) => {
+    const t = e.target;
+    if (!t || t.tagName !== 'IMG' || !t.dataset.fb || t.dataset.fbDone) return;
+    t.dataset.fbDone = '1';
+    t.classList.remove('ph', 'prod', 'real');
+    t.classList.add('art');
+    t.src = t.dataset.fb;
+  }, true);
+}

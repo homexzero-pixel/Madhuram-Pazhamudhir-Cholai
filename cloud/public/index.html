@@ -8,15 +8,70 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/img/icon-192.png">
 <link rel="apple-touch-icon" href="/img/icon-192.png">
-<link rel="stylesheet" href="/app.css?v=2026.11.28e">
+<link rel="preload" href="/img/logo-full.webp" as="image" fetchpriority="high">
+<style>
+/* opening screen: the logo drives in, the name and a line come up, then it drives out (splash.js) */
+#splash{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#f2f6ec;
+  font-family:Poppins,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;transition:opacity .35s ease,visibility 0s linear .35s;animation:spKill 0s linear 12s forwards}
+#splash.go{opacity:0;visibility:hidden}
+html:has(#splash:not(.go)){overflow:hidden}
+.sp-in{display:flex;flex-direction:column;align-items:center;text-align:center;padding:24px;transform:translateY(-3vh)}
+.sp-hero{position:relative;width:min(76vw,340px);margin-bottom:26px}
+.sp-blob{position:absolute;left:2%;right:2%;top:-48%;bottom:-48%;border-radius:50%;background:radial-gradient(closest-side,#d9eebb 0%,#e4f2cf 55%,rgba(228,242,207,0) 100%);opacity:0;transform:scale(.55)}
+.sp-logo{position:relative;display:block;width:100%;height:auto;opacity:0;transform:translateX(-115vw) skewX(-14deg)}
+.sp-lines{position:absolute;left:-17%;top:20%;width:19%;height:58%;display:flex;flex-direction:column;justify-content:space-between;opacity:0}
+.sp-lines i{display:block;height:4px;border-radius:4px;background:#8ccf4d}
+.sp-lines i:nth-child(1){width:70%;margin-left:30%}.sp-lines i:nth-child(2){width:100%;background:#2f9e44}.sp-lines i:nth-child(3){width:50%;margin-left:50%}
+.sp-ta{font:700 clamp(20px,5.8vw,27px)/1.3 "Noto Sans Tamil","Nirmala UI","Latha",sans-serif;color:#c9d3bf;opacity:0;transform:translateY(8px)}
+.sp-tag{margin-top:6px;font-size:13.5px;letter-spacing:.2px;color:#6f7d67;opacity:0;transform:translateY(8px)}
+.sp-dots{display:flex;gap:6px;margin-top:24px;opacity:0;transition:opacity .3s}
+.sp-dots i{width:7px;height:7px;border-radius:50%;background:#9fcf6a;animation:spDot 1s ease-in-out infinite}
+.sp-dots i:nth-child(2){animation-delay:.15s}.sp-dots i:nth-child(3){animation-delay:.3s}
+#splash.run .sp-logo{animation:spIn .8s cubic-bezier(.2,.75,.25,1.05) .05s forwards}
+#splash.run .sp-lines{animation:spLines 1.1s ease-out .05s forwards}
+#splash.run .sp-blob{animation:spBlob .7s cubic-bezier(.2,.8,.2,1) .4s forwards}
+#splash.run .sp-ta{animation:spName .5s ease-out .7s forwards}
+#splash.run .sp-tag{animation:spUp .4s ease-out .95s forwards}
+#splash.wait .sp-logo{animation:spIn .8s cubic-bezier(.2,.75,.25,1.05) .05s forwards,spBob 1.8s ease-in-out .9s infinite}
+#splash.wait .sp-dots{opacity:1}
+#splash.out .sp-logo{animation:spOut .5s cubic-bezier(.55,0,.8,.2) forwards}
+#splash.out .sp-lines{animation:spLinesOut .45s ease-in forwards}
+#splash.out .sp-ta,#splash.out .sp-tag{animation:spBlur .4s ease-in forwards}
+#splash.out .sp-blob{animation:spBlobOut .4s ease-in forwards}
+#splash.out .sp-dots{opacity:0}
+@keyframes spIn{0%{opacity:1;transform:translateX(-115vw) skewX(-14deg)}62%{transform:translateX(4%) skewX(5deg)}80%{transform:translateX(-1.5%) skewX(-2deg)}100%{opacity:1;transform:none}}
+@keyframes spLines{0%{opacity:0;transform:translateX(-40px)}25%{opacity:1}70%{opacity:1;transform:none}100%{opacity:0;transform:translateX(12px)}}
+@keyframes spBlob{to{opacity:1;transform:scale(1)}}
+@keyframes spName{0%{opacity:0;transform:translateY(8px);color:#c9d3bf}55%{opacity:1}100%{opacity:1;transform:none;color:#1f7a2e}}
+@keyframes spUp{to{opacity:1;transform:none}}
+@keyframes spBob{0%,100%{transform:none}50%{transform:translateY(-4px)}}
+@keyframes spOut{0%{opacity:1;transform:none}18%{opacity:1;transform:translateX(-3%) skewX(-4deg)}100%{opacity:1;transform:translateX(120vw) skewX(12deg)}}
+@keyframes spLinesOut{0%{opacity:1;transform:none}100%{opacity:0;transform:translateX(60vw)}}
+@keyframes spBlur{to{opacity:0;filter:blur(6px);transform:translateX(28px)}}
+@keyframes spBlobOut{to{opacity:0;transform:scale(.7)}}
+@keyframes spDot{0%,100%{transform:none;opacity:.5}50%{transform:translateY(-5px);opacity:1}}
+@keyframes spKill{to{opacity:0;visibility:hidden}}
+@media (prefers-reduced-motion:reduce){#splash .sp-logo,#splash .sp-ta,#splash .sp-tag,#splash .sp-blob{animation:none!important;opacity:1;transform:none;color:#1f7a2e}#splash .sp-lines{display:none}}
+</style>
 </head>
 <body>
-<div id="app" class="loading">Loading…</div>
+<div id="splash" role="status" aria-label="Opening Madhuram Pazhamudhir Solai">
+  <div class="sp-in">
+    <div class="sp-hero"><span class="sp-blob"></span><span class="sp-lines"><i></i><i></i><i></i></span>
+      <img class="sp-logo" src="/img/logo-full.webp" alt="Madhuram Pazhamudhir Solai" fetchpriority="high"></div>
+    <div class="sp-ta">மதுரம் பழமுதிர் சோலை</div>
+    <div class="sp-tag">Fresh fruits · Vegetables · Daily needs</div>
+    <div class="sp-dots"><i></i><i></i><i></i></div>
+  </div>
+</div>
+<link rel="stylesheet" href="/app.css?v=2026.11.28f">
+<div id="app"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="print-area" aria-hidden="true"></div>
-<script src="/icons.js?v=2026.11.28e"></script>
-<script src="/app.js?v=2026.11.28e"></script>
-<script src="/pos.js?v=2026.11.28e"></script>
-<script src="/more.js?v=2026.11.28e"></script>
+<script src="/splash.js?v=2026.11.28f"></script>
+<script src="/icons.js?v=2026.11.28f"></script>
+<script src="/app.js?v=2026.11.28f"></script>
+<script src="/pos.js?v=2026.11.28f"></script>
+<script src="/more.js?v=2026.11.28f"></script>
 </body>
 </html>

@@ -179,6 +179,19 @@ const cust = require('../custauth');
 const meOut = (c) => (c ? { id: c.id, name: c.name, phone: c.phone, address: c.address || '', verified: !!c.verified, points: Number(c.points || 0),
   email: c.email || '' } : null);
 r.get('/shop/account', wrap(async (req, res) => ok(res, { me: meOut(await cust.current(req)), sms: cust.smsEnabled() })));
+// The home page in one call: every row of products it shows (a phone on a slow network waits once instead of nine times)
+r.get('/shop/home', wrap(async (req, res) => {
+  if ((await settings.load()).online_enabled !== '1') return ok(res, { closed: true, rails: {}, suggest: [], again: [] });
+  const c = await cust.current(req);
+  const q = (p) => shop.catalogue(p).catch(() => []);
+  const [veg, fruits, fresh, exotics, offers, staples, trend, feed, suggest, again] = await Promise.all([
+    q({ sec: 'veg', sort: 'popular', limit: 12 }), q({ sec: 'fruits', sort: 'popular', limit: 12 }), q({ fresh: 1, sort: 'new', limit: 12 }),
+    q({ sec: 'exotics', sort: 'popular', limit: 12 }), q({ only: 'offers', sort: 'offers', limit: 12 }), q({ sec: 'staples', sort: 'popular', limit: 12 }),
+    q({ sort: 'popular', limit: 6 }), q({ sort: 'popular', limit: 20, offset: 0 }),
+    shop.suggest(c ? c.id : null).catch(() => []), c ? shop.buyAgain(c.id).catch(() => []) : Promise.resolve([]),
+  ]);
+  ok(res, { rails: { veg, fruits, fresh, exotics, offers, staples, trend, feed }, suggest, again });
+}));
 const me = async (req) => { const c = await cust.current(req); if (!c) throw new UserError('Please log in.', 401); return c; };
 r.get('/shop/account/addresses', wrap(async (req, res) => ok(res, { addresses: await cust.addresses((await me(req)).id) })));
 r.post('/shop/account/addresses', wrap(async (req, res) => {
@@ -282,7 +295,7 @@ r.post('/products/image-by-code/:code', need('photos'), express.raw({ type: ['im
   ok(res, { id: it.id, name: it.name });
 }));
 r.post('/shop-banners/image', need('settings'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
-  ok(res, { name: images.saveBanner(req.body) });
+  ok(res, { name: await images.saveBanner(req.body) });
 }));
 r.post('/products/:id/image/remove', need('photos'), wrap(async (req, res) => { await images.remove(Number(req.params.id)); ok(res); }));
 r.get('/images/fetch', need('photos'), wrap(async (req, res) => ok(res, await images.status())));

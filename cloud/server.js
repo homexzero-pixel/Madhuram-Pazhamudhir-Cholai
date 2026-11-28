@@ -70,18 +70,24 @@ function createApp() {
   });
 
   const pub = path.join(__dirname, 'public');
-  app.get('/sw.js', (req, res) => {
+  app.get(['/sw.js', '/shop-sw.js'], (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
-    res.sendFile(path.join(pub, 'sw.js'));
+    res.sendFile(path.join(pub, req.path.slice(1)));
+  });
+  // program files with a version number (?v=…) and the fonts never change: browsers keep them for a year without asking again
+  app.use((req, res, next) => {
+    if ((req.query.v && /\.(js|css)$/.test(req.path)) || /^\/fonts\/[\w.-]+\.woff2$/.test(req.path)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    next();
   });
   // product photos (public: the customers' shop shows them)
   app.get('/img/p/:name', async (req, res, next) => {
     const images = require('./src/images');
-    let p = images.filePath(req.params.name);
-    // customers' site as its own app: the photo was uploaded on the billing site; copy it from there once
+    let p = await images.photo(req.params.name).catch(() => null);
+    // customers' site as its own app: a photo the database does not have yet comes from the billing site once
     if (!p && req.site === 'shop' && !req.headers['x-mpc-photo-copy']) p = await images.fetchFromBilling(req.params.name).catch(() => null);
     if (!p) return next(new UserError('Not found.', 404));
     res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+    if (Buffer.isBuffer(p)) return res.type(path.extname(req.params.name)).send(p);
     return res.sendFile(p);
   });
   app.use(express.static(pub, { index: false, maxAge: '1h' }));
@@ -178,6 +184,8 @@ async function main() {
 function startJobs() {
   const shopOnly = ['shop'].includes(String(process.env.SITE_ROLE || process.env.APP_ROLE || '').toLowerCase());
   events.start({ billing: !shopOnly });
+  // photos: keep every photo in the database too, and find the ones a move to a new domain or folder left behind
+  setTimeout(() => require('./src/images').recover({ authority: !shopOnly }).catch((e) => console.error('photos:', e.message)), shopOnly ? 4000 : 8000).unref();
   if (shopOnly) return;
   require('./src/backups').schedule();
   const stock = require('./src/stock');

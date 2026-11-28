@@ -84,8 +84,22 @@ Owner phone: open the address in Chrome → ⋮ → **Install app** / Add to Hom
 - Evening: **Owner tools → Day summary → Send on WhatsApp** to see the day on your phone.
 - **Internet is needed to complete a bill.** If the internet stops, the open bill stays on the screen; complete it when the internet
   returns. Keep a mobile hotspot ready. (The shop PC version keeps working without internet, if you prefer that at the counter.)
+- **Changing a quantity on the bill:** every line has **−**, the quantity and **+**. Plus / minus change it by one piece (250 g for a
+  loose item); minus on the last piece shows a bin and takes the line off. Tap the quantity to type it (or press F4). The + and −
+  keys do the same for the chosen line. The cursor goes back to the scan box, so the next barcode goes straight on the bill.
 
 ## Online shop look
+
+- **Opening screen:** both sites open with the shop's logo driving in, the name and a line, then the page (about 1.5 seconds; longer
+  only while a slow phone is still loading). The customers' site uses its own logo and app icon (`public/img/shop-logo.webp`,
+  `shop-icon-192.png`, `shop-icon-512.png`, `shop-icon-maskable-512.png`, `shop-icon-180.png`); the billing software keeps
+  `logo-full.webp` and `icon-*.png`.
+- **No login needed to look around.** A first-time visitor sees *Log in* or *Continue as guest* (one tap). Logging in is asked only
+  when the order is placed.
+- **Get the app:** on Android phones and on PCs (Chrome / Edge) the shop offers *Install* (home page card, Profile, and a button in
+  the top bar on PCs). On iPhones it shows how: Share, then *Add to Home Screen*.
+- **Fast:** the home page comes in one call; the next visit opens at once from what the phone saw last time and is refreshed a moment
+  later. Fonts (Poppins), program files and pictures are kept by the phone.
 
 - The shop (`/shop/`) works on phones and PCs: home with banners, categories, offers and best sellers; search with sort and
   filters; product details with "Add to Basket"; basket with delivery or takeaway and a time; order tracking; profile with
@@ -172,6 +186,12 @@ No code or environment variable changes are needed. In this order:
 
 Old `SHOP_URL` / `BILLING_URL` values in the environment variables are not needed any more and can be deleted: the address in
 Settings and the address the billing site noted come first. Keep `SITE_ROLE`, `EVENTS_SECRET` and the `DB_*` variables.
+
+**Product photos after a move.** Photos are kept in the database as well as on the app's disk (from November 2026), so a new domain or
+hosting folder cannot lose them again. Photos saved before that were files only: when the app starts it looks for them in the other
+`madhuram_images` folders of the same hosting account (the old domain's folder) and keeps them in the database. Photos that are gone
+from everywhere are taken off the products (so no broken pictures); the ones that came from your photo list are fetched again: open
+**Settings → Product photos** and press **Continue** (keep the page open while it works).
 
 | Setting | Where | Meaning |
 |---|---|---|

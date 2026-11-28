@@ -31,30 +31,55 @@ async function save(itemId, buf, source = 'upload') {
   if (!ext) throw new UserError('This is not a JPG, PNG or WebP photo.');
   const it = await db.one('SELECT id, image FROM items WHERE id=?', [itemId]);
   if (!it) throw new UserError('Product not found.', 404);
-  fs.mkdirSync(DIR, { recursive: true });
   const name = `p${it.id}_${crypto.randomBytes(4).toString('hex')}.${ext}`;
-  fs.writeFileSync(path.join(DIR, name), buf);
+  await keep(name, buf);
+  writeCopy(name, buf);
   await db.query('UPDATE items SET image=?, image_source=?, updated_at=? WHERE id=?', [name, source, nowIST(), it.id]);
   await db.bump();
-  if (it.image && NAME.test(it.image)) { try { fs.unlinkSync(path.join(DIR, it.image)); } catch (_) { /* gone */ } }
+  if (it.image && NAME.test(it.image)) await drop(it.image);
   return name;
 }
 
 // A banner photo for the online shop (wide picture, resized on the PC before upload).
-function saveBanner(buf) {
+async function saveBanner(buf) {
   if (!Buffer.isBuffer(buf) || !buf.length) throw new UserError('Choose a photo.');
   if (buf.length > MAX) throw new UserError('The photo is too large (more than 800 KB).');
   const ext = kind(buf);
   if (!ext) throw new UserError('This is not a JPG, PNG or WebP photo.');
-  fs.mkdirSync(DIR, { recursive: true });
   const name = `b_${crypto.randomBytes(4).toString('hex')}.${ext}`;
-  fs.writeFileSync(path.join(DIR, name), buf);
+  await keep(name, buf);
+  writeCopy(name, buf);
   return name;
+}
+
+// ------------------------------------------------------------------ the database copy of every photo
+// The file on this app's disk is a fast copy. The database copy survives a redeploy, a change of domain or hosting folder,
+// and the customers' site (its own copy of the app) reads it straight from the shared database.
+async function keep(name, buf) {
+  await db.query(`INSERT INTO photo_files (name, data, bytes, created_at) VALUES (?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE data=VALUES(data), bytes=VALUES(bytes)`, [name, buf, buf.length, nowIST()]);
+}
+function writeCopy(name, buf) {
+  try { fs.mkdirSync(DIR, { recursive: true }); fs.writeFileSync(path.join(DIR, name), buf); return true; } catch (_) { return false; }
+}
+async function drop(name) {
+  try { fs.unlinkSync(path.join(DIR, name)); } catch (_) { /* gone */ }
+  await db.query('DELETE FROM photo_files WHERE name=?', [name]).catch(() => {});
+}
+// A photo to send: this app's file, else the database copy (kept on disk again for next time). A path, a Buffer or null.
+async function photo(name) {
+  if (!NAME.test(name || '')) return null;
+  const p = path.join(DIR, name);
+  if (fs.existsSync(p)) return p;
+  const row = await db.one('SELECT data FROM photo_files WHERE name=?', [name]).catch(() => null);
+  if (!row || !row.data || !row.data.length) return null;
+  const buf = Buffer.from(row.data);
+  return writeCopy(name, buf) ? p : buf;
 }
 
 async function remove(itemId) {
   const it = await db.one('SELECT image FROM items WHERE id=?', [itemId]);
-  if (it && it.image && NAME.test(it.image)) { try { fs.unlinkSync(path.join(DIR, it.image)); } catch (_) { /* gone */ } }
+  if (it && it.image && NAME.test(it.image)) await drop(it.image);
   await db.query('UPDATE items SET image=NULL, image_source=NULL, updated_at=? WHERE id=?', [nowIST(), itemId]);
   await db.bump();
 }
@@ -86,10 +111,8 @@ async function fetchFromBilling(name) {
   if (!r.ok) return null;
   const buf = Buffer.from(await r.arrayBuffer());
   if (!buf.length || buf.length > 2 * MAX || !kind(buf)) return null;
-  fs.mkdirSync(DIR, { recursive: true });
-  const p = path.join(DIR, name);
-  fs.writeFileSync(p, buf);
-  return p;
+  await keep(name, buf).catch(() => {});
+  return writeCopy(name, buf) ? path.join(DIR, name) : buf;
 }
 
 // ------------------------------------------------------------------ background lookup by barcode
@@ -168,7 +191,8 @@ async function status() {
   const c = await db.one(`SELECT SUM(image IS NOT NULL) with_photo, SUM(image IS NULL) without_photo,
     SUM(image_source='openfoodfacts') from_db FROM items WHERE price IS NOT NULL`);
   const { stop: _s, ...j } = job;
-  return { ...j, with_photo: Number(c.with_photo || 0), without_photo: Number(c.without_photo || 0), from_db: Number(c.from_db || 0) };
+  const { running: _r, ...rec } = recovery;
+  return { ...j, with_photo: Number(c.with_photo || 0), without_photo: Number(c.without_photo || 0), from_db: Number(c.from_db || 0), recovery: rec };
 }
 
 // ------------------------------------------------------------------ photos from a list of web addresses
@@ -318,5 +342,91 @@ async function linkFailed(itemId, note) {
 async function linksAgain() { await db.query("UPDATE photo_links SET status='waiting', note=NULL, tried_at=NULL WHERE status='failed'"); }
 async function linksClear() { await db.query("DELETE FROM photo_links WHERE status IN ('waiting','failed')"); }
 
-module.exports = { fetchFromBilling, saveBanner, saveByCode, save, remove, filePath, start, stop, status, DIR, kind,
+// ------------------------------------------------------------------ after a move to a new domain or hosting folder
+// Photos in use (products, UPI QR, festival photo, shop banners) that are not in the database yet are looked for on this
+// app's disk and in other "madhuram_images" folders of the same hosting account (the old domain's folder is usually still
+// there), and kept in the database. The billing site then queues the ones still missing from the owner's photo list again,
+// and clears the rest so the screens show "no photo" instead of a broken picture.
+const recovery = { ran: false, running: false, at: null, in_use: 0, saved: 0, found: 0, missing: 0, requeued: 0, cleared: 0, folders: 0 };
+const PHOTO_IN = /(?:p\d+|b)_[0-9a-f]{8}\.(?:jpg|png|webp)/g;
+async function namesInUse() {
+  const names = new Set((await db.query('SELECT image FROM items WHERE image IS NOT NULL')).map((r) => r.image).filter((n) => NAME.test(n)));
+  for (const r of await db.query("SELECT v FROM settings WHERE k IN ('upi_qr','festival_banner','shop_banners')")) {
+    for (const m of String(r.v || '').matchAll(PHOTO_IN)) names.add(m[0]);
+  }
+  return names;
+}
+const SKIP_DIRS = new Set(['node_modules', 'proc', 'sys', 'dev', 'tmp', 'cache', 'logs', 'mail', 'wp-admin', 'wp-includes', 'wp-content']);
+function photoFolders(where) {
+  const own = path.resolve(DIR);
+  const base = path.basename(own);
+  const roots = new Set((where || [path.resolve(DIR, '..', '..'), require('os').homedir()]).filter((r) => r && r !== path.parse(r).root));
+  const found = new Set();
+  let seen = 0;
+  for (const root of roots) {
+    const queue = [[root, 0]];
+    while (queue.length && seen < 4000) {
+      const [d, depth] = queue.shift();
+      seen += 1;
+      let ents = [];
+      try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch (_) { continue; }
+      for (const e of ents) {
+        if (!e.isDirectory() || e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue;
+        const p = path.resolve(d, e.name);
+        if (e.name === 'madhuram_images' || e.name === base) { if (p !== own) found.add(p); continue; }
+        if (depth < 3) queue.push([p, depth + 1]);
+      }
+    }
+  }
+  return [...found];
+}
+async function recover({ authority = true, roots } = {}) {
+  if (recovery.running) return recovery;
+  recovery.running = true;
+  try {
+    const names = await namesInUse();
+    const have = new Set((await db.query('SELECT name FROM photo_files')).map((r) => r.name));
+    const want = [...names].filter((n) => !have.has(n));
+    const folders = want.length ? photoFolders(roots) : [];
+    let saved = 0;
+    let found = 0;
+    const still = [];
+    for (const n of want) {
+      let src = path.join(DIR, n);
+      let old = false;
+      if (!fs.existsSync(src)) {
+        src = null;
+        for (const d of folders) { const p = path.join(d, n); if (fs.existsSync(p)) { src = p; old = true; break; } }
+      }
+      if (!src) { still.push(n); continue; }
+      try {
+        const buf = fs.readFileSync(src);
+        if (!buf.length || buf.length > 2 * MAX || !kind(buf)) { still.push(n); continue; }
+        await keep(n, buf);
+        if (old) { writeCopy(n, buf); found += 1; } else saved += 1;
+      } catch (_) { still.push(n); }
+    }
+    let requeued = 0;
+    let cleared = 0;
+    if (authority && still.length) {
+      const lost = await db.query(`SELECT i.id, i.image, l.status FROM items i LEFT JOIN photo_links l ON l.item_id=i.id
+        WHERE i.image IN (${still.map(() => '?').join(',')})`, still);
+      const now = nowIST();
+      for (const it of lost) {
+        if (it.status) {
+          await db.query("UPDATE photo_links SET status='waiting', note=NULL, tried_at=NULL, added_at=? WHERE item_id=?", [now, it.id]);
+          requeued += 1;
+        }
+        await db.query('UPDATE items SET image=NULL, image_source=NULL, updated_at=? WHERE id=? AND image=?', [now, it.id, it.image]);
+        cleared += 1;
+      }
+      if (cleared) await db.bump();
+    }
+    Object.assign(recovery, { ran: true, at: nowIST(), in_use: names.size, saved, found, missing: still.length, requeued, cleared, folders: folders.length });
+    if (want.length) console.log(`Product photos: ${saved} kept in the database, ${found} found in an old folder, ${still.length} missing (${requeued} to fetch again).`);
+  } finally { recovery.running = false; }
+  return recovery;
+}
+
+module.exports = { fetchFromBilling, saveBanner, saveByCode, save, remove, filePath, photo, keep, recover, recovery, photoFolders, start, stop, status, DIR, kind,
   addLinks, linksStatus, nextLinks, linkSource, linkDone, linkFailed, linksAgain, linksClear, privateIp, photoType };

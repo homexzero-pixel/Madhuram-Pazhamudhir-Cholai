@@ -138,3 +138,59 @@ test('photos from a list of web addresses: matched by code or barcode, downloade
   assert.throws(() => images.photoType(Buffer.from('\0\0\0\x18ftypheic\0\0\0\0')), /HEIC/);
   assert.equal(images.photoType(Buffer.from('<!DOCTYPE html><html>')), null);
 });
+
+test('photos are kept in the database: served after the files are lost, and found again after a move to a new domain', async () => {
+  const fs = require('fs');
+  const images = require('../src/images');
+  const mk = async (name) => (await call('POST', '/api/products', JSON.stringify({ name, price: '20' }))).data.item;
+  const [a, b, c, d, e, f] = [await mk('Kept apple'), await mk('Moved banana'), await mk('Lost cherry'), await mk('Linked dates'),
+    await mk('Here elaichi'), await mk('Shop fig')];
+  // a photo saved now is kept in the database at once
+  const up = await call('POST', `/api/products/${a.id}/image`, JPG, 'image/jpeg');
+  const aName = up.data.image.replace('/img/p/', '');
+  assert.equal((await db.one('SELECT bytes FROM photo_files WHERE name=?', [aName])).bytes, JPG.length);
+  // this app's folder is lost (a new domain or hosting folder): the photo still opens, from the database, and is kept on disk again
+  fs.unlinkSync(path.join(images.DIR, aName));
+  const r1 = await fetch(`${base}/img/p/${aName}`);
+  assert.equal(r1.status, 200);
+  assert.deepEqual(Buffer.from(await r1.arrayBuffer()), JPG);
+  assert.equal(fs.existsSync(path.join(images.DIR, aName)), true);
+
+  // photos saved by the older version (files only): one left in the old domain's folder, one still here, two lost
+  const move = path.join(os.tmpdir(), `mpc_move_${process.pid}`);
+  const oldDir = path.join(move, 'domains', 'old.example.com', 'madhuram_images');
+  fs.mkdirSync(oldDir, { recursive: true });
+  const name = (it, x) => `p${it.id}_0000000${x}.jpg`;
+  fs.writeFileSync(path.join(oldDir, name(b, 'b')), JPG);
+  fs.writeFileSync(path.join(oldDir, 'b_0000000f.jpg'), JPG);            // the UPI QR from Settings
+  fs.writeFileSync(path.join(images.DIR, name(e, 'e')), JPG);
+  for (const [it, x] of [[b, 'b'], [c, 'c'], [d, 'd'], [e, 'e'], [f, 'f']]) {
+    await db.query("UPDATE items SET image=?, image_source='link' WHERE id=?", [name(it, x), it.id]);
+  }
+  await db.query("INSERT INTO settings (k, v) VALUES ('upi_qr', 'b_0000000f.jpg') ON DUPLICATE KEY UPDATE v=VALUES(v)");
+  await db.query("INSERT INTO photo_links (item_id, url, status, added_at) VALUES (?, 'https://example.com/dates.jpg', 'done', NOW())", [d.id]);
+  try {
+    // the customers' site helps (its own copies) but never clears anything
+    const shopRun = await images.recover({ authority: false, roots: [move] });
+    assert.deepEqual([shopRun.found, shopRun.saved, shopRun.missing, shopRun.requeued, shopRun.cleared], [2, 1, 3, 0, 0], JSON.stringify(shopRun));
+    assert.equal((await db.one('SELECT image FROM items WHERE id=?', [f.id])).image, name(f, 'f'));
+    await db.query('DELETE FROM photo_files WHERE name IN (?)', [[name(b, 'b'), name(e, 'e'), 'b_0000000f.jpg']]);
+    // the billing site (the copies from the old folder are on its disk now): kept, the lost ones fetched again from the list or cleared
+    const rec = await images.recover({ roots: [move] });
+    assert.deepEqual([rec.found, rec.saved, rec.missing, rec.requeued, rec.cleared], [0, 3, 3, 1, 3], JSON.stringify(rec));
+    const kept = new Set((await db.query('SELECT name FROM photo_files')).map((r) => r.name));
+    for (const n of [aName, name(b, 'b'), name(e, 'e'), 'b_0000000f.jpg']) assert.ok(kept.has(n), n);
+    assert.equal(fs.existsSync(path.join(images.DIR, name(b, 'b'))), true);
+    const rows = await db.query('SELECT id, image FROM items WHERE id IN (?) ORDER BY id', [[b.id, c.id, d.id, f.id]]);
+    assert.deepEqual(rows.map((r) => r.image), [name(b, 'b'), null, null, null]);
+    assert.equal((await db.one('SELECT status FROM photo_links WHERE item_id=?', [d.id])).status, 'waiting');
+    assert.equal((await fetch(`${base}/img/p/${name(b, 'b')}`)).status, 200);
+    assert.equal((await fetch(`${base}/img/p/b_0000000f.jpg`)).status, 200);
+    // nothing left to do: a second run changes nothing; the status shows what happened
+    const again = await images.recover({ roots: [move] });
+    assert.deepEqual([again.found, again.saved, again.missing, again.cleared], [0, 0, 0, 0]);
+    assert.equal((await call('GET', '/api/images/fetch')).data.recovery.ran, true);
+  } finally {
+    fs.rmSync(move, { recursive: true, force: true });
+  }
+});

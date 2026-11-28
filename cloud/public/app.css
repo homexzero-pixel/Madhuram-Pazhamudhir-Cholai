@@ -10,7 +10,18 @@ html, body { margin: 0; background: var(--paper); color: var(--ink); font-size: 
 a { color: var(--brand); }
 h1 { font-size: 1.35rem; margin: 0 0 12px; }
 h2 { font-size: 1.1rem; margin: 18px 0 8px; }
-.loading { padding: 40px; text-align: center; color: var(--muted); }
+.loading { color: transparent; min-height: 90px; border-radius: 12px; overflow: hidden; margin: 6px 0;
+  background: linear-gradient(90deg, #e9edf3 0%, #f5f7fa 40%, #e9edf3 80%) 0 0 / 300% 100%; animation: skm 1.2s linear infinite; }
+/* the outline of a screen while it loads (grey blocks; no "Loading…" text, no bar) */
+.sk { background: linear-gradient(90deg, #e9edf3 0%, #f5f7fa 40%, #e9edf3 80%) 0 0 / 300% 100%; animation: skm 1.2s linear infinite; border-radius: 10px; }
+@keyframes skm { to { background-position: -150% 0; } }
+.skel { padding: 4px 0; }
+.skel .sk-h { height: 30px; width: 240px; max-width: 60%; margin-bottom: 18px; }
+.skel .sk-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.skel .sk-c { height: 96px; border-radius: 14px; }
+.skel .sk-l { height: 44px; margin-bottom: 10px; }
+.skel .sk-l.short { width: 60%; }
+@media (prefers-reduced-motion: reduce) { .sk, .loading { animation: none; } }
 .muted { color: var(--muted); }
 .small { font-size: .86rem; }
 .r, td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
@@ -372,12 +383,17 @@ kbd { border-radius: 3px; }
 .ostep li + li::after { content: ""; position: absolute; top: 10px; right: 50%; width: 100%; height: 2px; background: #e8ebf0; }
 .ostep li.done { color: inherit; font-weight: 600; } .ostep li.done::before { content: "✓"; background: #1e9b26; color: #fff; } .ostep li.done::after { background: #1e9b26; }
 
-/* moving between screens: the old one stays, dimmed, with a thin bar on top, until the new one is ready */
-#main.routing { opacity: .6; pointer-events: none; transition: opacity .15s .15s; }
-body.routing::before { content: ''; position: fixed; top: 0; left: 0; z-index: 200; height: 3px; width: 35%; background: var(--brand-2, #2f6fed);
-  animation: routebar 1s ease-in-out infinite; }
-@keyframes routebar { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
-@media (prefers-reduced-motion: reduce) { body.routing::before { animation: none; width: 100%; opacity: .5; } }
+/* bill lines: minus / quantity / plus */
+.bill-lines td.qc { width: 1%; white-space: nowrap; padding-left: 2px; padding-right: 2px; }
+.stp { display: inline-flex; align-items: stretch; height: 36px; border: 1.5px solid var(--brand-2); border-radius: 10px; overflow: hidden; background: #fff; }
+.stp button { display: grid; place-items: center; min-width: 34px; padding: 0 6px; border: 0; border-radius: 0; background: transparent; color: var(--brand-2); box-shadow: none; }
+.stp button:hover { background: var(--soft); }
+.stp button .ico { width: 17px; height: 17px; stroke-width: 2.4; }
+.stp .dn.rm { color: var(--danger); }
+.stp .q { min-width: 46px; font-weight: 700; font-size: .98rem; color: var(--ink); border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+  font-variant-numeric: tabular-nums; }
+.stp .q small { font-weight: 500; font-size: .7rem; color: var(--muted); margin-left: 2px; }
+@media (max-width: 760px) { .stp { height: 40px; } .stp button { min-width: 38px; } }
 
 /* reports: the shop at a glance */
 .dash-say { font-size: 1.05rem; line-height: 1.6; margin: 6px 0 14px; max-width: 900px; }
