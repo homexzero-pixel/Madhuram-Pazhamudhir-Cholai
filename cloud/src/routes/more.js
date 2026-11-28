@@ -30,6 +30,10 @@ const shopUrl = (req) => site.shopUrl(req);
 const clientIp = (req) => req.ip || '';
 
 // ------------------------------------------------------------------ counter events that matter for loss watch
+// Start fresh (owner): remove the test bills, returns, online orders, cash drawers and expenses (a backup is saved first)
+r.get('/fresh-start', need('users'), wrap(async (req, res) => ok(res, { preview: await require('../fresh').preview() })));
+r.post('/fresh-start', need('users'), wrap(async (req, res) => ok(res, { result: await require('../fresh').run(req.body || {}, req.user) })));
+
 r.post('/pos/event', need('bill'), wrap(async (req, res) => {
   const action = req.body.action;
   if (!['bill_cancel', 'line_remove', 'unknown_barcode'].includes(action)) throw new UserError('Unknown event.');
@@ -99,7 +103,7 @@ r.get('/owner/buylist', need('daily'), wrap(async (req, res) => {
   ok(res, out);
 }));
 r.get('/owner/losswatch', need('reports'), wrap(async (req, res) => ok(res, await owner.lossWatch(req.query))));
-r.get('/owner/day', need('daily'), wrap(async (req, res) => ok(res, { text: await owner.dayText(req.query), owner_whatsapp: (await settings.load()).owner_whatsapp })));
+r.get('/owner/day', need('reports'), wrap(async (req, res) => ok(res, { text: await owner.dayText(req.query), owner_whatsapp: (await settings.load()).owner_whatsapp })));
 
 // ------------------------------------------------------------------ online orders: staff side
 r.get('/orders', need('orders'), wrap(async (req, res) => ok(res, { orders: await shop.staffList(req.query.tab), cod: await fulfilment.codPending(),

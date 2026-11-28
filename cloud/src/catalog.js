@@ -186,9 +186,13 @@ async function save(data, user) {
   const mrp = paise(data.mrp, 'MRP');
   if (price !== null && price < 0) throw new UserError('Price cannot be negative.');
   if (mrp !== null && price !== null && price > mrp) throw new UserError('Selling price is more than MRP.');
-  const gst = rateBp(data.gst_rate);
+  let gst = rateBp(data.gst_rate);
   if (![0, 25, 300, 500, 1200, 1800, 2800, 4000].includes(gst)) throw new UserError('GST rate should be 0, 0.25, 3, 5, 12, 18, 28 or 40.');
-  const taxClass = TAX_CLASSES.includes(data.tax_class) ? data.tax_class : (gst > 0 ? 'taxable' : 'unset');
+  let taxClass = TAX_CLASSES.includes(data.tax_class) ? data.tax_class : (gst > 0 ? 'taxable' : 'unset');
+  let hsn = String(data.hsn || '').replace(/\D/g, '').slice(0, 8);
+  // GST (rate, type, HSN) is the owner's: a product staff add gets "Not set yet" for the owner to fill in, and staff cannot change it
+  const ownGst = require('./auth').can(user, 'gst');
+  if (!ownGst && !Number(data.id)) { gst = 0; taxClass = 'unset'; hsn = ''; }
   const active = data.active === undefined ? price !== null : !!data.active;
   if (active && price === null) throw new UserError('Enter a selling price before the product can be sold.');
   const plu = String(data.plu || '').trim() || null;
@@ -202,13 +206,21 @@ async function save(data, user) {
     const now = nowIST();
     const cat = await categoryId(q, data.cat);
     const fields = [name, String(data.name_ta || '').trim().slice(0, 160), cat, unit, price === null ? null : rs(price),
-      mrp === null ? null : rs(mrp), rs(gst), taxClass, String(data.hsn || '').replace(/\D/g, '').slice(0, 8),
+      mrp === null ? null : rs(mrp), rs(gst), taxClass, hsn,
       qtyDb(milli(data.reorder_level) || 0), active ? 1 : 0, plu, now];
     let id = Number(data.id) || 0;
     try {
       if (id) {
         const old = await q.one('SELECT * FROM items WHERE id=? FOR UPDATE', [id]);
         if (!old) throw new UserError('Product not found.', 404);
+        if (!ownGst) {                         // GST fields left out (staff screens) keep the owner's; different ones are refused
+          if ((data.gst_rate !== undefined && rateBp(data.gst_rate) !== rateBp(old.gst_rate))
+            || (data.tax_class !== undefined && data.tax_class !== old.tax_class)
+            || (data.hsn !== undefined && String(data.hsn).replace(/\D/g, '').slice(0, 8) !== String(old.hsn || ''))) {
+            throw new UserError('Only the owner can change GST (rate, type or HSN).', 403);
+          }
+          [fields[6], fields[7], fields[8]] = [old.gst_rate, old.tax_class, old.hsn || ''];
+        }
         await q(`UPDATE items SET name=?, name_ta=?, category_id=?, unit=?, price=?, mrp=?, gst_rate=?, tax_class=?, hsn=?,
           reorder_level=?, active=?, plu=?, updated_at=? WHERE id=?`, [...fields, id]);
         if (old.price !== fields[4]) {
@@ -389,6 +401,7 @@ const HEADERS = {
 // Products from a CSV file. One row per product; several barcodes can go in one cell, separated by | , ; or spaces.
 // Rows with an SKU / product code that already exists are updated. Products with a selling price start selling at once.
 async function importCsv(text, user) {
+  const ownGst = require('./auth').can(user, 'gst');
   const rows = parseCsv(text);
   if (rows.length < 2) throw new UserError('The file has no product rows.');
   const head = rows[0].map((h) => h.trim().toLowerCase());
@@ -418,7 +431,7 @@ async function importCsv(text, user) {
         const price = paise(cell(r, 'price'));
         const mrp = paise(cell(r, 'mrp'));
         const cost = paise(cell(r, 'cost')) || 0;
-        const gstRaw = cell(r, 'gst').replace('%', '');
+        const gstRaw = ownGst ? cell(r, 'gst').replace('%', '') : '';
         const gst = gstRaw ? rateBp(gstRaw) : 0;
         const unit = /^(kg|kgs|kilo)/i.test(cell(r, 'unit')) ? 'kg' : 'pcs';
         let sku = cell(r, 'sku').slice(0, 20);
@@ -431,7 +444,7 @@ async function importCsv(text, user) {
         const active = price !== null && price > 0 ? 1 : 0;
         batch.push([sku, name, cell(r, 'name_ta').slice(0, 160), cats.get(cell(r, 'cat').slice(0, 60)) || null, unit,
           price === null ? null : rs(price), mrp === null || mrp === 0 ? null : rs(mrp), rs(gst), gst > 0 ? 'taxable' : 'unset',
-          cell(r, 'hsn').replace(/\D/g, '').slice(0, 8), active, now, (cost / 100).toFixed(4), qtyDb(milli(cell(r, 'reorder') || '0') || 0), plu, now]);
+          ownGst ? cell(r, 'hsn').replace(/\D/g, '').slice(0, 8) : '', active, now, (cost / 100).toFixed(4), qtyDb(milli(cell(r, 'reorder') || '0') || 0), plu, now]);
         for (const code of cell(r, 'barcode').split(/[|,;\s]+/).filter(Boolean)) {
           try { codes.push([cleanCode(code), sku]); } catch (e) { errors.push(`Row ${n + 2}: ${e.message}`); }
         }

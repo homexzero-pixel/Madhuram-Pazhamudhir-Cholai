@@ -53,7 +53,15 @@ Tamil, customer, price change and discount with manager PIN, hold, cancel), cash
    **At the counter:** the shift opens by itself (no opening cash to type; the drawer is counted at closing). Keys: F6 cash exact,
    F3 UPI, F12 payment, F7 customer (also inside the payment window, and after the sale to send the bill on WhatsApp), F10 hold,
    F11 bills on hold (numbered 1, 2, 3; press the number to bring one back; they also show as chips at the top), F9 cancel.
-   New logins are **counter persons**: billing, their drawer, customers, online orders, stock updates and product photos, not prices.
+   Under the bill are three big buttons, **Cash**, **UPI** and **Card** (each takes the whole bill), and **Payment** for cash given /
+   change / split. The payment window opens with the same three big choices.
+   **Who can do what:** only the **owner** sees the Dashboard and Reports (and the day summary), changes GST (a product's GST rate,
+   type and HSN, the GSTIN, the GST rule for billing), manages staff logins, downloads backups and uses Start fresh. Every other login
+   (**counter person**) can do everything else: billing, prices and discounts, returns, credit, online orders, products and stock,
+   customers, daily tools and settings. A product a counter person adds starts with GST "Not set yet" for the owner to fill in.
+   **Start fresh** (Settings & backup, owner): after testing, removes every bill, return, online order, cash drawer and expense in one go;
+   a backup is saved on the server first; products, customers, staff and settings stay; the stock the test bills took goes back;
+   bill numbers start again from 1.
    **Low stock** (menu) lists products at or below their low stock alert (set in each product) and best sellers with no stock.
    **Daily tools, Today's prices**: price per kg or per 250 g, today's offer, and the stock on the shelf in kg or g, saved together.
    **Offers**: after a festival offer, "Tell your customers" shares the message on WhatsApp. **Customers**: download all (Excel).
@@ -201,7 +209,7 @@ from everywhere are taken off the products (so no broken pictures); the ones tha
 | `EVENTS_SECRET` | both apps | the shop app wakes the billing app at once after an order (signed); without it the billing app still sees new orders within a second |
 | `BILLING_URL` | shop app, optional | only used until staff have opened the billing site once (it notes its own address in the database) |
 | `EVENTS_WEBHOOK_URL` | billing app, optional | every order event is also sent there, signed (for an automation) |
-| `ANTHROPIC_API_KEY` | optional, either app | turns on the AI in "Ask the shop" (shop app) and the AI summary on Checks & AI (billing app). Without it everything works and "Ask the shop" answers from the shop's own search. Put the key only in hPanel. |
+| `ANTHROPIC_API_KEY` | leave empty | the AI helpers were taken out of the screens (November 2026). Without this key nothing uses AI; "Ask the shop" answers from the shop's own search. |
 | `AI_SHOP=off`, `AI_BILLING=off`, `AI_ALL=off` | optional | stop the AI at once on that site |
 | `CORS_ALLOW` | optional | other web addresses allowed to call the API from a browser (normally none) |
 
@@ -209,8 +217,8 @@ from everywhere are taken off the products (so no broken pictures); the ones tha
 *stock − stock held for open orders* is above 0. Products whose stock was never entered (0) are not shown. Enter stock with
 Purchases, Products → Stock in, or a stock count. Billing at the counter is still never blocked by stock.
 
-**Checks & AI** (Online orders → Checks & AI): products with more held than in stock, orders waiting too long, cash on delivery not
-handed in, a **Correct held stock** button, the AI switches and the AI log (personal details masked).
+Online orders shows how each customer pays: **UPI paid** (with the reference to check), **UPI · not paid yet**, or **Cash on
+delivery / Pay at pickup**. Held stock is corrected by itself when the app starts.
 
 ## Updates
 

@@ -179,9 +179,8 @@ test('cancel before and after the invoice: held stock goes back, a credit note r
   assert.equal((await db.one('SELECT stock_pending FROM sales WHERE id=?', [inv.data.bill.id])).stock_pending, 1);
   const cash0 = (await cashier.get('/api/shift?counter=Counter%201')).data.summary;
   assert.equal(cash0.cash_sales, (await cashier.get('/api/shift?counter=Counter%201')).data.summary.cash_sales);   // COD adds no cash yet
-  assert.equal((await cashier.post(`/api/orders/${id2}/cancel`, { note: 'Refused at the door' })).status, 403);
-  const approval = (await cashier.post('/api/approve', { username: 'owner', pin: '4321', perm: 'refund' })).data.token;
-  const cn = await cashier.post(`/api/orders/${id2}/cancel`, { note: 'Refused at the door', approval, counter: 'Counter 1' });
+  // staff cancel an invoiced order themselves (only reports, GST, staff logins and backups are the owner's)
+  const cn = await cashier.post(`/api/orders/${id2}/cancel`, { note: 'Refused at the door', counter: 'Counter 1' });
   assert.equal(cn.data.ok, true, JSON.stringify(cn.data));
   assert.match(cn.data.credit.no, /^MCN\//);
   assert.equal(cn.data.credit.method, 'cod');
@@ -242,7 +241,6 @@ test('held stock is checked against the open orders and corrected; more held tha
   await db.query('UPDATE items SET reserved = reserved + 7 WHERE id=?', [products.plenty.id]);
   const checks = (await owner.get('/api/checks')).data;
   assert.ok(checks.items.some((i) => i.kind === 'reserved_drift' && i.item_id === products.plenty.id), JSON.stringify(checks.items));
-  assert.equal((await cashier.post('/api/stock/reconcile')).status, 403);
   const fixed = (await owner.post('/api/stock/reconcile')).data.fixed;
   assert.equal(fixed.length, 1);
   assert.equal(await reserved(products.plenty.id), 0);
@@ -353,6 +351,8 @@ test('rate limits: too many logins from one address are refused', async () => {
 });
 
 test('shop assistant: answers only from available products and the customer\'s own orders; injection, promises and made-up prices are stopped', async () => {
+  // the AI switches are off now (taken out of the screens); this test turns them on to check the safeguards still hold
+  await require('../src/settings').save({ ai_shop_enabled: '1', ai_billing_enabled: '1' });
   const c = await customer('Gita', '9000000008', '10.1.0.8');
   // no API key: the shop's own search answers (badge "search"), out-of-stock products never appear
   let r = (await c.post('/api/shop/assistant', { q: 'Do you have saffron and ponni rice?' })).data;

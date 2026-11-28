@@ -9,13 +9,17 @@ const scrypt = promisify(crypto.scrypt);
 
 const PERMISSIONS = ['bill', 'price_override', 'discount_approve', 'cancel_bill', 'stock_view', 'products', 'receive',
   'cash', 'reopen_shift', 'reports', 'settings', 'users', 'backup', 'customers', 'refund', 'credit_sale', 'purchase', 'supplier_pay',
-  'orders', 'daily', 'photos'];
+  'orders', 'daily', 'photos', 'gst'];
+// The shop's rule: only the owner sees the dashboard and reports (and the day's figures), changes GST, manages staff logins and
+// downloads backups (they hold every bill). Every other login can do everything else.
+const OWNER_ONLY = ['reports', 'users', 'backup', 'gst'];
+const STAFF = new Set(PERMISSIONS.filter((p) => !OWNER_ONLY.includes(p)));
 const ROLE_PERMS = {
   owner: new Set(PERMISSIONS),
-  manager: new Set(PERMISSIONS.filter((p) => !['settings', 'users'].includes(p))),
-  cashier: new Set(['bill', 'cancel_bill', 'cash', 'stock_view', 'customers', 'orders', 'receive', 'photos']),
-  purchaser: new Set(['stock_view', 'products', 'receive', 'purchase', 'daily', 'photos']),
-  auditor: new Set(['stock_view', 'reports', 'daily']),
+  manager: STAFF,
+  cashier: STAFF,
+  purchaser: STAFF,
+  auditor: STAFF,
 };
 const ROLES = Object.keys(ROLE_PERMS);
 const can = (user, perm) => !!user && !!ROLE_PERMS[user.role] && ROLE_PERMS[user.role].has(perm);

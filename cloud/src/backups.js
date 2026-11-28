@@ -26,9 +26,10 @@ async function make(kind = 'auto') {
     await db.query('INSERT INTO stored_backups (name, created_at, bytes, kind) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE bytes=VALUES(bytes)',
       [name, nowIST(), bytes, kind]);
     await prune();
-    await conn.query("SELECT RELEASE_LOCK('mpc_backup')");
     return { name, bytes };
   } finally {
+    // the lock belongs to this database session: let it go even when the backup failed, or the next backup waits forever
+    await conn.query("SELECT RELEASE_LOCK('mpc_backup')").catch(() => {});
     conn.release();
   }
 }

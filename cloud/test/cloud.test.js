@@ -73,6 +73,13 @@ test('first setup, login, roles, lockout and origin check', async () => {
   assert.equal((await cashier.post('/api/login', { username: 'PRIYA', password: 'cash-pass-1' })).data.ok, true);
   assert.equal((await cashier.get('/api/dashboard')).status, 403);
   assert.equal((await cashier.get('/api/users')).status, 403);
+  assert.equal((await cashier.get('/api/reports')).status, 403);
+  assert.equal((await cashier.get('/api/reports/dashboard')).status, 403);
+  assert.equal((await cashier.get('/api/backups')).status, 403);
+  assert.equal((await cashier.get('/api/fresh-start')).status, 403);
+  assert.equal((await cashier.get('/api/owner/day')).status, 403);
+  assert.equal((await cashier.get('/api/settings')).status, 200);
+  assert.ok(!(await cashier.get('/api/me')).data.perms.includes('gst'));
 
   // another web site cannot make changes with the cashier's login
   const forged = await cashier.call('POST', '/api/logout', {}, { Origin: 'https://evil.example' });
@@ -107,14 +114,12 @@ test('products: add, barcode, opening stock, CSV import, search', async () => {
 
   assert.match((await owner.post('/api/products', { name: 'Dup', price: '5', barcode: '8901234567890' })).data.error, /already belongs/);
   assert.match((await owner.post('/api/products', { name: 'X', price: '90', mrp: '80' })).data.error, /more than MRP/);
-  // a cashier needs a manager's PIN to add a product at the counter
-  assert.equal((await cashier.post('/api/products', { name: 'Biscuit', price: '10', barcode: '555' })).status, 403);
+  // a counter person adds a product at the counter (no PIN); its GST is left "Not set yet" for the owner
   const wrong = await cashier.post('/api/approve', { username: 'kumar', pin: '0000', perm: 'products' });
   assert.equal(wrong.status, 401);
-  const ap = await cashier.post('/api/approve', { username: 'kumar', pin: '2468', perm: 'products' });
-  assert.equal(ap.data.ok, true);
-  r = await cashier.post('/api/products', { name: 'Biscuit', price: '10', barcode: '555', approval: ap.data.token });
+  r = await cashier.post('/api/products', { name: 'Biscuit', price: '10', barcode: '555', gst_rate: '18', tax_class: 'taxable', hsn: '1905' });
   assert.equal(r.data.ok, true, JSON.stringify(r.data));
+  assert.deepEqual([r.data.item.tax_class, Number(r.data.item.gst_rate), r.data.item.hsn], ['unset', 0, '']);
 
   const csv = 'SKU,Department,Category,Product name,Sale unit,Pack barcode,MRP INR,Selling price INR,HSN,GST rate\n' +
     'MPC00001,Fresh,Fruit,"Poovan banana, loose",kg,,,,,\n' +
@@ -174,12 +179,10 @@ test('shift, checkout with FEFO stock, GST, idempotency and receipt', async () =
   const bad = async (lines, payments, extra = {}) => (await cashier.post('/api/checkout', { uuid: uuid(), counter: c, lines, payments, ...extra })).data.error;
   assert.match(await bad([{ id: rice.id, qty: 1.5 }], [{ method: 'cash', amount: '112.5' }]), /whole number/);
   assert.match(await bad([{ id: rice.id, qty: 1 }], [{ method: 'cash', amount: '70' }]), /does not match/);
-  assert.match(await bad([{ id: rice.id, qty: 1, rate: '60' }], [{ method: 'cash', amount: '60' }]), /manager must approve/);
   assert.equal((await db.one('SELECT COUNT(*) n FROM sales')).n, 1);   // nothing half-saved
 
-  // a manager approves a price change at the counter
-  const ap = await cashier.post('/api/approve', { username: 'kumar', pin: '2468', perm: 'price_override' });
-  r = await cashier.post('/api/checkout', { uuid: uuid(), counter: c, lines: [{ id: rice.id, qty: 1, rate: '70', approval: ap.data.token }],
+  // a counter person changes a price at the counter (no PIN needed now); it is written down for the owner
+  r = await cashier.post('/api/checkout', { uuid: uuid(), counter: c, lines: [{ id: rice.id, qty: 1, rate: '70' }],
     payments: [{ method: 'upi', amount: '70' }] });
   assert.equal(r.data.bill.total, '70.00', JSON.stringify(r.data));
   const log = await db.one("SELECT * FROM audit WHERE action='price_override'");
@@ -277,9 +280,18 @@ test("the shop's details from its printed bill are filled in once, and the owner
 });
 
 test('counter changes: customer added after the sale, today\'s prices with offer and stock, reports at a glance, customer download, low stock', async () => {
-  // a counter person can count stock and add product photos now (but not change products)
+  // a counter person counts stock and changes products, but GST (rate, type, HSN, the GSTIN) stays with the owner
   assert.equal((await cashier.post('/api/stock/count', { item_id: apple.id, count: '4' })).data.ok, true);
-  assert.equal((await cashier.post('/api/products', { name: 'X', price: '10' })).status, 403);
+  const rice0 = (await owner.get(`/api/products/${rice.id}`)).data.item;
+  const gstTry = await cashier.post('/api/products', { id: rice.id, name: rice0.name, unit: rice0.unit, price: rice0.price, mrp: rice0.mrp,
+    gst_rate: '12', tax_class: 'taxable', active: true });
+  assert.equal(gstTry.status, 403);
+  assert.match(gstTry.data.error, /Only the owner can change GST/);
+  assert.equal(Number((await owner.get(`/api/products/${rice.id}`)).data.item.gst_rate), 5);
+  const gstin = await cashier.post('/api/settings', { gstin: '33AAAAA0000A1Z5' });
+  assert.equal(gstin.status, 403);
+  assert.match(gstin.data.error, /Only the owner can change GST/);
+  assert.equal((await cashier.post('/api/settings', { bill_footer: (await owner.get('/api/settings')).data.settings.bill_footer })).data.ok, true);
   // a bill without a customer; the customer asks for it afterwards
   const r = await cashier.post('/api/checkout', { uuid: uuid(), counter: 'Counter 2', lines: [{ id: rice.id, qty: 1 }], payments: [{ method: 'cash', amount: '75' }] });
   assert.equal(r.data.ok, true, JSON.stringify(r.data));

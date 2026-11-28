@@ -424,14 +424,19 @@ function payDialog() {
   const d = modal(`<div class="pay-head"><h3>Payment · <span style="color:var(--brand)">${inr(total)}</span></h3>
       <button type="button" class="pay-cust" id="pcu">${C ? `${ico('user')} <b>${esc(C.name)}</b> ${esc(C.phone || '')} · change <kbd>F7</kbd>`
     : `${ico('user')} Add customer <kbd>F7</kbd>`}</button></div>${online}
-    <form><label>Cash given by customer ₹</label>
+    <div class="pm-tabs" role="tablist" aria-label="How the customer pays">
+      <button type="button" class="pm-cash on" data-pm="cash" role="tab">${ico('cash')}<b>Cash</b></button>
+      <button type="button" class="pm-upi" data-pm="upi" role="tab">${ico('qr')}<b>UPI</b></button>
+      <button type="button" class="pm-card" data-pm="card" role="tab">${ico('card')}<b>Card</b></button></div>
+    <form><div class="pm-sec" data-sec="cash"><label>Cash given by customer ₹</label>
       <div class="row"><input name="cash" inputmode="decimal" autofocus style="flex:1;font-size:1.3rem">
         <button type="button" id="exact" class="primary">Exact ${inr(total)}</button></div>
-      <div class="row" style="margin-top:8px">${[10, 20, 50, 100, 200, 500, 2000].map((v) => `<button type="button" data-v="${v}">₹${v}</button>`).join('')}</div>
+      <div class="row" style="margin-top:8px">${[10, 20, 50, 100, 200, 500, 2000].map((v) => `<button type="button" data-v="${v}">₹${v}</button>`).join('')}</div></div>
+      <div class="pm-sec" data-sec="ref" hidden><label>UPI / card reference (optional)</label><input name="ref" autocomplete="off"></div>
       <div id="paybox" class="card" style="margin-top:10px;padding:10px"></div>
-      <div class="grid3"><div><label>UPI ₹</label><input name="upi" inputmode="decimal"></div>
-        <div><label>Card ₹</label><input name="card" inputmode="decimal"></div>
-        <div><label>UPI / card ref.</label><input name="ref"></div></div>
+      <details class="split"><summary>Split the payment (part cash, part UPI or card)</summary>
+        <div class="grid2"><div><label>UPI ₹</label><input name="upi" inputmode="decimal"></div>
+        <div><label>Card ₹</label><input name="card" inputmode="decimal"></div></div></details>
       ${ptsMax ? `<label>Pay with points ₹ (${esc(C.name)} has ${Number(C.points)} points, worth up to ${inr(Money.rs(ptsMax))} on this bill)</label>
         <div class="row"><input name="points" inputmode="decimal" style="flex:1"><button type="button" id="allpts">Use ${inr(Money.rs(ptsMax))}</button></div>`
       : loyaltyOn() && C && C.id ? `<p class="small muted">${esc(C.name)} has ${Number(C.points || 0)} points${Number(C.points || 0) < Number(App.settings.loyalty_min_redeem || 0) ? ` (can use from ${Number(App.settings.loyalty_min_redeem)})` : ''}.</p>` : ''}
@@ -459,6 +464,9 @@ function payDialog() {
       $$('[data-rest]', box).forEach((b) => b.addEventListener('click', () => {
         const k = b.dataset.rest; f[k].value = Money.rs(val(k) + remaining); calc(); f.querySelector('button.primary.big').focus();
       }));
+    } else if (!cashDue && (upi || card) && !f.cash.value) {
+      box.innerHTML = `<div class="pm-ok">${ico('check')}<span>${upi ? `UPI <b>${inr(upi)}</b>` : ''}${upi && card ? ' + ' : ''}${card ? `Card <b>${inr(card)}</b>` : ''}
+        · check the money has come in, then press <b>Complete sale</b>.</span></div>`;
     } else {
       box.innerHTML = `<div class="row" style="justify-content:space-between"><span>Cash to take <b>${inr(cashDue)}</b></span>
         <span>Change <span class="change">${inr(change)}</span></span></div>`;
@@ -466,6 +474,21 @@ function payDialog() {
     return { upi, card, credit, pts, cashUsed, given, remaining, nonCash };
   };
   if ($('#allpts', d)) $('#allpts', d).addEventListener('click', () => { f.points.value = Money.rs(ptsMax); calc(); f.cash.focus(); });
+  // Cash / UPI / Card: one tap puts the whole amount (less points and credit) on that method
+  const pick = (m) => {
+    $$('[data-pm]', d).forEach((b) => b.classList.toggle('on', b.dataset.pm === m));
+    $('[data-sec="cash"]', d).hidden = m !== 'cash';
+    $('[data-sec="ref"]', d).hidden = m === 'cash';
+    const rest = Math.max(0, total - val('credit') - val('points'));
+    if (m === 'cash') { f.upi.value = ''; f.card.value = ''; f.cash.focus(); } else {
+      f.cash.value = '';
+      f.upi.value = m === 'upi' ? Money.rs(rest) : '';
+      f.card.value = m === 'card' ? Money.rs(rest) : '';
+      f.ref.focus();
+    }
+    calc();
+  };
+  $$('[data-pm]', d).forEach((b) => b.addEventListener('click', () => pick(b.dataset.pm)));
   const toCustomer = () => { d.close('customer'); customerDialog({ after: () => { if (POS.bill.lines.length) payDialog(); } }); };
   $('#pcu', d).addEventListener('click', toCustomer);
   d.addEventListener('keydown', (e) => { if (e.key === 'F7') { e.preventDefault(); toCustomer(); } });
@@ -740,8 +763,10 @@ App.views.bill = async (main) => {
       <div class="row cust"><span id="cust" style="flex:1"></span><button id="cbtn">Customer F7</button></div>
       <div class="bill"><div class="bill-lines" id="lines"></div>
         <div class="bill-total"><span class="muted" id="count"></span><span class="t" id="total">₹0.00</span></div></div>
-      <div class="pay-row"><button class="primary big paybtn" id="pcash">Cash exact F6</button><button class="primary big paybtn" id="pupi">UPI F3</button>
-        <button class="big paybtn" id="pany">Payment F12</button></div>
+      <div class="pay-row pay3"><button class="paybtn pm-cash" id="pcash">${ico('cash')}<span><b>Cash</b><small>exact · F6</small></span></button>
+        <button class="paybtn pm-upi" id="pupi">${ico('qr')}<span><b>UPI</b><small>F3</small></span></button>
+        <button class="paybtn pm-card" id="pcard">${ico('card')}<span><b>Card</b><small>full amount</small></span></button>
+        <button class="paybtn pm-more" id="pany">${ico('wallet')}<span><b>Payment</b><small>cash given, change, split · F12</small></span></button></div>
       <div class="row"><button id="bqty">Qty F4</button><button id="bprice">Price/Disc F5</button><button id="bdel">Remove Del</button>
         <button id="bhold">Hold F10</button><button id="brecall">On hold F11 <span class="pill" id="heldn"></span></button>
         <button class="danger" id="bcancel">Cancel F9</button><button id="blast" ${POS.last ? '' : 'disabled'}>Last bill</button></div>
@@ -758,6 +783,7 @@ App.views.bill = async (main) => {
   $('#cbtn').addEventListener('click', () => customerDialog());
   $('#pcash').addEventListener('click', exactCash);
   $('#pupi').addEventListener('click', () => complete([{ method: 'upi', amount: Money.rs(totals().total) }]));
+  $('#pcard').addEventListener('click', () => complete([{ method: 'card', amount: Money.rs(totals().total) }]));
   $('#pany').addEventListener('click', payDialog);
   $('#bqty').addEventListener('click', changeQty);
   $('#bprice').addEventListener('click', priceDialog);

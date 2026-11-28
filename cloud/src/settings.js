@@ -61,8 +61,8 @@ const DEFAULTS = {
   referral_points: '50',           // loyalty points for a customer whose friend joins and buys (0 = no reward)
   price_stores: '9,19,29,49,99,119',              // banner photos at the top of the online shop: [{img, kicker, title, sub, link}]
   // AI helpers (only work when the hosting has ANTHROPIC_API_KEY; without it the shop's own search answers)
-  ai_shop_enabled: '1',            // "Ask the shop" on the customers' site uses the AI
-  ai_billing_enabled: '1',         // the billing site's "Checks & AI" page writes an AI summary
+  ai_shop_enabled: '0',            // "Ask the shop" on the customers' site uses the AI (off: the AI helpers were taken out)
+  ai_billing_enabled: '0',         // (off: the billing site's AI page was taken out)
   ai_daily_tokens: '300000',       // the whole shop's daily AI budget (tokens)
   ai_customer_daily: '25',         // questions one customer may ask per day
 };

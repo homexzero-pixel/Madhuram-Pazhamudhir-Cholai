@@ -159,6 +159,14 @@ r.get('/settings', need('settings'), wrap(async (req, res) => ok(res, { settings
 r.post('/settings', need('settings'), wrap(async (req, res) => {
   const v = req.body || {};
   if (v.invoice_prefix !== undefined) v.invoice_prefix = String(v.invoice_prefix).trim().toUpperCase();
+  // the GST number and the GST rule for billing are the owner's
+  if (!auth.can(req.user, 'gst')) {
+    const cur = await settings.load();
+    for (const k of ['gstin', 'require_tax_setup']) {
+      if (v[k] !== undefined && String(v[k]).trim() !== String(cur[k] ?? '').trim()) throw new UserError('Only the owner can change GST settings.', 403);
+      delete v[k];
+    }
+  }
   // a new customer website address must open the shop before it goes on posters and WhatsApp links
   if (v.shop_url !== undefined) {
     const url = String(v.shop_url).trim().replace(/\/+$/, '');

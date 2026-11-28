@@ -845,9 +845,10 @@ async function productDialog(id, onSaved, preset = {}) {
       <div class="grid3"><div><label>Selling price ₹</label><input name="price" inputmode="decimal" value="${esc(item.price ?? '')}" ${id ? 'autofocus' : ''}></div>
         <div><label>MRP ₹</label><input name="mrp" inputmode="decimal" value="${esc(item.mrp ?? '')}"></div>
         <div><label>Sold by</label><select name="unit"><option value="pcs">Piece / pack</option><option value="kg" ${item.unit === 'kg' ? 'selected' : ''}>Weight (kg)</option></select></div></div>
-      <div class="grid3"><div><label>GST %</label><select name="gst_rate">${['0', '5', '12', '18', '28', '40', '3', '0.25'].map((g) => `<option ${Number(item.gst_rate) === Number(g) ? 'selected' : ''}>${g}</option>`).join('')}</select></div>
-        <div><label>GST type</label><select name="tax_class">${[['unset', 'Not set yet'], ['taxable', 'Taxable'], ['exempt', 'Exempt'], ['nil', 'Nil-rated']].map(([v, l]) => `<option value="${v}" ${item.tax_class === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-        <div><label>HSN</label><input name="hsn" value="${esc(item.hsn)}"></div></div>
+      ${can('gst') ? '' : '<p class="small muted" style="margin:10px 0 0">GST is set by the owner. New products start as "Not set yet".</p>'}
+      <div class="grid3"><div><label>GST %</label><select name="gst_rate" ${can('gst') ? '' : 'disabled'}>${['0', '5', '12', '18', '28', '40', '3', '0.25'].map((g) => `<option ${Number(item.gst_rate) === Number(g) ? 'selected' : ''}>${g}</option>`).join('')}</select></div>
+        <div><label>GST type</label><select name="tax_class" ${can('gst') ? '' : 'disabled'}>${[['unset', 'Not set yet'], ['taxable', 'Taxable'], ['exempt', 'Exempt'], ['nil', 'Nil-rated']].map(([v, l]) => `<option value="${v}" ${item.tax_class === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div><label>HSN</label><input name="hsn" value="${esc(item.hsn)}" ${can('gst') ? '' : 'disabled'}></div></div>
       <div class="grid3"><div><label>Category</label><input name="cat" value="${esc(item.cat)}" list="catlist"></div>
         <div><label>PLU (loose items)</label><input name="plu" inputmode="numeric" value="${esc(item.plu)}"></div>
         <div><label>Low stock alert when stock ≤</label><input name="reorder_level" inputmode="decimal" value="${esc(item.reorder_level)}"></div></div>
@@ -1088,8 +1089,6 @@ App.views.dashboard = async (main) => {
         · <b>${inr((ch.online || {}).total || 0)}</b> (${(ch.online || {}).bills || 0})</div><div class="l">${d.orders.total} online orders · ${d.orders.open} open</div></div>
       <div class="card stat"><div class="l">Cash · UPI · Card · Credit</div><div class="small" style="margin-top:6px">${inr(m.cash || 0)} · ${inr(m.upi || 0)} · ${inr(m.card || 0)} · ${inr(m.credit || 0)}</div>
         <div class="l">Returns ${inr(d.returns)} · Discounts ${inr(d.discount)}</div></div>
-      <div class="card stat"><div class="l">Needs attention</div><div class="small" style="margin-top:6px">
-        <a href="#/products">${d.low_stock} low stock</a> · <a href="#/reports?r=expiry">${d.expiring} expiring in 7 days</a></div></div>
     </div>
     <div class="grid2">
       <div class="card"><h2 style="margin-top:0">${d.trend_kind === 'hour' ? 'Sales by hour' : 'Sales by day'}</h2>
@@ -1111,6 +1110,33 @@ App.views.dashboard = async (main) => {
   App.leave = () => clearInterval(timer);
 };
 
+// ================================================================== Start fresh (owner): remove the test bills, orders and cash
+async function freshStart() {
+  const { preview: p } = await api('/fresh-start');
+  const d = modal(`<h3>Start fresh</h3>
+    <p>This removes, for good:</p>
+    <ul class="fresh-list"><li><b>${p.bills}</b> bills (${inr(p.bills_total)}${p.first ? `, ${esc(p.first)} to ${esc(p.last)}` : ''}) and <b>${p.returns}</b> returns</li>
+      <li><b>${p.orders}</b> online orders</li><li><b>${p.shifts}</b> cash drawers (cash closing) and <b>${p.expenses}</b> expenses</li></ul>
+    <p class="small muted">Products, prices, barcodes, photos, customers, staff logins and settings stay. A full backup is saved on the server first.</p>
+    <form><label>Stock</label>
+      <label class="opt-line"><input type="radio" name="stock" value="restore" checked><span>Put back the stock the test bills took (recommended)</span></label>
+      <label class="opt-line"><input type="radio" name="stock" value="zero"><span>Set the stock of every product to 0 (if you also tested "stock in"; count the real stock after)</span></label>
+      <label class="opt-line"><input type="radio" name="stock" value="keep"><span>Leave the stock as it is now</span></label>
+      <label style="margin-top:12px">Type <b>FRESH</b> to confirm</label><input name="confirm" autocomplete="off" autocapitalize="characters" required>
+      <div class="actions"><button type="button" data-close>Cancel</button><button class="danger">Remove the test data</button></div></form>`);
+  const f = $('form', d);
+  f.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitting($('button.danger', f), async () => {
+      const { result: r } = await api('/fresh-start', { method: 'POST', body: { stock: f.stock.value, confirm: f.confirm.value } });
+      d.close('ok');
+      Object.keys(localStorage).filter((k) => /^mpc_(bill|held)/.test(k)).forEach((k) => localStorage.removeItem(k));
+      toast(`Done. ${r.bills} test bills and ${r.orders} online orders removed. Backup: ${r.backup}`);
+      route();
+    });
+  });
+}
+
 // ================================================================== Staff logins
 const ROLE_NAMES = { owner: 'Owner', manager: 'Manager', cashier: 'Counter person', purchaser: 'Purchaser', auditor: 'Auditor' };
 App.views.staff = async (main) => {
@@ -1120,8 +1146,8 @@ App.views.staff = async (main) => {
     <table><tr><th>Name</th><th>Login name</th><th>Role</th><th>PIN</th><th>Status</th></tr>${users.map((u) => `<tr class="click" data-id="${u.id}">
       <td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${esc(ROLE_NAMES[u.role] || u.role)}</td><td>${u.has_pin ? 'set' : '-'}</td>
       <td>${u.active ? '<span class="pill">active</span>' : '<span class="pill off">disabled</span>'}</td></tr>`).join('')}</table>
-    <div class="card small" style="margin-top:14px"><b>Counter person:</b> billing, their own cash drawer, customers, online orders, stock updates
-      (add stock, stock count) and product photos. They cannot change prices. <b>Owner:</b> everything.</div>`;
+    <div class="card small" style="margin-top:14px"><b>Counter person:</b> everything in the software except the Dashboard and Reports,
+      changing GST, staff logins and backups. <b>Owner:</b> everything.</div>`;
   const edit = (u) => {
     const d = modal(`<h3>${u ? 'Edit login' : 'Add login'}</h3><form>
       <div class="grid2"><div><label>Name</label><input name="name" value="${esc(u ? u.name : '')}" required autofocus></div>
@@ -1152,7 +1178,7 @@ App.views.settings = async (main) => {
       <div class="grid2">${f('name', 'Shop name')}${f('name_ta', 'Shop name in Tamil', 'class="ta"')}</div>
       <div class="grid2"><div><label>Address (one line on the bill for each line here)</label><textarea name="address" rows="2">${esc(s.address)}</textarea></div>
         ${f('phone', 'Phone')}</div>
-      <div class="grid3">${f('gstin', 'GSTIN')}${f('fssai', 'FSSAI licence')}${f('invoice_prefix', 'Bill number prefix', 'maxlength="3" style="text-transform:uppercase"')}</div>
+      <div class="grid3">${f('gstin', 'GSTIN', can('gst') ? '' : 'readonly title="Only the owner can change GST"')}${f('fssai', 'FSSAI licence')}${f('invoice_prefix', 'Bill number prefix', 'maxlength="3" style="text-transform:uppercase"')}</div>
       <p class="small muted">Bill numbers look like <b>${esc(s.invoice_prefix)}/${esc(today().slice(5, 7) + today().slice(2, 4))}/T2/107</b>: prefix / month and year / counter / bill number.
         Every counter starts again at 1 each month. If your old billing machine already printed bills with the same prefix this month,
         keep a different prefix until the 1st of next month, so no two bills share a number.</p>
@@ -1168,7 +1194,7 @@ App.views.settings = async (main) => {
         ${f('loyalty_min_redeem', 'Points needed before they can be used', 'inputmode="numeric"')}</div>
       <p class="small muted" id="loyex"></p>
       <h2>Counters</h2>${f('counters', 'Counter names (separate with commas)')}
-      <label class="row" style="font-weight:400"><input type="checkbox" name="require_tax_setup" style="width:auto" ${s.require_tax_setup === '1' ? 'checked' : ''}>
+      <label class="row" style="font-weight:400"><input type="checkbox" name="require_tax_setup" style="width:auto" ${s.require_tax_setup === '1' ? 'checked' : ''} ${can('gst') ? '' : 'disabled'}>
         Stop billing products whose GST type is "Not set yet" (turn on after the accountant checks the GST data)</label>
       <h2>WhatsApp and UPI</h2>
       <div class="grid3"><div><label>Open WhatsApp in</label><select name="whatsapp_open"><option value="app">WhatsApp program (PC / phone)</option>
@@ -1214,24 +1240,23 @@ App.views.settings = async (main) => {
         <label class="btn" style="margin:0">${ico('camera')} Choose festival photo<input type="file" accept="image/*" id="festFile" hidden></label>
         <button type="button" class="danger" id="festDel" ${s.festival_banner ? '' : 'hidden'}>Remove</button></div>
       <input type="hidden" name="festival_banner" id="festName" value="${esc(s.festival_banner || '')}">
-      <h3 style="margin:18px 0 4px">AI helpers</h3>
-      <p class="small muted" style="margin:0 0 8px">Work only when the hosting has an AI key (ANTHROPIC_API_KEY). Without it, "Ask the shop" answers from the shop's own search.
-        The AI only suggests products that are in stock, never works out prices, GST or totals, and never promises discounts or refunds. See Online orders → Checks & AI.</p>
-      <div class="grid3"><label class="row" style="font-weight:400"><input type="checkbox" name="ai_shop_enabled" style="width:auto" ${s.ai_shop_enabled === '1' ? 'checked' : ''}> AI answers in "Ask the shop" (customers' site)</label>
-        <label class="row" style="font-weight:400"><input type="checkbox" name="ai_billing_enabled" style="width:auto" ${s.ai_billing_enabled === '1' ? 'checked' : ''}> AI summary on Checks & AI (billing site)</label><div></div></div>
-      <div class="grid3">${f('ai_daily_tokens', 'Daily AI budget for the shop (tokens)', 'inputmode="numeric"')}${f('ai_customer_daily', 'Questions per customer per day', 'inputmode="numeric"')}<div></div></div>
       <h2>Weighing scale labels</h2>
       <label class="row" style="font-weight:400"><input type="checkbox" name="scale_enabled" style="width:auto" ${s.scale_enabled === '1' ? 'checked' : ''}> The shop uses barcode labels printed by the weighing scale</label>
       <div class="grid3">${f('scale_prefixes', 'Label starts with')}${f('scale_item_start', 'Item code starts at (0 = first digit)')}${f('scale_item_length', 'Item code digits')}</div>
       <div class="grid3">${f('scale_value_start', 'Weight starts at')}${f('scale_value_length', 'Weight digits')}${f('scale_value_decimals', 'Decimals in weight')}</div>
       <button class="primary" style="margin-top:12px">Save settings</button></form>
     <div class="grid2" style="margin-top:14px">
-      <div class="card"><h2 style="margin-top:0">Backup</h2><p class="small">Download a copy of everything (products, stock, bills, cash, staff) to this PC.
+      ${can('backup') ? `<div class="card"><h2 style="margin-top:0">Backup</h2><p class="small">Download a copy of everything (products, stock, bills, cash, staff) to this PC.
         Do it every evening and keep the files in Google Drive or a pen drive. Hostinger also keeps its own daily backups.</p>
         ${can('backup') ? `<a class="btn big ${backupDoneToday() ? 'okbtn' : 'badbtn'}" id="bkdl" href="/api/backup">${backupDoneToday() ? 'Today\'s backup downloaded' : 'Download today\'s backup'}</a>
           <button id="bknow">Save a backup on the server now</button>` : ''}
         <div id="bklist" class="small" style="margin-top:10px"></div>
-        <p class="small muted">To restore: Hostinger hPanel → Databases → phpMyAdmin → choose the database → Import → the backup file.</p></div>
+        <p class="small muted">To restore: Hostinger hPanel → Databases → phpMyAdmin → choose the database → Import → the backup file.</p></div>` : ''}
+      ${can('users') ? `<div class="card fresh-card"><h2 style="margin-top:0">Start fresh (remove test bills)</h2>
+        <p class="small">After testing, before real billing starts: removes every bill, return, online order, cash drawer and expense in one go.
+          Products, prices, barcodes, photos, customers, staff logins and settings stay. The stock the test bills took goes back on the shelf,
+          bill numbers start again from 1, and points and dues from the test bills are taken off. A full backup is saved on the server first.</p>
+        <button class="danger" id="freshgo">Start fresh…</button></div>` : ''}
       <div class="card"><h2 style="margin-top:0">Product photos</h2><div id="phst" class="small">…</div>
         <p class="small">Finds the photo of each packed product by its barcode in the open product databases <b>Open Food Facts</b>, <b>Open Beauty Facts</b>
           and <b>Open Products Facts</b> (food, soap/shampoo/cream, household; free, open data whose photos may be
@@ -1248,10 +1273,10 @@ App.views.settings = async (main) => {
         <div id="plres" class="small"></div><div id="plst" class="small" style="margin-top:6px"></div>
         <div class="row" style="margin-top:6px"><button class="primary" id="plgo" hidden>Continue</button><button id="plstop" hidden>Stop</button>
           <button id="plagain" hidden>Try the failed ones again</button></div><div id="plfail"></div></div>
-      <div class="card"><h2 style="margin-top:0">Bring data from the shop PC</h2><p class="small">On the shop PC double-click <b>Export_For_Cloud.bat</b>.
+      ${can('users') ? `<div class="card"><h2 style="margin-top:0">Bring data from the shop PC</h2><p class="small">On the shop PC double-click <b>Export_For_Cloud.bat</b>.
         It makes <i>madhuram_cloud_export.json.gz</i> on the desktop with all products, prices, barcodes, stock, customers and staff logins
         (they keep their passwords). Choose that file here. Allowed only before the first cloud bill.</p>
-        <input type="file" id="impf" accept=".gz,.json"><button id="impgo" style="margin-top:8px">Bring in</button><div id="impres"></div></div>
+        <input type="file" id="impf" accept=".gz,.json"><button id="impgo" style="margin-top:8px">Bring in</button><div id="impres"></div></div>` : ''}
     </div>`;
   const loyEx = () => {
     const sf = $('#sf'); const per = Number(sf.loyalty_points_per_100.value) || 0; const val = Number(sf.loyalty_point_value.value) || 0;
@@ -1334,8 +1359,8 @@ App.views.settings = async (main) => {
     localStorage.setItem('mpc_backup_day', today());
     setTimeout(() => { const b = $('#bkdl'); if (b) { b.className = 'btn big okbtn'; b.textContent = 'Today\'s backup downloaded'; } markBackup(); }, 800);
   });
-  if ($('#bklist')) {
-    loadBackups().catch((e) => { $('#bklist').textContent = e.message; });
+  if ($('#bklist') && can('backup')) {
+    loadBackups().catch((e) => { if ($('#bklist')) $('#bklist').textContent = e.message; });
     $('#bknow').addEventListener('click', () => submitting($('#bknow'), async () => { await api('/backups', { method: 'POST', body: {} }); toast('Backup saved.'); loadBackups(); }));
   }
   const photoStatus = async () => {
@@ -1397,7 +1422,8 @@ App.views.settings = async (main) => {
     $('#phgo').addEventListener('click', () => submitting($('#phgo'), async () => { await api('/images/fetch', { method: 'POST', body: {} }); toast('Finding photos. You can keep working.'); photoStatus(); }));
     $('#phstop').addEventListener('click', () => submitting($('#phstop'), async () => { await api('/images/fetch', { method: 'POST', body: { action: 'stop' } }); photoStatus(); }));
   }
-  $('#impgo').addEventListener('click', () => submitting($('#impgo'), async () => {
+  if ($('#freshgo')) $('#freshgo').addEventListener('click', freshStart);
+  if ($('#impgo')) $('#impgo').addEventListener('click', () => submitting($('#impgo'), async () => {
     const file = $('#impf').files[0];
     if (!file) throw new Error('Choose the export file first.');
     if (!confirm('This replaces all products and stock on the cloud with the shop PC\'s. Continue?')) return;

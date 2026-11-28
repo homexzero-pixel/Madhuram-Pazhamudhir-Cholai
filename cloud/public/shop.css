@@ -863,3 +863,21 @@ body[data-page=welcome] .bnav, body[data-page=welcome] .pcbar, body[data-page=we
   .pc-inst .ico { width: 18px; height: 18px; }
   .inst-card { margin: 18px 24px 0; }
 }
+
+/* ---------------------------------------------------------------- checkout: how the customer pays, big and clear */
+.paych { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pch { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 16px 14px 14px; border-radius: 18px; border: 2px solid var(--line);
+  background: #fff; cursor: pointer; min-height: 132px; }
+.pch input { position: absolute; opacity: 0; pointer-events: none; }
+.pch .pci { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; margin-bottom: 6px; }
+.pch .pci .ico { width: 28px; height: 28px; stroke-width: 2; }
+.pch-cash .pci { background: #fff4e5; color: #b45309; }
+.pch-upi .pci { background: #f3efff; color: #5b21b6; }
+.pch b { font-size: 1.02rem; font-weight: 700; color: var(--ink); }
+.pch > span:not(.pci) { font-size: .8rem; color: var(--mut); line-height: 1.35; }
+.pch .pck { position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #d4d4d4; display: grid; place-items: center; color: transparent; }
+.pch .pck .ico { width: 15px; height: 15px; stroke-width: 3; }
+.pch.on { border-color: var(--g); background: var(--g-s); }
+.pch.on .pck { background: var(--g); border-color: var(--g); color: #fff; }
+.pch:focus-within { outline: 2px solid var(--g-l); outline-offset: 2px; }
+@media (max-width: 360px) { .paych { grid-template-columns: 1fr; } }

@@ -967,11 +967,12 @@ async function cartView() {
       <p class="small mut" style="margin:10px 0 0">The shop does this while packing. You never pay for an item you did not get.</p></div>
     ${S.mode === 'delivery' ? `<div class="box"><h3>Notes for the delivery person</h3><div class="drop">${DROPS.map((d) => `<button type="button" data-drop="${esc(d)}"
       class="${S.drop.includes(d) ? 'on' : ''}" aria-pressed="${S.drop.includes(d)}">${esc(d)}</button>`).join('')}</div></div>` : ''}
-    <div class="box"><h3>Payment</h3>
-      <label class="addr ${S.pay === 'cash' ? 'on' : ''}"><input type="radio" name="pay" value="cash" ${S.pay === 'cash' ? 'checked' : ''}><span class="ai">${ico('cash')}</span>
-        <span class="at"><b>Pay on ${S.mode === 'delivery' ? 'delivery' : 'collection'}</b><span>Cash or UPI when you ${S.mode === 'delivery' ? 'receive the order' : 'collect'}</span></span></label>
-      <label class="addr ${S.pay === 'upi' ? 'on' : ''}"><input type="radio" name="pay" value="upi" ${S.pay === 'upi' ? 'checked' : ''}><span class="ai">${ico('qr')}</span>
-        <span class="at"><b>Pay online by UPI</b><span>Scan the shop's QR code or pay${s.upi_id ? ` to ${esc(s.upi_id)}` : ''} after placing the order</span></span></label></div>
+    <div class="box"><h3>How will you pay?</h3>
+      <div class="paych" role="radiogroup" aria-label="Payment">
+      <label class="pch pch-cash ${S.pay === 'cash' ? 'on' : ''}"><input type="radio" name="pay" value="cash" ${S.pay === 'cash' ? 'checked' : ''}><span class="pci">${ico('cash')}</span>
+        <b>${S.mode === 'delivery' ? 'Cash on delivery' : 'Pay at pickup'}</b><span>Cash or UPI when you ${S.mode === 'delivery' ? 'receive the order' : 'collect it'}</span><i class="pck">${ico('check')}</i></label>
+      <label class="pch pch-upi ${S.pay === 'upi' ? 'on' : ''}"><input type="radio" name="pay" value="upi" ${S.pay === 'upi' ? 'checked' : ''}><span class="pci">${ico('qr')}</span>
+        <b>Pay now by UPI</b><span>GPay, PhonePe, Paytm${s.upi_id ? ` · ${esc(s.upi_id)}` : ''}: scan the QR after placing the order</span><i class="pck">${ico('check')}</i></label></div></div>
     <div class="box"><div class="field" style="margin:0"><label for="noteF">Note for the shop (optional)</label>
       <input id="noteF" placeholder="e.g. ripe bananas, small tomatoes" value="${esc(S.note)}" maxlength="300"></div>
       <input id="hpF" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true"><div id="oerr"></div></div>
@@ -1000,7 +1001,7 @@ async function cartView() {
     b.classList.toggle('on'); b.setAttribute('aria-pressed', String(S.drop.includes(d)));
   }));
   $('#noteF').addEventListener('input', (e) => { S.note = e.target.value; });
-  $$('[name=pay]').forEach((r) => r.addEventListener('change', () => { S.pay = r.value; LS.set('mpc_pay', S.pay); $$('label.addr').forEach((l) => { const i = $('input', l); if (i.name === 'pay') l.classList.toggle('on', i.checked); }); }));
+  $$('[name=pay]').forEach((r) => r.addEventListener('change', () => { S.pay = r.value; LS.set('mpc_pay', S.pay); $$('label.pch').forEach((l) => l.classList.toggle('on', $('input', l).checked)); }));
   $$('[data-place]').forEach((b) => b.addEventListener('click', placeOrder));
   $('#clearB').addEventListener('click', () => { if (confirm('Remove everything from the basket?')) { S.cart = {}; saveCart(); cartView(); } });
   drawBars();

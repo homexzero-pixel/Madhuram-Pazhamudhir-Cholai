@@ -1,7 +1,7 @@
 // Madhuram online shop – service worker. Lets customers install the shop as an app and opens it fast.
 // Prices, stock, orders and accounts always come from the server; only program files, fonts and pictures are kept.
-const VERSION = 'shop-2026.11.28-4';
-const SHELL = ['/', '/shop.css?v=2026.11.28d', '/shop.js?v=2026.11.28d', '/icons.js?v=2026.11.28d', '/splash.js?v=2026.11.28d',
+const VERSION = 'shop-2026.11.28-5';
+const SHELL = ['/', '/shop.css?v=2026.11.28e', '/shop.js?v=2026.11.28e', '/icons.js?v=2026.11.28e', '/splash.js?v=2026.11.28e',
   '/shop.webmanifest', '/fonts/poppins-400.woff2', '/fonts/poppins-500.woff2', '/fonts/poppins-600.woff2', '/fonts/poppins-700.woff2',
   '/img/shop-logo.webp?v=2', '/img/shop-icon-192.png?v=2'];
 const PICTURE = /^\/(img|fe|photos|fonts)\//;

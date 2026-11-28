@@ -69,7 +69,11 @@ App.afterFrame.push(() => {
 });
 
 // ================================================================== Online orders (staff)
-const ORDER_TABS = [['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', 'Performance'], ['checks', 'Checks & AI']];
+const ORDER_TABS = [['open', 'To do'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All'], ['perf', 'Performance']];
+// how the customer pays, as a clear tag: UPI paid / UPI not paid yet / cash on delivery or at pickup
+const payTag = (o) => (o.pay_pref === 'upi'
+  ? (o.pay_ref ? `<span class="paytag upi paid">${ico('qr')}UPI paid</span><div class="small muted">ref ${esc(o.pay_ref)}</div>` : `<span class="paytag upi">${ico('qr')}UPI · not paid yet</span>`)
+  : `<span class="paytag cash">${ico('cash')}${o.mode === 'delivery' ? 'Cash on delivery' : 'Pay at pickup'}</span>`);
 const statusPill = (o) => `<span class="pill ${{ new: 'bad', cancelled: 'off', done: 'ok' }[o.status] || ''}">${esc(o.status_label)}</span>`;
 // the one next step for an order, as a button on the list
 function nextStep(o) {
@@ -82,7 +86,6 @@ function nextStep(o) {
 App.views.orders = async (main) => {
   const tab = hashParam('tab') || 'open';
   if (tab === 'perf') return ordersPerformance(main);
-  if (tab === 'checks') return checksView(main);
   const { orders, cod, shop_url: shopUrl, online_enabled: onlineOn } = await api(`/orders?tab=${tab}`);
   App.shopUrl = shopUrl;
   App.settings.online_enabled = onlineOn;
@@ -94,11 +97,11 @@ App.views.orders = async (main) => {
       <div class="card stat"><div class="l">In progress</div><div class="v">${counts.busy}</div><div class="l">being packed or delivered</div></div>
       <div class="card stat"><div class="l">Cash on delivery out</div><div class="v ${Number(cod.amount) ? 'warn' : ''}">${inr(cod.amount)}</div><div class="l">${cod.orders} orders not completed</div></div></div>` : ''}
     ${tabs(ORDER_TABS, tab, 'orders')}
-    ${orders.length ? `<table><tr><th>Order</th><th>Slot</th><th>Customer</th><th class="hide-sm">Type</th><th>Status</th><th class="r">Amount</th><th></th></tr>
+    ${orders.length ? `<table><tr><th>Order</th><th>Slot</th><th>Customer</th><th class="hide-sm">Type</th><th>Status</th><th>Payment</th><th class="r">Amount</th><th></th></tr>
       ${orders.map((o) => { const n = nextStep(o); return `<tr class="click" data-id="${o.id}"><td><b>${esc(o.number)}</b><div class="small muted">${o.items} items${o.bill_no ? ` · ${esc(o.bill_no)}` : ''}</div></td>
       <td>${esc(o.slot_label)}</td><td>${esc(o.name)}<div class="small muted">${esc(o.phone)}</div></td>
       <td class="hide-sm">${o.mode === 'delivery' ? 'Delivery' : 'Takeaway'}${o.agent_name ? `<div class="small muted">${esc(o.agent_name)}</div>` : ''}</td>
-      <td>${statusPill(o)}${Number(o.cod) && o.status !== 'done' ? '<div class="small warn">Cash on delivery</div>' : ''}</td>
+      <td>${statusPill(o)}</td><td>${payTag(o)}</td>
       <td class="r">${inr(o.bill_total || Money.rs(Money.paise(o.est_items) + Money.paise(o.delivery_charge)))}</td>
       <td class="r">${n ? `<button class="small ${n[0] === 'complete' || n[0] === 'accept' ? 'primary' : ''}" data-go="${n[0]}" data-oid="${o.id}">${esc(n[1])}</button>` : ''}</td></tr>`; }).join('')}</table>`
     : '<p class="muted">No orders here.</p>'}`;
@@ -123,44 +126,6 @@ async function ordersPerformance(main) {
     <div class="grid2"><div class="card"><h2 style="margin-top:0">Most ordered online</h2><table>${p.top.map((t) => `<tr><td>${esc(t.name)}</td><td class="r">${t.orders} orders</td><td class="r">${esc(t.qty)} ${esc(t.unit)}</td></tr>`).join('') || '<tr><td class="muted">No orders</td></tr>'}</table></div>
       <div class="card"><h2 style="margin-top:0">Why orders were cancelled</h2><table>${p.cancel_reasons.map((c) => `<tr><td>${esc(c.reason || '(no reason)')}</td><td class="r">${c.n}</td></tr>`).join('') || '<tr><td class="muted">None</td></tr>'}</table></div></div>`;
   return undefined;
-}
-
-// ------------------------------------------------------------------ Checks & AI: held stock, waiting orders, cash out, AI log
-async function checksView(main) {
-  const withAi = hashParam('ai') === '1';
-  const [c, logs] = await Promise.all([api(`/checks${withAi ? '?ai=1' : ''}`), can('reports') ? api('/ai/logs?limit=60') : Promise.resolve(null)]);
-  const lvl = { high: 'bad', medium: 'warn', low: '' };
-  const st = c.status;
-  main.innerHTML = `<h1>Online orders</h1>${tabs(ORDER_TABS, 'checks', 'orders')}
-    <div class="grid2"><div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Things to check</h2>
-        ${can('products') ? '<button id="reconcile">Correct held stock</button>' : ''}</div>
-      <p class="small muted">Worked out from the stock and the open orders. Products with more held than in stock are hidden from the customers' site until stock comes in.</p>
-      ${c.items.length ? `<table>${c.items.map((i) => `<tr><td><span class="pill ${lvl[i.level]}">${esc(i.kind.replace(/_/g, ' '))}</span></td><td>${esc(i.text)}</td>
-        <td class="r">${i.order_id ? `<button class="small" data-oid="${i.order_id}">Open</button>` : ''}</td></tr>`).join('')}</table>` : '<p class="ok">Nothing to check. Held stock matches the open orders.</p>'}
-      ${c.ai ? `<div class="card" style="margin-top:12px;background:#f5f6ff"><div class="row"><span class="pill" style="background:#e5e8ff;color:#2c3db8">AI summary</span>
-          <span class="small muted">${esc(c.ai.model)} · from the list above only</span></div><p>${esc(c.ai.summary)}</p>
-          <ul>${c.ai.actions.map((a) => `<li><b>${esc(a.ref)}</b>: ${esc(a.action)}</li>`).join('')}</ul></div>`
-    : st.on && c.items.length && can('reports') ? '<button id="aiSum" style="margin-top:10px">Ask the AI what to do first</button>' : ''}</div>
-      <div class="card"><h2 style="margin-top:0">AI helpers</h2>
-        <p>Customers' site: <b class="${logs && logs.shop.on ? 'ok' : 'muted'}">${logs ? (logs.shop.on ? 'on' : `off (${!logs.shop.keyed ? 'no API key on the server' : logs.shop.hard_off ? 'switched off on the server' : 'switched off in Settings'})`) : '–'}</b><br>
-        Billing site: <b class="${st.on ? 'ok' : 'muted'}">${st.on ? 'on' : 'off'}</b>${logs ? ` · model ${esc(logs.shop.model)}` : ''}</p>
-        ${logs ? `<p class="small muted">Tokens used today: ${logs.used.toLocaleString('en-IN')} of ${Number(App.settings.ai_daily_tokens || 0).toLocaleString('en-IN')} ·
-          ${logs.today.map((t) => `${esc(t.outcome)} ${t.n}`).join(' · ') || 'no questions today'} · blocked today: ${c.blocked_today}</p>` : ''}
-        <p class="small muted">Without an AI key the customers' "Ask the shop" answers from the shop's own search. The AI never works out prices, GST, totals or stock,
-          only suggests products that are in stock, and never promises discounts or refunds.</p></div></div>
-    ${logs ? `<h2>AI log</h2><p class="small muted">Phone numbers, e-mail, UPI and card numbers are masked before anything is sent or saved.</p>
-      <table><tr><th>When</th><th>Site</th><th>Who</th><th>Question</th><th>Answer</th><th>Outcome</th><th class="r hide-sm">Tokens</th></tr>
-      ${logs.rows.map((r) => `<tr><td class="small">${esc(r.at.slice(5, 16))}</td><td>${esc(r.site)}</td><td class="small">${esc(r.customer || r.staff || '–')}</td>
-        <td class="small">${esc(r.question)}</td><td class="small">${esc(r.answer)}</td>
-        <td><span class="pill ${{ ok: 'ok', blocked: 'bad', error: 'warn', refused: 'warn' }[r.outcome] || 'off'}">${esc(r.outcome)}</span>${r.reason ? `<div class="small muted">${esc(r.reason)}</div>` : ''}</td>
-        <td class="r hide-sm small">${r.tokens_in + r.tokens_out || ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No questions yet.</td></tr>'}</table>` : ''}`;
-  if ($('#reconcile')) $('#reconcile').addEventListener('click', () => submitting($('#reconcile'), async () => {
-    const r = await api('/stock/reconcile', { method: 'POST', body: {} });
-    toast(r.fixed.length ? `Corrected ${r.fixed.length} products.` : 'Held stock already matches the open orders.');
-    route();
-  }));
-  if ($('#aiSum')) $('#aiSum').addEventListener('click', () => { location.hash = '#/orders?tab=checks&ai=1'; });
-  $$('[data-oid]', main).forEach((b) => b.addEventListener('click', () => orderDialog(Number(b.dataset.oid))));
 }
 
 // ------------------------------------------------------------------ one order
@@ -274,7 +239,7 @@ async function orderDialog(id) {
     <p><b>${esc(o.name)}</b> · ${esc(o.phone)} ${o.phone_verified ? '<span class="pill">Phone verified</span>' : '<span class="pill off">phone not verified</span>'} · ${o.mode === 'delivery' ? 'Home delivery' : 'Takeaway'}<br>${esc(o.slot_label)}
     ${o.address ? `<br>${ico('pin')} ${esc(o.address)}` : ''}${o.notes ? `<br>Note: ${esc(o.notes)}` : ''}
     <br>If an item is not available: <b>${esc(SUB_TEXT[o.sub_pref] || SUB_TEXT.call)}</b>${o.drop_note ? `<br>For the delivery person: <b>${esc(o.drop_note)}</b>` : ''}
-    <br>Pays by ${o.pay_pref.toUpperCase()}${o.pay_ref ? ` · <b>UPI ref ${esc(o.pay_ref)}</b> (check it in your UPI app)` : ''}
+    <br><span style="display:inline-block;margin-top:6px">${payTag(o)}</span>${o.pay_ref ? ' <span class="small">Check the ref in your UPI app.</span>' : ''}
     ${o.bill_no ? `<br>Bill <b>${esc(o.bill_no)}</b> ${inr(o.bill_total)}${Money.paise(o.cod_due || '0') && o.status !== 'done' ? ` · <b class="warn">cash on delivery ${inr(o.cod_due)}</b>` : ''}` : ''}
     ${o.agent_name ? `<br>${ico('scooter')} ${esc(o.agent_name)} · ${esc(o.agent_phone)}${o.tracking ? ` · ${esc(o.tracking)}` : ''}` : ''}
     ${o.status_note ? `<br><i>${esc(o.status_note)}</i>` : ''}</p>
@@ -652,7 +617,7 @@ App.views.reports = async (main) => {
 App.views.owner = async (main) => {
   const tab = hashParam('tab') || 'prices';
   const T = [['prices', "Today's prices"], ['offers', 'Offers'], ['expenses', 'Expenses'], ['board', 'Price board'],
-    ['labels', 'Barcode labels'], ['day', 'Day summary (WhatsApp)']];
+    ['labels', 'Barcode labels'], ...(can('reports') ? [['day', 'Day summary (WhatsApp)']] : [])];
   main.innerHTML = `<h1>Daily tools</h1>${tabs(T, tab, 'owner')}<div id="obody"></div>`;
   const body = $('#obody');
   if (tab === 'day') {
