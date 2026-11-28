@@ -328,7 +328,7 @@ async function orderDialog(id) {
 function posterPrint() {
   const s = App.settings;
   $('#print-area').innerHTML = `<div style="width:190mm;padding:12mm;text-align:center;font-family:'Segoe UI','Nirmala UI',sans-serif">
-    <img src="/img/logo.webp" style="width:70mm"><h1 style="font-size:30px;margin:6mm 0">Order from your phone!</h1>
+    <img src="/img/logo-full.webp" style="width:120mm" alt=""><h1 style="font-size:30px;margin:6mm 0">Order from your phone!</h1>
     <div class="ta" style="font-size:22px">உங்கள் மொபைலில் ஆர்டர் செய்யுங்கள்!</div>
     <img src="/api/orders-poster.svg" style="width:110mm;margin:8mm 0">
     <div style="font-size:20px">Scan → choose → <b>Takeaway</b> or <b>Home delivery</b> → pick a time</div>

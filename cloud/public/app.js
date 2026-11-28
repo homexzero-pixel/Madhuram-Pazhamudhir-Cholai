@@ -348,11 +348,11 @@ function frame() {
   const s = App.settings;
   $('#app').className = '';
   $('#app').innerHTML = `
-    <div class="topbar"><button id="menu-btn" aria-label="Menu">${ico('menu')}</button><b>${esc(s.name)}</b>
+    <div class="topbar"><button id="menu-btn" aria-label="Menu">${ico('menu')}</button><b class="tb-logo"><img src="/img/logo-full.webp" alt="${esc(s.name)}"></b>
       <button class="install-btn primary">Install</button></div>
     <div class="shell">
       <aside class="side" id="side">
-        <div class="side-brand"><img src="/img/logo.webp" alt=""><div><b>${esc(s.name)}</b><span>Store software</span></div></div>
+        <div class="side-brand full"><img src="/img/logo-full.webp" alt="${esc(s.name)}"><span>Store software</span></div>
         <nav class="nav">${navHtml()}</nav>
         <button class="install-btn" id="install-btn">${ico('download')} Install on this PC</button>
         <div class="who"><div class="who-n">${esc(App.me.name)}</div><div class="who-r">${esc(App.me.role)} · <span id="who-c">${esc(myCounter() || 'no counter')}</span></div>
@@ -447,7 +447,7 @@ function showLogin(st) {
   if (App.leave) { App.leave(); App.leave = null; }
   $('#app').className = '';
   $('#app').innerHTML = `<div class="login card">
-    <img src="/img/logo.webp" alt="">
+    <img src="/img/logo-full.webp" alt="Madhuram Pazhamudhir Solai">
     <h1>Log in</h1>
     <form id="login-form"><label>Login name</label><input name="username" autocomplete="username" required autofocus>
       <label>Password</label><input name="password" type="password" autocomplete="current-password" required>
@@ -481,7 +481,7 @@ function showLogin(st) {
 function showSetup() {
   $('#app').className = '';
   $('#app').innerHTML = `<div class="login card" style="max-width:520px">
-    <img src="/img/logo.webp" alt="">
+    <img src="/img/logo-full.webp" alt="Madhuram Pazhamudhir Solai">
     <h1>Welcome! First-time setup</h1>
     <p class="muted">Create the owner login. You can add cashiers and managers afterwards.</p>
     <form id="setup-form">
