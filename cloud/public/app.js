@@ -752,7 +752,8 @@ App.views.products = async (main) => {
       ${i.image ? `<img class="thumb" src="${esc(i.image)}" alt="" loading="lazy">` : '<span class="thumb none"></span>'}
       <span>${esc(i.name)}${i.name_ta ? `<div class="small ta muted">${esc(i.name_ta)}</div>` : ''}</span></div></td>
       <td class="hide-sm small">${esc(i.sku)}${i.plu ? ` · PLU ${esc(i.plu)}` : ''}<br>${esc(i.codes.join(', '))}</td>
-      <td class="r">${i.price ? inr(i.price) : '<span class="pill off">no price</span>'}${i.unit === 'kg' ? '/kg' : ''}</td>
+      <td class="r">${i.price ? inr(i.price) : '<span class="pill off">no price</span>'}${i.unit === 'kg' ? '/kg' : ''}${(i.more_prices || []).length
+        ? `<div class="small muted" title="More selling prices">+ ${i.more_prices.map((x) => esc(inr(x))).join(', ')}</div>` : ''}</td>
       <td class="r ${Number(i.on_hand) <= Number(i.reorder_level) && i.active ? 'warn' : ''}">${esc(i.on_hand)} ${esc(i.unit)}</td>
       <td class="hide-sm">${i.active ? '<span class="pill">selling</span>' : '<span class="pill off">off</span>'}</td></tr>`).join('');
     if (!more) $('#plist').innerHTML = `<p class="small muted">${total} products</p><table><tbody id="ptb"><tr><th>Product</th><th class="hide-sm">Codes</th>
@@ -854,6 +855,9 @@ async function productDialog(id, onSaved, preset = {}) {
       <div class="grid3"><div><label>Selling price ₹</label><input name="price" inputmode="decimal" value="${esc(item.price ?? '')}" ${id ? 'autofocus' : ''}></div>
         <div><label>MRP ₹</label><input name="mrp" inputmode="decimal" value="${esc(item.mrp ?? '')}"></div>
         <div><label>Sold by</label><select name="unit"><option value="pcs">Piece / pack</option><option value="kg" ${item.unit === 'kg' ? 'selected' : ''}>Weight (kg)</option></select></div></div>
+      <div id="xprices"></div>
+      ${editable ? `<button type="button" id="xpadd" class="xp-add">${ico('plus')} Add another selling price</button>` : ''}
+      <p class="small muted" id="xphelp" style="margin:4px 0 0"></p>
       ${can('gst') ? '' : '<p class="small muted" style="margin:10px 0 0">GST is set by the owner. New products start as "Not set yet".</p>'}
       <div class="grid3"><div><label>GST %</label><select name="gst_rate" ${can('gst') ? '' : 'disabled'}>${['0', '5', '12', '18', '28', '40', '3', '0.25'].map((g) => `<option ${Number(item.gst_rate) === Number(g) ? 'selected' : ''}>${g}</option>`).join('')}</select></div>
         <div><label>GST type</label><select name="tax_class" ${can('gst') ? '' : 'disabled'}>${[['unset', 'Not set yet'], ['taxable', 'Taxable'], ['exempt', 'Exempt'], ['nil', 'Nil-rated']].map(([v, l]) => `<option value="${v}" ${item.tax_class === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
@@ -906,6 +910,26 @@ async function productDialog(id, onSaved, preset = {}) {
     $('#ph', d).innerHTML = '<span>No photo</span>'; $('#phx', d).remove();
     if (onSaved) onSaved();
   }));
+  // more selling prices (two MRPs of the same product, small and big, wholesale): billing shows them all when it is scanned or tapped
+  const xp = (item.prices || []).map((x) => ({ id: x.id, price: x.price ?? '', mrp: x.mrp ?? '', label: x.label || '' }));
+  const drawXp = (focusLast) => {
+    $('#xprices', d).innerHTML = (xp.length ? `<div class="xp-row xp-head"><span></span><span>Selling price ₹</span><span>MRP ₹ (if different)</span>
+      <span>Name (optional)</span><span></span></div>` : '') + xp.map((x, n) => `<div class="xp-row" data-n="${n}"><span class="xp-n">Price ${n + 2}</span>
+      <input data-f="price" inputmode="decimal" placeholder="Selling ₹" value="${esc(x.price)}" aria-label="Selling price ${n + 2}">
+      <input data-f="mrp" inputmode="decimal" placeholder="MRP ₹" value="${esc(x.mrp)}" aria-label="MRP of price ${n + 2}">
+      <input data-f="label" maxlength="40" placeholder="Name, e.g. Big" value="${esc(x.label)}" aria-label="Name of price ${n + 2}">
+      ${editable ? `<button type="button" class="xp-x" data-xr="${n}" title="Remove this price" aria-label="Remove price ${n + 2}">${ico('trash')}</button>` : ''}</div>`).join('');
+    $$('.xp-row[data-n]', d).forEach((row) => {
+      const x = xp[Number(row.dataset.n)];
+      $$('input', row).forEach((inp) => { inp.disabled = !editable; inp.addEventListener('input', () => { x[inp.dataset.f] = inp.value; }); });
+    });
+    $$('[data-xr]', d).forEach((b) => b.addEventListener('click', () => { xp.splice(Number(b.dataset.xr), 1); drawXp(); }));
+    if ($('#xpadd', d)) $('#xpadd', d).hidden = xp.length >= 8;
+    $('#xphelp', d).textContent = xp.length ? `At billing, scanning or tapping this product shows all ${xp.length + 1} prices to choose from (keys 1 to ${xp.length + 1}).` : '';
+    if (focusLast) { const last = $$('.xp-row [data-f=price]', d).pop(); if (last) last.focus(); }
+  };
+  if ($('#xpadd', d)) $('#xpadd', d).addEventListener('click', () => { xp.push({ id: 0, price: '', mrp: '', label: '' }); drawXp(true); });
+  drawXp();
   let codes = [...item.codes];
   const drawCodes = () => {
     $('#bclist', d).innerHTML = codes.map((c, i) => `<span class="chip">${esc(c)} <button type="button" data-x="${i}" title="Remove">×</button></span>`).join('') ||
@@ -938,6 +962,7 @@ async function productDialog(id, onSaved, preset = {}) {
       const pending = $('#bcscan', d).value.trim();
       if (pending && !codes.includes(pending)) codes.push(pending);
       f.codes = codes;
+      f.prices = xp.map((x) => ({ id: x.id || undefined, price: x.price, mrp: x.mrp, label: x.label }));
       if (id) f.id = id;
       if (preset.approval) f.approval = preset.approval;
       const r = await api('/products', { method: 'POST', body: f });

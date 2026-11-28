@@ -10,8 +10,9 @@ const TAX_CLASSES = ['unset', 'taxable', 'exempt', 'nil'];
 // and refreshed when `version` changes.
 async function version() {
   const r = await db.one('SELECT COUNT(*) n, MAX(updated_at) u FROM items WHERE active=1');
-  const b = await db.one('SELECT COUNT(*) n FROM barcodes');
-  return `${r.n}-${(r.u || '').replace(/\D/g, '')}-${b.n}-${todayIST()}`;
+  const b = await db.one(`SELECT (SELECT COUNT(*) FROM barcodes) n,
+    (SELECT CONCAT(COUNT(*), '.', COALESCE(MAX(id), 0), '.', COALESCE(SUM(price), 0)) FROM item_prices) p`);
+  return `${r.n}-${(r.u || '').replace(/\D/g, '')}-${b.n}-${String(b.p || '').replace(/\D/g, '')}-${todayIST()}`;
 }
 
 async function counterCatalogue() {
@@ -19,6 +20,8 @@ async function counterCatalogue() {
     `SELECT i.id, i.sku, i.plu, i.name, i.name_ta, i.unit, ${require('./money').PRICE_NOW(todayIST())} price, i.mrp, i.gst_rate, i.tax_class, i.on_hand, c.name cat, i.image
      FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE i.active=1 ORDER BY i.name`);
   const codes = await db.query('SELECT b.code, b.item_id, b.per FROM barcodes b JOIN items i ON i.id=b.item_id WHERE i.active=1');
+  const more = await db.query(`SELECT p.id, p.item_id, p.price, p.mrp, p.label FROM item_prices p JOIN items i ON i.id=p.item_id
+    WHERE i.active=1 ORDER BY p.item_id, p.sort, p.id`);
   const sold = new Map((await db.query(`SELECT l.item_id, COUNT(*) n FROM sale_lines l JOIN sales x ON x.id=l.sale_id
     WHERE x.business_date > DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY l.item_id`)).map((r) => [r.item_id, Number(r.n)]));
   return {
@@ -27,6 +30,8 @@ async function counterCatalogue() {
     items: items.map((i) => [i.id, i.sku, i.plu || '', i.name, i.name_ta, i.unit, i.price, i.mrp, i.gst_rate, i.tax_class,
       qtyStr(milli(i.on_hand)), i.cat || '', sold.get(i.id) || 0, i.image || '']),
     barcodes: codes.map((b) => [b.code, b.item_id, qtyStr(milli(b.per))]),
+    // more selling prices of a product: [item id, price id, price, MRP, name]; billing shows them all to choose from
+    prices: more.map((x) => [x.item_id, x.id, x.price, x.mrp, x.label || '']),
   };
 }
 
@@ -131,7 +136,8 @@ async function search({ q = '', status = 'all', limit = 50, offset = 0 }) {
   if (status === 'out') where.push('i.active=1 AND i.price IS NOT NULL AND i.on_hand <= 0');
   if (status === 'noprice') where.push('i.price IS NULL');
   if (status === 'nophoto') where.push('i.active=1 AND i.image IS NULL');
-  const sql = `SELECT i.*, c.name cat, (SELECT GROUP_CONCAT(code) FROM barcodes WHERE item_id=i.id) codes
+  const sql = `SELECT i.*, c.name cat, (SELECT GROUP_CONCAT(code) FROM barcodes WHERE item_id=i.id) codes,
+       (SELECT GROUP_CONCAT(price ORDER BY sort, id) FROM item_prices WHERE item_id=i.id) more
      FROM items i LEFT JOIN categories c ON c.id=i.category_id ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
      ORDER BY ${status === 'nophoto' ? `(SELECT COUNT(*) FROM sale_lines l JOIN sales x ON x.id=l.sale_id WHERE l.item_id=i.id
        AND x.business_date > DATE_SUB(CURDATE(), INTERVAL 60 DAY)) DESC, i.on_hand > 0 DESC,` : ''}
@@ -148,6 +154,7 @@ function itemOut(i) {
     on_hand: qtyStr(milli(i.on_hand)), active: !!i.active, cat: i.cat || '', codes: i.codes ? String(i.codes).split(',') : [],
     image: i.image ? `/img/p/${i.image}` : null, image_source: i.image_source || null,
     offer_price: i.offer_price, offer_from: i.offer_from, offer_to: i.offer_to, shop_section: i.shop_section || '',
+    more_prices: i.more ? String(i.more).split(',') : [],
   };
 }
 
@@ -155,8 +162,38 @@ async function get(id) {
   const i = await db.one(`SELECT i.*, c.name cat, (SELECT GROUP_CONCAT(code) FROM barcodes WHERE item_id=i.id) codes
     FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE i.id=?`, [id]);
   if (!i) throw new UserError('Product not found.', 404);
-  return itemOut(i);
+  const prices = await db.query('SELECT id, price, mrp, label FROM item_prices WHERE item_id=? ORDER BY sort, id', [i.id]);
+  return { ...itemOut({ ...i, more: prices.map((x) => x.price).join(',') }), prices: prices.map((x) => ({ id: x.id, price: x.price, mrp: x.mrp, label: x.label })) };
 }
+
+// More selling prices sent by the Products page: [{ id (kept when edited), price, mrp, label }]. Empty rows are left out.
+const MAX_PRICES = 8;                         // with the product's own price: 9, chosen with keys 1 to 9 at billing
+function cleanPrices(list, price, mrp) {
+  if (!Array.isArray(list)) throw new UserError('The list of selling prices is not right. Reload the page.');
+  const out = [];
+  const seen = new Set([`${price}|${mrp}`]);
+  for (const x of list) {
+    if (!x || typeof x !== 'object') continue;
+    const label = String(x.label || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    const empty = (v) => v === undefined || v === null || String(v).trim() === '';
+    if (empty(x.price) && empty(x.mrp) && !label) continue;
+    const n = out.length + 2;
+    if (empty(x.price)) throw new UserError(`Type selling price ${n}.`);
+    const p = paise(x.price, `selling price ${n}`);
+    if (p === null || p <= 0) throw new UserError(`Selling price ${n} must be more than zero.`);
+    const m = empty(x.mrp) ? null : paise(x.mrp, `MRP of price ${n}`);
+    if (m !== null && m <= 0) throw new UserError(`MRP of price ${n} must be more than zero.`);
+    if (m !== null && p > m) throw new UserError(`Selling price ${n} (₹${rs(p)}) is more than its MRP ₹${rs(m)}.`);
+    if (m === null && mrp !== null && p > mrp) throw new UserError(`Selling price ${n} (₹${rs(p)}) is more than the MRP ₹${rs(mrp)}. Type its own MRP.`);
+    const key = `${p}|${m === null ? mrp : m}`;
+    if (seen.has(key)) throw new UserError(`Selling price ${n} (₹${rs(p)}) is the same as another price of this product.`);
+    seen.add(key);
+    out.push({ id: Number(x.id) || 0, price: p, mrp: m, label });
+  }
+  if (out.length > MAX_PRICES) throw new UserError(`Up to ${MAX_PRICES + 1} selling prices for one product.`);
+  return out;
+}
+const priceText = (x) => `₹${Number(x.price).toFixed(2)}${x.mrp !== null && x.mrp !== undefined ? ` (MRP ₹${Number(x.mrp).toFixed(2)})` : ''}${x.label ? ` ${x.label}` : ''}`;
 
 async function categoryId(q, name) {
   name = String(name || '').trim().slice(0, 60);
@@ -201,6 +238,8 @@ async function save(data, user) {
   const opening = milli(data.opening_qty) || 0;
   if (opening < 0) throw new UserError('Opening stock cannot be negative.');
   if (unit === 'pcs' && opening % 1000) throw new UserError('Opening stock for a piece item must be a whole number.');
+  const more = data.prices === undefined ? null : cleanPrices(data.prices, price, mrp);
+  if (more && more.length && price === null) throw new UserError('Type the first selling price before adding more.');
 
   return db.tx(async (q) => {
     const now = nowIST();
@@ -253,6 +292,26 @@ async function save(data, user) {
     if (data.codes !== undefined) {         // the Products page sends the full list: drop codes that were removed
       const keep = codes.length ? codes : ['\u0000'];
       await q(`DELETE FROM barcodes WHERE item_id=? AND code NOT IN (${keep.map(() => '?').join(',')})`, [id, ...keep]);
+    }
+    if (more) {                              // more selling prices: edited ones keep their number, removed ones go
+      const old = await q('SELECT id, price, mrp, label FROM item_prices WHERE item_id=? ORDER BY sort, id', [id]);
+      const keep = new Set();
+      for (const [n, x] of more.entries()) {
+        const row = [rs(x.price), x.mrp === null ? null : rs(x.mrp), x.label, n];
+        if (x.id && old.some((o) => o.id === x.id && !keep.has(o.id))) {
+          await q('UPDATE item_prices SET price=?, mrp=?, label=?, sort=? WHERE id=?', [...row, x.id]);
+          keep.add(x.id);
+        } else {
+          keep.add((await q('INSERT INTO item_prices (item_id, price, mrp, label, sort) VALUES (?,?,?,?,?)', [id, ...row])).insertId);
+        }
+      }
+      const gone = old.filter((o) => !keep.has(o.id)).map((o) => o.id);
+      if (gone.length) await q(`DELETE FROM item_prices WHERE id IN (${gone.map(() => '?').join(',')})`, gone);
+      const before = old.map(priceText).join(', ');
+      const after = more.map((x) => priceText({ price: rs(x.price), mrp: x.mrp === null ? null : rs(x.mrp), label: x.label })).join(', ');
+      if (before !== after) {
+        await audit({ user_id: user.id, action: 'price_change', summary: `${name}: more selling prices ${before || 'none'} → ${after || 'none'}` }, q);
+      }
     }
     if (data.shop_section !== undefined) {   // the online-shop section the owner chose ('' = worked out from the name)
       const sec = require('./sections').KEYS.has(data.shop_section) ? data.shop_section : null;

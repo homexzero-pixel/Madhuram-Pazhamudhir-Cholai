@@ -114,9 +114,9 @@ async function auditLog({ limit = 200 }) {
 
 // ------------------------------------------------------------------ backup: the whole database as one .sql.gz file
 // It can be loaded back with Hostinger's phpMyAdmin (Import) into an empty database.
-const TABLES = ['settings', 'users', 'categories', 'items', 'barcodes', 'lots', 'stock_moves', 'customers', 'shifts', 'cash_moves',
+const TABLES = ['settings', 'users', 'categories', 'items', 'barcodes', 'item_prices', 'lots', 'stock_moves', 'customers', 'shifts', 'cash_moves',
   'sequences', 'sales', 'sale_lines', 'sale_lot_allocs', 'payments', 'audit', 'suppliers', 'purchases', 'purchase_lines', 'supplier_payments',
-  'sale_returns', 'return_lines', 'customer_ledger', 'online_orders', 'online_order_lines', 'expenses'];
+  'sale_returns', 'return_lines', 'customer_ledger', 'online_orders', 'online_order_lines', 'expenses', 'customer_addresses', 'loyalty_ledger'];
 
 // Write the whole database as gzip SQL to `out` (an HTTP response or a file). Resolves when everything is written.
 async function dumpTo(out) {
@@ -178,7 +178,7 @@ async function importFromShop(buffer, user) {
   }
   const counts = { items: 0, barcodes: 0, lots: 0, customers: 0, users: 0 };
   await db.tx(async (q) => {
-    for (const t of ['sale_lot_allocs', 'stock_moves', 'lots', 'barcodes', 'items', 'categories']) await q(`DELETE FROM ${t}`);
+    for (const t of ['sale_lot_allocs', 'stock_moves', 'lots', 'barcodes', 'item_prices', 'items', 'categories']) await q(`DELETE FROM ${t}`);
     const now = nowIST();
     const cats = new Map();
     for (const it of data.items) {

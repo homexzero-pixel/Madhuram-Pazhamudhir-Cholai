@@ -472,3 +472,15 @@ CREATE TABLE IF NOT EXISTS photo_links (
   tried_at DATETIME NULL,
   KEY (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- More than one selling price for a product (two MRPs of the same tea powder, small and big garlic, a wholesale price).
+-- The product's own price is the first; these are the others. Scanning or tapping the product at billing shows every price to choose from.
+CREATE TABLE IF NOT EXISTS item_prices (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  item_id INT NOT NULL,
+  price DECIMAL(10,2) NOT NULL,
+  mrp DECIMAL(10,2) NULL,
+  label VARCHAR(40) NOT NULL DEFAULT '',
+  sort INT NOT NULL DEFAULT 0,
+  INDEX (item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -63,7 +63,15 @@ Tamil, customer, price change and discount with manager PIN, hold, cancel), cash
    a backup is saved on the server first; products, customers, staff and settings stay; the stock the test bills took goes back;
    bill numbers start again from 1.
    **Low stock** (menu) lists products at or below their low stock alert (set in each product) and best sellers with no stock.
-   **Daily tools, Today's prices**: price per kg or per 250 g, today's offer, and the stock on the shelf in kg or g, saved together.
+   **Daily tools, Today's prices**: price per kg, per 250 g … or **per piece**, today's offer, and the stock on the shelf in kg, g or
+   pieces (1, 2, 3), saved together. Choosing *per piece* (or *pcs* for the stock) makes the product sold by the piece at the counters and
+   online after Save; choosing a weight makes it sold by kg again. The first list has the loose items sold by kg and the fruit and
+   vegetables sold by the piece.
+   **More than one selling price** (Products, open a product, **+ Add another selling price**): for two MRPs of the same product (old
+   and new stock), small and big, or a wholesale price. Each extra price has its own MRP (empty = the product's MRP) and an optional name.
+   At billing, scanning or tapping the product shows all its prices: press 1, 2, 3 … or tap one (Enter takes the first). No manager
+   approval is needed for these prices, and the bill line shows the name of the price chosen. A barcode scanned while the prices are
+   showing is kept and goes on the bill right after the choice.
    **Offers**: after a festival offer, "Tell your customers" shares the message on WhatsApp. **Customers**: download all (Excel).
    **Reports**: sales by day, categories by day, best products, payments and busy hours for any period; detailed reports below.
    **Product photos from a list:** Settings, Product photos, *Photos from a list (Excel or CSV)*: choose a sheet with `Product code` (or

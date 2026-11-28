@@ -478,3 +478,28 @@ details.split { margin-top: 10px; } details.split summary { cursor: pointer; col
   font-size: .9rem; cursor: pointer; background: #fff; }
 .pick-sec label input { width: auto; margin: 0; }
 .pick-sec label:has(input:checked) { border-color: #15803d; background: #ecfdf3; color: #166534; }
+
+/* Products: more selling prices (Price 2, Price 3 …) */
+.xp-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 6px; align-items: center; margin-top: 8px; }
+.xp-n { font-size: .85rem; font-weight: 600; color: var(--muted); }
+.xp-head { margin-top: 10px; font-size: .78rem; font-weight: 600; color: var(--muted); }
+.xp-head + .xp-row { margin-top: 2px; }
+.xp-row .xp-x { padding: 6px 8px; color: var(--danger); border-color: #f3c4c4; }
+.xp-add { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; color: var(--brand-2); border-style: dashed; border-color: #9db8f5; background: #f7f9ff; }
+@media (max-width: 560px) {
+  .xp-row { grid-template-columns: 1fr 1fr auto; }
+  .xp-head { display: none; }
+  .xp-row .xp-n { grid-column: 1 / -1; }
+  .xp-row [data-f=label] { grid-column: 1 / 3; }
+}
+/* Billing: choose one of the product's selling prices */
+dialog.pickprice { width: min(460px, 94vw); }
+.pp-list { display: grid; gap: 8px; margin-top: 4px; }
+.pp { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; border: 1.5px solid var(--line);
+  border-radius: 12px; background: #fff; color: var(--ink); font-weight: 500; }
+.pp:hover, .pp:focus-visible { border-color: var(--brand-2); background: var(--soft); outline: none; }
+.pp .k { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: var(--soft); color: var(--brand); font-weight: 800; font-size: 1.1rem; }
+.pp .pv { font-size: 1.35rem; font-weight: 800; letter-spacing: .2px; }
+.pp .pl { display: block; font-size: .85rem; color: var(--muted); font-weight: 600; }
+.pp .pm { font-size: .85rem; color: var(--muted); white-space: nowrap; }
+#lines .sub .tag { display: inline-block; padding: 0 6px; border-radius: 6px; background: var(--soft); color: var(--brand); font-weight: 600; font-size: .78rem; margin-left: 4px; }

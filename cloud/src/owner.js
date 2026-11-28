@@ -14,22 +14,30 @@ const inr = (p) => {
 };
 
 // ------------------------------------------------------------------ today's prices (fruit & vegetable rates change every morning)
+// The first list (no category, nothing searched): loose items sold by weight, and the fruit and vegetables sold by the piece.
+const FRESH = ['veg', 'fruits', 'exotics'];
 async function priceList({ cat = '', q = '' } = {}) {
+  const sections = require('./sections');
   const where = ["i.sku <> 'DELIVERY'"];
   const args = [];
-  if (cat) { where.push('c.name=?'); args.push(cat); } else if (!q) where.push("i.unit='kg'");
+  if (cat) { where.push('c.name=?'); args.push(cat); } else if (!q) {
+    const fresh = new Set();
+    for (const k of FRESH) for (const id of await sections.idsOf(k)) fresh.add(id);
+    where.push("(i.unit='kg' OR i.id IN (?))"); args.push(sections.inList(fresh));
+  }
   if (q) { where.push('(i.name LIKE ? OR i.name_ta LIKE ? OR i.sku=? OR i.id IN (SELECT item_id FROM barcodes WHERE code=?))'); args.push(`%${q}%`, `%${q}%`, q, q); }
   const today = todayIST();
   const items = await db.query(`SELECT i.id, i.name, i.name_ta, i.unit, i.price, i.mrp, i.on_hand, i.reserved, i.active, c.name cat,
       IF(i.offer_price IS NOT NULL AND ? BETWEEN COALESCE(i.offer_from, '2000-01-01') AND COALESCE(i.offer_to, '2999-12-31'), i.offer_price, NULL) offer
-    FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE ${where.join(' AND ')} ORDER BY c.name, i.name LIMIT 400`, [today, ...args]);
+    FROM items i LEFT JOIN categories c ON c.id=i.category_id WHERE ${where.join(' AND ')} ORDER BY c.name, i.name LIMIT 600`, [today, ...args]);
   const cats = await db.query(`SELECT DISTINCT c.name FROM categories c JOIN items i ON i.category_id=c.id WHERE i.active=1 ORDER BY c.name`);
-  return { items: items.map(({ reserved, ...i }) => ({ ...i, on_hand: qtyStr(milli(i.on_hand)),
-    online: !!(i.active && Number(i.price) > 0 && milli(i.on_hand) - milli(reserved) > 0) })), cats: cats.map((c) => c.name) };
+  const always = await sections.alwaysIds();         // vegetables, fruits, dairy: online with a price alone (no stock count needed)
+  return { items: items.map(({ reserved, ...i }) => ({ ...i, on_hand: qtyStr(milli(i.on_hand)), always: always.has(i.id),
+    online: !!(i.active && Number(i.price) > 0 && (always.has(i.id) || milli(i.on_hand) - milli(reserved) > 0)) })), cats: cats.map((c) => c.name) };
 }
 
-// Each change: { id, price?, offer?, stock? }. Price and offer per kg (or piece); the offer is for today only ('' removes it);
-// stock is what is on the shelf now, in kg (or pieces). Fruit and vegetables with a price and stock show in the online shop at once.
+// Each change: { id, unit?, price?, offer?, stock? }. unit: sold by 'kg' or by the piece ('pcs'). Price and offer per kg (or piece);
+// the offer is for today only ('' removes it); stock is what is on the shelf now, in kg (or pieces).
 async function savePrices(changes, user) {
   if (!Array.isArray(changes) || !changes.length) throw new UserError('Nothing was changed.');
   const has = (v) => v !== undefined && v !== null && String(v).trim() !== '';
@@ -42,6 +50,12 @@ async function savePrices(changes, user) {
       const it = await q.one('SELECT id, name, unit, price, mrp, offer_price, offer_from, offer_to FROM items WHERE id=? FOR UPDATE', [ch.id]);
       if (!it) continue;
       let price = it.price === null ? null : paise(it.price);
+      if ((ch.unit === 'kg' || ch.unit === 'pcs') && ch.unit !== it.unit) {      // sold by kg ↔ by the piece
+        await q('UPDATE items SET unit=?, updated_at=? WHERE id=?', [ch.unit, now, it.id]);
+        await audit({ user_id: user.id, action: 'price_change',
+          summary: `${it.name}: now sold ${ch.unit === 'kg' ? 'by kg' : 'by the piece'} (was ${it.unit === 'kg' ? 'by kg' : 'by the piece'}), ₹${it.price ?? '-'} (today's prices)` }, q);
+        n += 1;
+      }
       if (has(ch.price)) {
         const p = paise(ch.price, 'price');
         if (p === null || p <= 0) throw new UserError(`${it.name}: enter a price above zero.`);

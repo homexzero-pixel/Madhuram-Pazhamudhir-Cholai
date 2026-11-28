@@ -138,7 +138,8 @@ async function checkout(user, body) {
     const qty = milli(l.qty, 'quantity');
     if (!qty || qty <= 0) throw new UserError('Quantity must be more than zero.');
     if (qty > 100000000) throw new UserError('Quantity is too large.');
-    const p = { item_id: Number(l.id), qty, rate: null, disc: 0, note: String(l.note || '').slice(0, 160), approver: null };
+    // pick: one of the product's other selling prices (Products → Add another selling price), chosen at the counter: no approval needed
+    const p = { item_id: Number(l.id), qty, rate: null, disc: 0, note: String(l.note || '').slice(0, 160), approver: null, pick: Number(l.pick) || null };
     if (l.rate !== undefined && l.rate !== null && l.rate !== '') {
       p.rate = paise(l.rate, 'price');
       if (p.rate < 0) throw new UserError('Price cannot be negative.');
@@ -201,6 +202,9 @@ async function checkout(user, body) {
 
       // every product on the bill (and of the online order) locked once, in id order: no two bills wait on each other in a circle
       const itemRows = await stock.lockItems(q, [...prepared.map((p) => p.item_id), ...orderLines.map((l) => l.item_id)]);
+      const pickIds = [...new Set(prepared.map((p) => p.pick).filter(Boolean))];
+      const picks = new Map(pickIds.length ? (await q(`SELECT id, item_id, price, mrp FROM item_prices WHERE id IN (${pickIds.map(() => '?').join(',')})`,
+        pickIds)).map((r) => [r.id, r]) : []);
       const calc = [];
       let gross = 0;
       let discount = 0;
@@ -213,14 +217,23 @@ async function checkout(user, body) {
         }
         if (item.unit === 'pcs' && p.qty % 1000) throw new UserError(`${item.name} is sold by the piece: use a whole number.`);
         if (cfg.require_tax_setup === '1' && item.tax_class === 'unset') throw new UserError(`${item.name}: GST treatment not set.`);
-        const list = paise(item.offer_price !== null && bdate >= (item.offer_from || '2000-01-01') && bdate <= (item.offer_to || '2999-12-31') ? item.offer_price : item.price);
+        let list = paise(item.offer_price !== null && bdate >= (item.offer_from || '2000-01-01') && bdate <= (item.offer_to || '2999-12-31') ? item.offer_price : item.price);
+        let mrp = item.mrp;
+        if (p.pick && !p.delivery) {
+          const pk = picks.get(p.pick);
+          if (!pk || pk.item_id !== item.id) {
+            throw new UserError(`The price chosen for ${item.name} was changed in Products. Take it off the bill and scan it again.`);
+          }
+          list = paise(pk.price);
+          if (pk.mrp !== null) mrp = pk.mrp;
+        }
         if (list === null && p.rate === null) throw new UserError(`${item.name} has no selling price.`);
         const rate = p.rate ?? list;
         const g = lineAmount(rate, p.qty);
         if (p.disc > g) throw new UserError(`Discount on ${item.name} is more than its amount.`);
         const net = g - p.disc;
         const bp = item.tax_class === 'taxable' ? rateBp(item.gst_rate) : 0;
-        calc.push({ item, p, list: p.delivery ? rate : list ?? rate, rate, gross: g, net, bp, tax: splitTax(net, bp) });
+        calc.push({ item, p, list: p.delivery ? rate : list ?? rate, rate, mrp, gross: g, net, bp, tax: splitTax(net, bp) });
         gross += g;
         discount += p.disc;
       }
@@ -289,7 +302,7 @@ async function checkout(user, body) {
         const cost = taken.reduce((s, t) => s + Math.round(Number(t.unit_cost) * t.qty / 10), 0);   // paise
         const line = await q(`INSERT INTO sale_lines (sale_id, item_id, sku, name, name_ta, unit, qty, list_price, rate, mrp, gross, discount,
           discount_note, net, gst_rate, taxable, cgst, sgst, cost, approved_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [id, c.item.id, c.item.sku, c.item.name, c.item.name_ta, c.item.unit, qtyDb(c.p.qty), rs(c.list), rs(c.rate), c.item.mrp,
+        [id, c.item.id, c.item.sku, c.item.name, c.item.name_ta, c.item.unit, qtyDb(c.p.qty), rs(c.list), rs(c.rate), c.mrp,
           rs(c.gross), rs(c.p.disc), c.p.note, rs(c.net), rs(c.bp), rs(c.tax.taxable), rs(c.tax.cgst), rs(c.tax.sgst), rs(cost),
           c.p.approver]);
         for (const t of taken) {

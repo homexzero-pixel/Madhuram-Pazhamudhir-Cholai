@@ -27,6 +27,10 @@ async function loadCatalogue(force = false) {
     if (it.cat) count.set(it.cat, (count.get(it.cat) || 0) + 1 + it.sold * 5);
   }
   for (const [code, id, per] of data.barcodes) POS.byCode.set(code, { id, per: Money.milli(per) || 1000 });
+  for (const [itemId, pid, price, mrp, label] of data.prices || []) {      // Products → Add another selling price
+    const it = POS.byId.get(itemId);
+    if (it) (it.prices = it.prices || []).push({ id: pid, price: Money.paise(price), mrp: mrp === null ? null : Money.paise(mrp), label: label || '' });
+  }
   POS.cats = [...count.entries()].sort((a, b) => b[1] - a[1]).map((x) => x[0]);
 }
 // Stock shown on the tiles is refreshed every minute (billing is never stopped by stock).
@@ -46,42 +50,109 @@ function loadBill() {
 }
 function saveBill() { localStorage.setItem(billKey(), JSON.stringify(POS.bill)); }
 
+const linePick = (l, it) => (l.pick && it && it.prices ? it.prices.find((x) => x.id === l.pick) || null : null);
 function lineCalc(l) {
   const it = POS.byId.get(l.id);
-  const rate = l.rate ?? (it ? it.price : 0);
+  const pk = linePick(l, it);
+  const base = pk ? pk.price : it ? it.price : 0;
+  const rate = l.rate ?? base;
   const gross = Money.line(rate, l.qty);
-  return { it, rate, gross, net: gross - (l.disc || 0) };
+  return { it, pk, base, mrp: pk && pk.mrp !== null ? pk.mrp : it ? it.mrp : null, rate, gross, net: gross - (l.disc || 0) };
 }
 function totals() {
   let total = 0; let items = 0; let saved = 0;
   for (const l of POS.bill.lines) {
     const c = lineCalc(l);
     total += c.net; items += 1;
-    if (c.it && c.it.mrp) saved += Math.max(0, Money.line(c.it.mrp, l.qty) - c.net);
+    if (c.mrp) saved += Math.max(0, Money.line(c.mrp, l.qty) - c.net);
   }
   return { total, items, saved };
 }
 
-function addItem(it, qty) {
+// pick: undefined = not chosen yet (a product with more selling prices asks first), null = its own price, or one of its other prices
+function addItem(it, qty, pick) {
   if (!it) return;
   if (it.price === null) { toast(`${it.name} has no price. Set it in Products.`, true); return; }
+  if (pick === undefined && it.prices && it.prices.length) { choosePrice(it, qty); return; }
   const weighed = it.unit === 'kg';
   if (!qty) {
-    if (weighed) { weightDialog(it); return; }
+    if (weighed) { weightDialog(it, null, pick || null); return; }
     qty = 1000;
   }
   if (!weighed && qty % 1000) { toast(`${it.name} is sold by the piece.`, true); return; }
-  const same = !weighed && POS.bill.lines.findIndex((l) => l.id === it.id && l.rate == null && !l.disc);
+  const pid = pick ? pick.id : null;
+  const same = !weighed && POS.bill.lines.findIndex((l) => l.id === it.id && l.rate == null && !l.disc && (l.pick || null) === pid);
   if (same !== false && same >= 0) {
     POS.bill.lines[same].qty += qty;
     POS.sel = same;
   } else {
-    POS.bill.lines.push({ id: it.id, qty, rate: null, disc: 0, note: '' });
+    POS.bill.lines.push({ id: it.id, qty, rate: null, disc: 0, note: '', ...(pid ? { pick: pid } : {}) });
     POS.sel = POS.bill.lines.length - 1;
   }
   saveBill();
   renderBill();
   beep();
+}
+
+// A product with more than one selling price (Products → Add another selling price): the cashier chooses the price.
+// Keys 1 to 9 or a tap; Enter takes the highlighted one (the first at the start). A barcode scanned while this is open
+// is kept and goes on the bill after the choice.
+function choosePrice(it, qty) {
+  const opts = [{ id: null, price: it.price, mrp: it.mrp, label: '' }, ...it.prices];
+  const d = modal(`<h3>${esc(it.name)}</h3><p class="muted" style="margin:-4px 0 10px">Choose the price${it.unit === 'kg' ? ' per kg' : ''}: press 1 to ${opts.length}, or tap.</p>
+    <div class="pp-list">${opts.map((o, n) => `<button type="button" class="pp" data-n="${n}"><span class="k">${n + 1}</span>
+      <span><span class="pv">${inr(o.price)}</span>${o.label ? `<span class="pl">${esc(o.label)}</span>` : ''}</span>
+      <span class="pm">${o.mrp ? `MRP ${inr(o.mrp)}` : ''}</span></button>`).join('')}</div>
+    <div class="actions"><button type="button" data-close>Cancel</button></div>`);
+  d.classList.add('pickprice');
+  const btns = $$('.pp', d);
+  let done = false; let buf = ''; let timer = null; let queued = '';
+  const choose = (n) => {
+    if (done) return;
+    if (!opts[n]) { toast(`Press 1 to ${opts.length}.`, true); return; }
+    done = true;
+    d.close('ok');
+    addItem(it, qty, opts[n].id ? opts[n] : null);
+  };
+  btns.forEach((b) => b.addEventListener('click', () => choose(Number(b.dataset.n))));
+  setTimeout(() => { if (btns[0]) btns[0].focus(); }, 30);
+  d.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault(); clearTimeout(timer);
+      const typed = buf; buf = '';
+      if (typed.length >= 6) { queued = typed; toast(`Choose the price of ${it.name} first. The item you scanned goes on the bill after it.`); return; }
+      if (/^[1-9]$/.test(typed)) { choose(Number(typed) - 1); return; }
+      if (typed) { toast(`Press 1 to ${opts.length} to choose the price.`, true); return; }
+      if (document.activeElement && document.activeElement.matches('[data-close]')) { d.close('cancel'); return; }
+      const i = btns.indexOf(document.activeElement);
+      choose(i >= 0 ? i : 0);
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const i = btns.indexOf(document.activeElement);
+      btns[(i + (e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length].focus();
+      return;
+    }
+    if (e.key.length !== 1 || e.key === ' ' || e.ctrlKey || e.altKey || e.metaKey) return;
+    e.preventDefault();
+    buf += e.key;
+    clearTimeout(timer);
+    // one key 1 to 9 is a choice; a barcode scanner types many keys quickly and ends with Enter
+    if (/^[1-9]$/.test(buf)) timer = setTimeout(() => { const n = Number(buf) - 1; buf = ''; choose(n); }, 150);
+    else timer = setTimeout(() => { buf = ''; }, 600);
+  });
+  d.addEventListener('close', () => {
+    clearTimeout(timer);
+    if (!queued) return;
+    const text = queued; queued = '';
+    setTimeout(() => afterDialogs(() => { const sc = $('#scan'); if (sc) { sc.value = text; onScan({ target: sc }); } }), 0);
+  });
+}
+// run fn once no window is open (e.g. after the weight window that follows the price choice)
+function afterDialogs(fn) {
+  const open = $('dialog[open]');
+  if (open) open.addEventListener('close', () => setTimeout(() => afterDialogs(fn), 0), { once: true }); else fn();
 }
 
 let audio;
@@ -207,16 +278,17 @@ function linkDialog(code, approval) {
   });
 }
 
-function weightDialog(it, lineIndex = null) {
+function weightDialog(it, lineIndex = null, pick = null) {
   const cur = lineIndex !== null ? POS.bill.lines[lineIndex].qty : null;
-  const d = modal(`<h3>${esc(it.name)}</h3><p class="muted">${inr(it.price)} per ${it.unit === 'kg' ? 'kg' : 'piece'}</p>
+  const price = lineIndex !== null ? lineCalc(POS.bill.lines[lineIndex]).rate : pick ? pick.price : it.price;
+  const d = modal(`<h3>${esc(it.name)}</h3><p class="muted">${inr(price)} per ${it.unit === 'kg' ? 'kg' : 'piece'}${pick && pick.label ? ` · ${esc(pick.label)}` : ''}</p>
     <form><label>${it.unit === 'kg' ? 'Weight in kg (0.5 = 500 g, 0.25 = 250 g)' : 'Quantity'}</label>
     <input name="q" inputmode="decimal" value="${cur ? Money.qty(cur) : ''}" autofocus required>
     <div class="row" style="margin-top:8px">${(it.unit === 'kg' ? ['0.25', '0.5', '1', '1.5', '2'] : ['1', '2', '3', '5', '10']).map((v) => `<button type="button" data-v="${v}">${v}</button>`).join('')}</div>
     <p id="amt" class="muted"></p>
     <div class="actions"><button type="button" data-close>Cancel</button><button class="primary">OK</button></div></form>`);
   const input = $('[name=q]', d);
-  const show = () => { const q = Money.milli(input.value); $('#amt', d).textContent = q ? `Amount: ${inr(Money.line(it.price, q))}` : ''; };
+  const show = () => { const q = Money.milli(input.value); $('#amt', d).textContent = q ? `Amount: ${inr(Money.line(price, q))}` : ''; };
   input.addEventListener('input', show); show();
   $$('[data-v]', d).forEach((b) => b.addEventListener('click', () => { input.value = b.dataset.v; show(); input.focus(); }));
   $('form', d).addEventListener('submit', (e) => {
@@ -225,7 +297,7 @@ function weightDialog(it, lineIndex = null) {
     if (!q || q <= 0) { toast('Enter the quantity.', true); return; }
     if (it.unit !== 'kg' && q % 1000) { toast('Use a whole number for this item.', true); return; }
     d.close('ok');
-    if (lineIndex !== null) { POS.bill.lines[lineIndex].qty = q; saveBill(); renderBill(); } else addItem(it, q);
+    if (lineIndex !== null) { POS.bill.lines[lineIndex].qty = q; saveBill(); renderBill(); } else addItem(it, q, pick || null);
   });
 }
 
@@ -265,7 +337,7 @@ function priceDialog() {
   if (!l) { toast('Select a line on the bill first.', true); return; }
   const c = lineCalc(l);
   const d = modal(`<h3>Price / discount: ${esc(c.it ? c.it.name : '')}</h3>
-    <form><div class="grid2"><div><label>Price ₹ (list ${inr(c.it ? c.it.price : 0)})</label><input name="rate" inputmode="decimal" value="${Money.rs(c.rate)}" autofocus></div>
+    <form><div class="grid2"><div><label>Price ₹ (list ${inr(c.base)})</label><input name="rate" inputmode="decimal" value="${Money.rs(c.rate)}" autofocus></div>
     <div><label>Discount on this line ₹</label><input name="disc" inputmode="decimal" value="${l.disc ? Money.rs(l.disc) : ''}"></div></div>
     <label>Reason</label><input name="note" value="${esc(l.note || '')}" placeholder="e.g. damaged pack, regular customer">
     <p class="small muted">${can('price_override') ? '' : 'A manager must approve with their PIN.'}</p>
@@ -276,7 +348,7 @@ function priceDialog() {
     const rate = Money.paise(f.rate);
     const disc = Money.paise(f.disc || '0') || 0;
     if (rate === null || rate < 0 || disc < 0) { toast('Check the amounts.', true); return; }
-    const listPrice = c.it ? c.it.price : rate;
+    const listPrice = c.it ? c.base : rate;
     if (disc > Money.line(rate, l.qty)) { toast('Discount is more than the line amount.', true); return; }
     if ((rate !== listPrice || disc) && f.note.trim().length < 3) { toast('Write the reason.', true); return; }
     d.close('ok');
@@ -564,7 +636,7 @@ async function complete(payments) {
   try {
     const body = {
       uuid: POS.bill.uuid, counter: myCounter(), customer: POS.bill.customer, order_id: POS.bill.order_id, approval_credit: POS.bill.approval_credit,
-      lines: POS.bill.lines.map((l) => ({ id: l.id, qty: Money.qty(l.qty), rate: l.rate == null ? undefined : Money.rs(l.rate), delivery: l.delivery || undefined,
+      lines: POS.bill.lines.map((l) => ({ id: l.id, qty: Money.qty(l.qty), rate: l.rate == null ? undefined : Money.rs(l.rate), delivery: l.delivery || undefined, pick: l.pick || undefined,
         disc: l.disc ? Money.rs(l.disc) : undefined, note: l.note, approval_price: l.approval_price, approval_disc: l.approval_disc })),
       payments,
     };
@@ -650,7 +722,7 @@ function renderBill() {
     const kg = !!(c.it && c.it.unit === 'kg');
     const last = l.qty - (kg ? 250 : 1000) <= 0;
     return `<tr data-i="${i}" class="click ${i === POS.sel ? 'sel' : ''}"><td><div class="nm">${esc(name)}</div>
-      <div class="sub">${inr(c.rate)}${kg ? ' per kg' : ' each'}${l.rate != null ? ' (price changed)' : ''}${l.disc ? ` · discount ${inr(l.disc)}` : ''}</div></td>
+      <div class="sub">${inr(c.rate)}${kg ? ' per kg' : ' each'}${c.pk ? `<span class="tag">${esc(c.pk.label || `price ${(c.it.prices.indexOf(c.pk) + 2)}`)}</span>` : ''}${l.pick && !c.pk ? ' <span class="bad">price removed: delete this line and scan again</span>' : ''}${l.rate != null ? ' (price changed)' : ''}${l.disc ? ` · discount ${inr(l.disc)}` : ''}</div></td>
       <td class="qc">${l.delivery ? `<span class="muted small">${Money.qty(l.qty)}</span>` : `<div class="stp">
         <button type="button" class="dn${last ? ' rm' : ''}" data-dn="${i}" aria-label="${last ? 'Remove' : 'One less'}" title="${last ? 'Remove from the bill' : 'One less (minus key)'}">${last ? ico('trash') : ico('minus')}</button>
         <button type="button" class="q" data-q="${i}" title="Tap to type the quantity (F4)">${Money.qty(l.qty)}${kg ? '<small>kg</small>' : ''}</button>

@@ -640,7 +640,7 @@ App.views.owner = async (main) => {
     const picked = new Set(JSON.parse(sessionStorage.getItem('mpc_board') || '[]'));
     body.innerHTML = `<div class="row" style="margin-bottom:10px">
       <input id="bfind" placeholder="Scan barcode or type a name, Enter" value="${esc(q)}" style="max-width:260px">
-      <select id="bcat" style="max-width:220px"><option value="">Loose items (sold by kg)</option>${cats.map((c) => `<option ${c === cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+      <select id="bcat" style="max-width:220px"><option value="">Fruit & vegetables</option>${cats.map((c) => `<option ${c === cat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
       <button id="ball">Select all shown</button><button id="bnone">Clear</button>
       <button class="primary big" id="bprint">${ico('printer')} Print selected (<span id="bn">0</span>)</button></div>
       <div class="boards">${items.filter((i) => i.price).map((i) => `<button class="board ${picked.has(i.id) ? 'on' : ''}" data-id="${i.id}">
@@ -679,41 +679,50 @@ App.views.owner = async (main) => {
 
 // ================================================================== Today's prices: the price, today's offer and the stock on the shelf
 // The list loads once per category and switches in place (no page reload). What is typed is kept until Save, even when the
-// category is changed. Fruit and vegetables with a price and stock show in the online shop at once.
-const PER = { kg: [[1000, 'per kg'], [500, 'per 500 g'], [250, 'per 250 g'], [100, 'per 100 g']], pcs: [[1, 'per piece']] };
+// category is changed. Each product is sold by weight (price per kg, 500 g, 250 g or 100 g) or by the piece (1, 2, 3 …):
+// choosing "per piece" (or "pcs" for the stock) changes how it is sold, at the counters and online, after Save.
+const PER = [[1000, 'per kg'], [500, 'per 500 g'], [250, 'per 250 g'], [100, 'per 100 g'], [1, 'per piece']];
 async function todaysPrices(body) {
   const cache = new Map();
-  const pending = new Map();                     // id → { unit, name, per, price, offer, stock, su }
+  const pending = new Map();                     // id → { unit (now), name, mode (kg / pcs after Save), per, price, offer, stock, su }
   const saved = new Set();
   const state = { cat: '', q: '' };
   let catsShown = false;
   body.innerHTML = `<div class="row tp-bar">
       <input id="pfind" placeholder="Scan barcode or type a name, Enter" style="max-width:260px">
-      <select id="pcat" style="max-width:250px"><option value="">Fruit & vegetables (sold by kg)</option></select>
+      <select id="pcat" style="max-width:250px"><option value="">Fruit & vegetables</option></select>
       ${can('products') ? '<button id="padd2">+ Add product</button>' : ''}
       <button class="primary" id="psave">Save changes <span id="pn"></span></button><span id="pmsg" class="small muted"></span></div>
-    <p class="small muted">Type the price (choose per kg or per 250 g), today's offer if any, and the stock on the shelf (kg or g). Enter goes to the next box.
+    <p class="small muted">Type the price (per kg, per 250 g … or <b>per piece</b>), today's offer if any, and the stock on the shelf (kg, g or pieces: 1, 2, 3).
+      Choosing per piece sells the product by the piece at the counters and online. Enter goes to the next box.
       Changed boxes turn <b class="bad">red</b>; after Save they turn <b class="ok">green</b>.</p>
     <div id="ptable" class="tablewrap"></div>`;
-  const perKg = (v, g, unit) => { const x = Money.paise(v); return x === null ? null : unit === 'kg' ? Math.round((x * 1000) / g) : x; };
-  const show = (paiseKg, g, unit) => (paiseKg === null || paiseKg === undefined ? '' : Money.rs(unit === 'kg' ? Math.round((paiseKg * g) / 1000) : paiseKg));
+  // money typed for `g` grams (kg mode) or for one piece, to paise per kg / per piece, and back
+  const perKg = (v, g, mode) => { const x = Money.paise(v); return x === null ? null : mode === 'kg' ? Math.round((x * 1000) / g) : x; };
+  const show = (paiseKg, g, mode) => (paiseKg === null || paiseKg === undefined ? '' : Money.rs(mode === 'kg' ? Math.round((paiseKg * g) / 1000) : paiseKg));
+  const modeOf = (p, i) => p.mode || (i.unit === 'kg' ? 'kg' : 'pcs');
+  const perOf = (p, mode) => Number(p.per !== undefined ? p.per : mode === 'kg' ? 1000 : 1);
   const count = () => { $('#pn').textContent = pending.size ? `(${pending.size})` : ''; };
+  const modeNote = (i, mode) => (mode !== (i.unit === 'kg' ? 'kg' : 'pcs')
+    ? `<span class="bad">After Save: sold ${mode === 'pcs' ? 'by the piece' : 'by kg'}. Check the price and the stock.</span>` : '');
   const draw = (items) => {
     if (!$('#ptable')) return;
     $('#ptable').innerHTML = `<table class="tp"><tr><th>Product</th><th>Price ₹</th><th>Today's offer ₹</th><th>Stock on the shelf</th></tr>
       ${items.map((i) => {
     const p = pending.get(i.id) || {};
-    const per = Number(p.per || (i.unit === 'kg' ? 1000 : 1));
-    const opts = PER[i.unit === 'kg' ? 'kg' : 'pcs'];
-    const price = p.price !== undefined ? p.price : show(Money.paise(i.price), per, i.unit);
-    const offer = p.offer !== undefined ? p.offer : show(i.offer === null ? null : Money.paise(i.offer), per, i.unit);
+    const mode = modeOf(p, i);
+    const per = perOf(p, mode);
+    const price = p.price !== undefined ? p.price : show(Money.paise(i.price), per, mode);
+    const offer = p.offer !== undefined ? p.offer : show(i.offer === null ? null : Money.paise(i.offer), per, mode);
+    const su = mode === 'pcs' ? 'pcs' : p.su === 'g' ? 'g' : 'kg';
     return `<tr data-id="${i.id}" class="${saved.has(i.id) ? 'saved' : ''}"><td><b>${esc(i.name)}</b><div class="small ta muted">${esc(i.name_ta)}</div>
-        <div class="small">${i.online ? '<span class="ok">In the online shop</span>' : '<span class="muted">Not online yet (needs price and stock)</span>'}</div></td>
+        <div class="small">${i.online ? '<span class="ok">In the online shop</span>' : `<span class="muted">Not online yet (needs ${i.always ? 'a price' : 'price and stock'})</span>`}</div>
+        <div class="small tp-mode">${modeNote(i, mode)}</div></td>
       <td><div class="tp-in"><input class="tpi ${p.price !== undefined ? 'changed' : ''}" data-k="price" inputmode="decimal" value="${esc(price)}">
-        <select data-k="per" ${opts.length < 2 ? 'disabled' : ''}>${opts.map(([g, l]) => `<option value="${g}" ${g === per ? 'selected' : ''}>${l}</option>`).join('')}</select></div></td>
+        <select data-k="per" aria-label="Price for">${PER.map(([g, l]) => `<option value="${g}" ${g === per ? 'selected' : ''}>${l}</option>`).join('')}</select></div></td>
       <td><input class="tpi ${p.offer !== undefined ? 'changed' : ''}" data-k="offer" inputmode="decimal" value="${esc(offer)}" placeholder="none"></td>
       <td><div class="tp-in"><input class="tpi ${p.stock !== undefined ? 'changed' : ''}" data-k="stock" inputmode="decimal" value="${esc(p.stock ?? '')}" placeholder="${esc(i.on_hand)}">
-        ${i.unit === 'kg' ? `<select data-k="su"><option value="kg">kg</option><option value="g" ${p.su === 'g' ? 'selected' : ''}>g</option></select>` : '<span class="small">pcs</span>'}</div>
+        <select data-k="su" aria-label="Stock in">${[['kg', 'kg'], ['g', 'g'], ['pcs', 'pcs']].map(([v, l]) => `<option value="${v}" ${v === su ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="small muted">now ${esc(i.on_hand)} ${i.unit === 'kg' ? 'kg' : 'pcs'}</div></td></tr>`;
   }).join('') || '<tr><td colspan="4" class="muted">Nothing found.</td></tr>'}</table>`;
     const inputs = $$('.tpi', body);
@@ -721,22 +730,45 @@ async function todaysPrices(body) {
     $$('tr[data-id]', body).forEach((tr) => {
       const id = Number(tr.dataset.id);
       const it = items.find((x) => x.id === id);
-      const entry = () => { if (!pending.has(id)) pending.set(id, { unit: it.unit, name: it.name }); saved.delete(id); tr.classList.remove('saved'); return pending.get(id); };
+      const entry = () => { if (!pending.has(id)) pending.set(id, { unit: it.unit === 'kg' ? 'kg' : 'pcs', name: it.name }); saved.delete(id); tr.classList.remove('saved'); return pending.get(id); };
       $$('.tpi', tr).forEach((inp) => inp.addEventListener('input', () => { entry()[inp.dataset.k] = inp.value; inp.classList.add('changed'); count(); }));
       const per = $('[data-k=per]', tr);
-      if (per) per.addEventListener('change', () => {        // the same price shown for the new weight (₹80 per kg = ₹20 per 250 g)
-        const e = entry();
-        const old = Number(e.per || 1000);
-        const g = Number(per.value);
+      const su = $('[data-k=su]', tr);
+      // kg ↔ piece: the typed numbers stay as they are (red, to be checked); the other box follows
+      const setMode = (e, mode) => {
+        e.mode = mode;
         for (const k of ['price', 'offer']) {
           const inp = $(`[data-k=${k}]`, tr);
-          const v = perKg(inp.value, old, it.unit);
-          if (v !== null) { inp.value = show(v, g, it.unit); e[k] = inp.value; inp.classList.add('changed'); }
+          if (inp.value.trim() !== '') { e[k] = inp.value; inp.classList.add('changed'); }
+        }
+        if (mode === 'pcs') { per.value = '1'; su.value = 'pcs'; e.per = 1; } else {
+          if (per.value === '1') { per.value = '1000'; e.per = 1000; }
+          if (su.value === 'pcs') { su.value = e.su === 'g' ? 'g' : 'kg'; }
+        }
+        $('.tp-mode', tr).innerHTML = modeNote(it, mode);
+        $('[data-k=stock]', tr).placeholder = mode === (it.unit === 'kg' ? 'kg' : 'pcs') ? it.on_hand : 'count';
+      };
+      per.addEventListener('change', () => {
+        const e = entry();
+        const was = modeOf(e, it);
+        const old = perOf(e, was);
+        const g = Number(per.value);
+        const mode = g === 1 ? 'pcs' : 'kg';
+        if (mode !== was) { e.per = g; setMode(e, mode); count(); return; }
+        for (const k of ['price', 'offer']) {     // another weight: the same price shown for it (₹80 per kg = ₹20 per 250 g)
+          const inp = $(`[data-k=${k}]`, tr);
+          const v = perKg(inp.value, old, mode);
+          if (v !== null) { inp.value = show(v, g, mode); e[k] = inp.value; inp.classList.add('changed'); }
         }
         e.per = g; count();
       });
-      const su = $('[data-k=su]', tr);
-      if (su) su.addEventListener('change', () => { entry().su = su.value; count(); });
+      su.addEventListener('change', () => {
+        const e = entry();
+        const mode = su.value === 'pcs' ? 'pcs' : 'kg';
+        if (mode === 'kg') e.su = su.value;
+        if (mode !== modeOf(e, it)) setMode(e, mode);
+        count();
+      });
     });
   };
   const load = async () => {
@@ -759,19 +791,22 @@ async function todaysPrices(body) {
     if (!pending.size) throw new Error('Nothing was changed.');
     const changes = [];
     for (const [id, p] of pending) {
-      const g = Number(p.per || (p.unit === 'kg' ? 1000 : 1));
+      const mode = p.mode || p.unit;
+      const g = perOf(p, mode);
       const ch = { id };
+      if (mode !== p.unit) ch.unit = mode;
       for (const k of ['price', 'offer']) {
         if (p[k] === undefined) continue;
         if (String(p[k]).trim() === '') { if (k === 'offer') ch.offer = ''; continue; }
-        const v = perKg(p[k], g, p.unit);
+        const v = perKg(p[k], g, mode);
         if (v === null) throw new Error(`Check the ${k === 'price' ? 'price' : 'offer'} of ${p.name}.`);
         ch[k] = Money.rs(v);
       }
       if (p.stock !== undefined && String(p.stock).trim() !== '') {
         const q = Money.milli(p.stock);
         if (q === null) throw new Error(`Check the stock of ${p.name}.`);
-        ch.stock = Money.qty(p.unit === 'kg' && p.su === 'g' ? Math.round(q / 1000) : q);
+        if (mode === 'pcs' && q % 1000) throw new Error(`${p.name} is sold by the piece: type the stock as a whole number (1, 2, 3).`);
+        ch.stock = Money.qty(mode === 'kg' && p.su === 'g' ? Math.round(q / 1000) : q);
       }
       changes.push(ch);
     }
