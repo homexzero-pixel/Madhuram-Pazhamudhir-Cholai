@@ -1545,6 +1545,44 @@ function welcomeView() {
   });
 }
 
+// ------------------------------------------------------------------ updates: the installed app and open pages load a new version
+// by themselves. They ask the server which version it has (every 5 minutes and when the customer comes back to the app). The new
+// version loads while the customer is away from the app, when they come back, or when they move to another page; never in the
+// middle of the basket, signing in, an address or an open sheet. The basket is kept on the phone, so nothing is lost.
+const SHOP_V = (document.currentScript && new URL(document.currentScript.src, location.href).searchParams.get('v')) || '';
+const UPD = { ready: '' };
+function updQuiet() {
+  const a = document.activeElement;
+  return !['cart', 'auth', 'welcome', 'addresses', 'account'].includes(S.page) && !(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))
+    && !(document.getElementById('sheet') && !document.getElementById('sheet').hidden);
+}
+async function shopUpdateNow() {
+  sessionStorage.setItem('mpc_updated_to', UPD.ready);           // once per version: never a reload loop on a slow line
+  try { await fetch('/', { cache: 'no-store' }); } catch (_) { /* load it anyway */ }
+  location.reload();
+}
+async function shopCheckUpdate() {
+  if (!SHOP_V || UPD.ready) return;
+  try {
+    const r = await fetch('/api/shop/version', { cache: 'no-store' });
+    if (!r.ok) return;
+    const { v } = await r.json();
+    if (!v || v === SHOP_V) return;
+    UPD.ready = v;
+    if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then((g) => g && g.update()).catch(() => {});
+  } catch (_) { /* no internet: try again later */ }
+}
+function shopMaybeUpdate() {
+  if (UPD.ready && sessionStorage.getItem('mpc_updated_to') !== UPD.ready && updQuiet()) shopUpdateNow();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') shopMaybeUpdate();
+  else shopCheckUpdate().then(shopMaybeUpdate);
+});
+window.addEventListener('hashchange', shopMaybeUpdate);
+setTimeout(shopCheckUpdate, 10000);
+setInterval(() => { if (document.visibilityState === 'visible') shopCheckUpdate(); }, 300000);
+
 // ------------------------------------------------------------------ the shop as an app on the phone or PC ("Get the app")
 const INST = { ev: null };
 const standalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;

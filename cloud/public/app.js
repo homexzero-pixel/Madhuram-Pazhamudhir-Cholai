@@ -303,6 +303,47 @@ async function installApp() {
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
+// ------------------------------------------------------------------ updates: open screens and the installed app load a new version
+// by themselves. They ask the server which version it has (every 2 minutes and when the window comes back to the front). The new
+// version loads at a quiet moment: no window open, nothing being typed, no bill being saved, and nobody using the PC for 90 seconds
+// (or the window coming back to the front). "Update now" loads it at once. The open bill is kept on the PC, so nothing is lost.
+const APP_V = (document.currentScript && new URL(document.currentScript.src, location.href).searchParams.get('v')) || '';
+const Updates = { ready: '', used: Date.now() };
+['keydown', 'pointerdown', 'wheel'].forEach((ev) => document.addEventListener(ev, () => { Updates.used = Date.now(); }, { capture: true, passive: true }));
+function updateSafe() {
+  const a = document.activeElement;
+  const typing = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.value && a.id !== 'scan';
+  return !document.querySelector('dialog[open]') && !typing && !(typeof POS !== 'undefined' && POS.busy);
+}
+async function updateNow() {
+  sessionStorage.setItem('mpc_updated_to', Updates.ready);        // once per version: never a reload loop on a slow line
+  try { await fetch('/', { cache: 'no-store' }); } catch (_) { /* load it anyway */ }
+  location.reload();
+}
+async function checkUpdate() {
+  if (!APP_V || Updates.ready) return;
+  try {
+    const r = await fetch('/api/version', { cache: 'no-store' });
+    if (!r.ok) return;
+    const { v } = await r.json();
+    if (!v || v === APP_V) return;
+    Updates.ready = v;
+    if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then((g) => g && g.update()).catch(() => {});
+    const bar = document.createElement('div');
+    bar.id = 'updbar';
+    bar.innerHTML = '<span>A new version of the software is ready.</span><button type="button" class="primary">Update now</button>';
+    document.body.appendChild(bar);
+    bar.querySelector('button').addEventListener('click', updateNow);
+  } catch (_) { /* no internet: try again later */ }
+}
+function maybeUpdate(front) {
+  if (!Updates.ready || sessionStorage.getItem('mpc_updated_to') === Updates.ready || !updateSafe()) return;
+  if (front || Date.now() - Updates.used > 90000) updateNow();
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate().then(() => maybeUpdate(true)); });
+setTimeout(checkUpdate, 15000);
+setInterval(() => { if (document.visibilityState === 'visible') checkUpdate().then(() => maybeUpdate(false)); }, 120000);
+
 // ------------------------------------------------------------------ this PC's counter
 function counterFromUrl() {
   const m = location.search.match(/[?&]counter=(\d{1,2})/);

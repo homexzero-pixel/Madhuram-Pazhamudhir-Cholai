@@ -29,6 +29,9 @@ r.use(wrap(async (req, res, next) => {
 }));
 
 // ------------------------------------------------------------------ start, setup, login
+// the billing page's version: open screens and installed apps load a new one by themselves (app.js)
+r.get('/version', (req, res) => { res.setHeader('Cache-Control', 'no-store'); ok(res, { v: require('../pages').bill }); });
+
 r.get('/status', wrap(async (req, res) => {
   const s = await settings.load();
   ok(res, { setup_needed: await admin.needsSetup(), name: s.name, name_ta: s.name_ta, version: pkg.version, logged_in: !!req.user });

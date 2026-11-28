@@ -245,8 +245,20 @@ restart is quick. The explanation page appears only when the database really can
 
 ## Updates
 
-Push to GitHub (or upload a new ZIP) and press **Redeploy** in hPanel. Database tables are updated automatically at start. The PCs
-pick up the new version by themselves.
+Push to GitHub (or upload a new ZIP) and press **Redeploy** in hPanel. Database tables are updated automatically at start.
+
+**Open screens and installed apps update themselves** (from 28 Nov 2026). Each page asks the server which version it has
+(`/api/version` for billing, `/api/shop/version` for the customers' site; the `?v=` on the program files in `index.html` and
+`shop.html`), when it comes back to the front and every few minutes:
+- **Billing PCs:** a bar says *A new version of the software is ready* with **Update now**. Without a press, the new version loads
+  by itself when nobody has used the PC for 90 seconds, or when the window comes back to the front; never while a window (payment,
+  product, price) is open or something is being typed. The open bill stays on the PC.
+- **Customers' app and site:** the new version loads while the customer is away from the app, when they come back, or when they
+  move to another page; never in the basket, while signing in, editing an address or with a sheet open. The basket stays.
+- Each new version is loaded once per tab, so a slow line never causes a reload loop.
+- An app installed before 28 Nov 2026 has to be closed fully and opened again once (or F5 on a PC) to get this.
+- **The app icon** of an installed app changes later: Android and PCs (Chrome / Edge) update it within about a day after the app is
+  opened, sometimes asking "Update app icon?"; on an iPhone, remove the app from the Home Screen and add it again.
 
 ## For developers
 

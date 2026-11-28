@@ -160,6 +160,8 @@ const PHOTOS = (() => {
   const read = (d) => { try { return fs.readdirSync(require('path').join(dir, d)).filter((f) => f.endsWith('.webp')).map((f) => f.slice(0, -5)); } catch (_) { return []; } };
   return { b: read('b'), s: read('s'), p: read('p') };
 })();
+// the customers' page version: the installed app and open pages load a new one by themselves (shop.js)
+r.get('/shop/version', (req, res) => { res.setHeader('Cache-Control', 'no-store'); ok(res, { v: require('../pages').shop }); });
 r.get('/shop/info', wrap(async (req, res) => {
   const cfg = await settings.load();
   const secs = await require('../sections').list();

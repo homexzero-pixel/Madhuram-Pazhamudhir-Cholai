@@ -575,3 +575,24 @@ test("the customers' site has a picture for every section, the shop's 4 home sli
     delete process.env.SITE_ROLE;
   }
 });
+
+test('open screens and installed apps see an update: each site tells the version of its own page', async () => {
+  const fs = require('fs');
+  const pub = require('path').join(__dirname, '..', 'public');
+  const billV = fs.readFileSync(`${pub}/index.html`, 'utf8').match(/\/app\.js\?v=([\w.-]+)/)[1];
+  const shopV = fs.readFileSync(`${pub}/shop.html`, 'utf8').match(/\/shop\.js\?v=([\w.-]+)/)[1];
+  const b = await new Client().get('/api/version');
+  assert.equal(b.status, 200);
+  assert.equal(b.data.v, billV);
+  assert.match(b.headers['cache-control'], /no-store/);
+  process.env.SITE_ROLE = 'shop';
+  try {
+    const c = new Client();
+    const s = await c.get('/api/shop/version');
+    assert.equal(s.data.v, shopV);
+    assert.match(s.headers['cache-control'], /no-store/);
+    assert.equal((await c.get('/api/version')).status, 404);            // the billing page's version is not on the customers' site
+  } finally {
+    delete process.env.SITE_ROLE;
+  }
+});
