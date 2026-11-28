@@ -32,13 +32,15 @@ const CAT_KEYS = ['q', 'cat', 'code', 'ids', 'sort', 'limit', 'exclude', 'only',
 async function catalogue(params = {}) {
   const p = {};
   for (const k of CAT_KEYS) if (params[k] !== undefined && params[k] !== '') p[k] = String(params[k]).slice(0, 400);
-  return (await cache.cached(`cat:${JSON.stringify(p)}`, () => loadCatalogue(p))).slice();   // a copy: callers may sort it
+  const ak = (await sections.alwaysKeys()).join(',');
+  return (await cache.cached(`cat:${JSON.stringify(p)}:${ak}`, () => loadCatalogue(p))).slice();   // a copy: callers may sort it
 }
 async function loadCatalogue({ q = '', cat = '', code = '', ids = '', sort = '', limit = 150, exclude = '', only = '', offset = 0,
   sec = '', max_price: maxPrice = '', min_price: minPrice = '', fresh = '' }) {
   const P = PRICE_NOW(nowIST().slice(0, 10));
-  const where = ['i.active=1', 'i.price IS NOT NULL', 'i.price > 0', `i.sku <> '${DELIVERY_SKU}'`, `${AVAILABLE} > 0`];
-  const args = [];
+  const always = await sections.alwaysIds();                 // vegetables, fruits, dairy…: shown without a stock count
+  const where = ['i.active=1', 'i.price IS NOT NULL', 'i.price > 0', `i.sku <> '${DELIVERY_SKU}'`, `(${AVAILABLE} > 0 OR i.id IN (?))`];
+  const args = [sections.inList(always)];
   if (sec) {                                   // a shop section (vegetables, munchies…)
     const list = await sections.idsOf(String(sec));
     if (!list.length) return [];
@@ -81,7 +83,7 @@ async function loadCatalogue({ q = '', cat = '', code = '', ids = '', sort = '',
     FROM items i LEFT JOIN categories c ON c.id=i.category_id LEFT JOIN item_stats s ON s.item_id=i.id WHERE ${where.join(' AND ')}
     ORDER BY ${order} LIMIT ?, ?`, [...args, Math.min(Math.max(Math.trunc(Number(offset)) || 0, 0), 100000), Math.min(Math.max(Number(limit) || 150, 1), 150)]);
   return rows.map((r) => {
-    const avail = Math.max(0, milli(r.avail));
+    const avail = always.has(r.id) ? Math.max(999000, milli(r.avail)) : Math.max(0, milli(r.avail));
     const onOffer = Number(r.price) < Number(r.regular);
     return { id: r.id, name: r.name, name_ta: r.name_ta, unit: r.unit, price: r.price, mrp: r.mrp, cat: r.cat || '', cat_id: r.category_id,
       regular: onOffer ? r.regular : null, offer_to: onOffer ? r.offer_to : null,
@@ -122,18 +124,20 @@ async function buyAgain(customerId) {
 
 // Categories that have something available: the ones bought most in the last 30 days first.
 async function categories() {
-  return cache.cached('cats', () => db.query(`SELECT c.id, c.name, COUNT(*) items, COUNT(*) in_stock, COALESCE(SUM(s.sold_30d), 0) sold
+  const always = await sections.alwaysIds();
+  return cache.cached(`cats:${(await sections.alwaysKeys()).join(',')}`, () => db.query(`SELECT c.id, c.name, COUNT(*) items, COUNT(*) in_stock, COALESCE(SUM(s.sold_30d), 0) sold
     FROM categories c JOIN items i ON i.category_id=c.id LEFT JOIN item_stats s ON s.item_id=i.id
-    WHERE i.active=1 AND i.price IS NOT NULL AND i.price > 0 AND i.sku <> '${DELIVERY_SKU}' AND ${AVAILABLE} > 0
-    GROUP BY c.id, c.name ORDER BY sold DESC, items DESC, c.name`));
+    WHERE i.active=1 AND i.price IS NOT NULL AND i.price > 0 AND i.sku <> '${DELIVERY_SKU}' AND (${AVAILABLE} > 0 OR i.id IN (?))
+    GROUP BY c.id, c.name ORDER BY sold DESC, items DESC, c.name`, [sections.inList(always)]));
 }
 
 // Offers running today on available products, for the shop's banner: how many, the biggest saving and the last day.
 async function offerSummary() {
-  return cache.cached('offers', async () => {
+  const always = await sections.alwaysIds();
+  return cache.cached(`offers:${(await sections.alwaysKeys()).join(',')}`, async () => {
     const P = PRICE_NOW(nowIST().slice(0, 10));
     const r = await db.one(`SELECT COUNT(*) n, MAX(ROUND((1 - ${P} / i.price) * 100)) pct, MAX(i.offer_to) till, SUM(i.offer_to IS NULL) open_ended
-      FROM items i WHERE i.active=1 AND i.price > 0 AND ${P} < i.price AND ${AVAILABLE} > 0`);
+      FROM items i WHERE i.active=1 AND i.price > 0 AND ${P} < i.price AND (${AVAILABLE} > 0 OR i.id IN (?))`, [sections.inList(always)]);
     return { count: Number(r.n), pct: Number(r.pct || 0), till: Number(r.open_ended) ? null : r.till };
   });
 }
@@ -202,6 +206,7 @@ async function placeOrder(data, ip, customer) {
   if (!raw.length) throw new UserError('Your cart is empty.');
   if (raw.length > 60) throw new UserError('At most 60 different products in one order.');
 
+  const always = await sections.alwaysIds();                 // fresh produce and dairy: no stock count needed
   return db.tx(async (q) => {
     const hourAgo = nowIST(Date.now() - 3600000);
     if (ip && Number((await q.one('SELECT COUNT(*) n FROM online_orders WHERE ip=? AND created_at > ?', [ip, hourAgo])).n) >= 5) {
@@ -228,8 +233,10 @@ async function placeOrder(data, ip, customer) {
       if (!qty || qty <= 0 || qty > 1000000) throw new UserError(`Check the quantity of ${it.name}.`);
       if (it.unit === 'pcs' && qty % 1000) throw new UserError('Packed items are ordered in whole pieces.');
       const avail = milli(it.on_hand) - milli(it.reserved);
-      if (avail <= 0) throw new UserError(`${it.name} has just sold out. Please remove it from your basket.`, 409);
-      if (qty > avail) throw new UserError(`Only ${qtyStr(Math.max(0, avail))} ${it.unit} of ${it.name} available now. Please change the quantity.`, 409);
+      if (!always.has(it.id)) {
+        if (avail <= 0) throw new UserError(`${it.name} has just sold out. Please remove it from your basket.`, 409);
+        if (qty > avail) throw new UserError(`Only ${qtyStr(Math.max(0, avail))} ${it.unit} of ${it.name} available now. Please change the quantity.`, 409);
+      }
       lines.push([it, qty]);
       total += lineAmount(paise(it.price), qty);
     }

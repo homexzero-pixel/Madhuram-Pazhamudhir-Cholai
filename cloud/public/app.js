@@ -196,15 +196,24 @@ async function api(path, { method = 'GET', body, raw, type } = {}) {
   if (raw !== undefined) { opts.body = raw; opts.headers['Content-Type'] = type || 'application/octet-stream'; }
   else if (body !== undefined) { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json'; }
   let res;
-  try {
-    res = await fetch(`/api${path}`, opts);
-  } catch (_) {
-    const e = new Error('No internet connection to the store server. Check the internet and try again.');
-    e.offline = true;
-    throw e;
-  }
   let data = {};
-  try { data = await res.json(); } catch (_) { data = { ok: false, error: `Server answered ${res.status}. Try again.` }; }
+  for (let i = 0; ; i++) {
+    try {
+      res = await fetch(`/api${path}`, opts);
+    } catch (_) {
+      const e = new Error('No internet connection to the store server. Check the internet and try again.');
+      e.offline = true;
+      throw e;
+    }
+    try { data = await res.json(); } catch (_) { data = { ok: false, error: `Server answered ${res.status}. Try again.` }; }
+    // the server is starting (a few seconds after an update): nothing was done, so ask again behind the opening screen
+    if (res.status === 503 && data.starting && i < 45) {
+      if (window.Splash && Splash.keep) Splash.keep();
+      await new Promise((ok) => setTimeout(ok, i < 5 ? 1000 : 2000));
+      continue;
+    }
+    break;
+  }
   if (res.status === 401 && path !== '/login' && path !== '/approve') { App.me = null; showLogin(); }
   if (!res.ok || data.ok === false) {
     const e = new Error(data.error || 'Something went wrong.');
@@ -1171,7 +1180,8 @@ App.views.staff = async (main) => {
 
 // ================================================================== Settings & backup
 App.views.settings = async (main) => {
-  const { settings: s } = await api('/settings');
+  const [{ settings: s }, secs] = await Promise.all([api('/settings'), can('products') ? api('/shop-sections').then((r) => r.sections).catch(() => []) : []]);
+  const always = new Set(String(s.online_always ?? 'veg,fruits,dairy').split(',').filter(Boolean));
   const f = (k, label, attrs = '') => `<div><label>${label}</label><input name="${k}" value="${esc(s[k])}" ${attrs}></div>`;
   main.innerHTML = `<h1>Settings & backup</h1>
     <form id="sf" class="card"><h2 style="margin-top:0">Shop details (printed on the bill)</h2>
@@ -1218,6 +1228,10 @@ App.views.settings = async (main) => {
       <div class="grid3">${f('online_open', 'Orders from (time)', 'type="time"')}${f('online_close', 'Orders until (time)', 'type="time"')}${f('online_slot_minutes', 'Slot length (minutes)')}</div>
       <div class="grid3">${f('online_lead_minutes', 'First slot after (minutes)')}${f('online_days_ahead', 'Days ahead customers can choose')}${f('online_min_order', 'Minimum order for delivery ₹')}</div>
       <div class="grid3">${f('online_delivery_charge', 'Delivery charge ₹')}${f('online_free_delivery_above', 'Free delivery above ₹ (0 = never)')}<div></div></div>
+      ${secs.length ? `<h3 style="margin:18px 0 4px">Always in stock online (no stock count needed)</h3>
+      <p class="small muted" style="margin:0 0 8px">Products in these sections always show on the customers' site and can be ordered, even when no stock is entered
+        (the shop has them every day). Products in other sections show only while they have stock.</p>
+      <div class="pick-sec">${secs.map((x) => `<label class="${always.has(x.key) ? 'on' : ''}"><input type="checkbox" data-always value="${esc(x.key)}" ${always.has(x.key) ? 'checked' : ''}>${esc(x.name)}</label>`).join('')}</div>` : ''}
       <h3 style="margin:18px 0 4px">Banner photos at the top of the online shop</h3>
       <p class="small muted" style="margin:0 0 8px">Optional. Take a wide photo of your fresh stock or a festival offer; it shows first, with your words on the left.
         Without photos the shop shows its own banners for offers, fresh produce, delivery and loyalty points.</p>
@@ -1340,7 +1354,8 @@ App.views.settings = async (main) => {
   photoSetting('#festFile', '#festDel', '#festPrev', '#festName', 1400, 'No festival photo');
   $('#sf').addEventListener('submit', (e) => { e.preventDefault(); submitting($('button.primary', e.target), async () => {
     const v = formData(e.target);
-    for (const el of e.target.elements) if (el.type === 'checkbox') v[el.name] = el.checked ? '1' : '0';
+    for (const el of e.target.elements) if (el.type === 'checkbox' && el.name) v[el.name] = el.checked ? '1' : '0';
+    if ($('[data-always]')) v.online_always = $$('[data-always]').filter((x) => x.checked).map((x) => x.value).join(',');
     const r = await api('/settings', { method: 'POST', body: v });
     App.settings = r.settings;
     await loadMe();

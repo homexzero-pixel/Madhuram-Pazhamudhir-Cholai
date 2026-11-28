@@ -357,7 +357,7 @@ async function namesInUse() {
   return names;
 }
 const SKIP_DIRS = new Set(['node_modules', 'proc', 'sys', 'dev', 'tmp', 'cache', 'logs', 'mail', 'wp-admin', 'wp-includes', 'wp-content']);
-function photoFolders(where) {
+async function photoFolders(where) {
   const own = path.resolve(DIR);
   const base = path.basename(own);
   const roots = new Set((where || [path.resolve(DIR, '..', '..'), require('os').homedir()]).filter((r) => r && r !== path.parse(r).root));
@@ -369,7 +369,7 @@ function photoFolders(where) {
       const [d, depth] = queue.shift();
       seen += 1;
       let ents = [];
-      try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch (_) { continue; }
+      try { ents = await fs.promises.readdir(d, { withFileTypes: true }); } catch (_) { continue; }     // never holds up the shop
       for (const e of ents) {
         if (!e.isDirectory() || e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue;
         const p = path.resolve(d, e.name);
@@ -387,7 +387,7 @@ async function recover({ authority = true, roots } = {}) {
     const names = await namesInUse();
     const have = new Set((await db.query('SELECT name FROM photo_files')).map((r) => r.name));
     const want = [...names].filter((n) => !have.has(n));
-    const folders = want.length ? photoFolders(roots) : [];
+    const folders = want.length ? await photoFolders(roots) : [];
     let saved = 0;
     let found = 0;
     const still = [];

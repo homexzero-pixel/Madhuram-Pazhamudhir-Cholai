@@ -159,6 +159,10 @@ r.get('/settings', need('settings'), wrap(async (req, res) => ok(res, { settings
 r.post('/settings', need('settings'), wrap(async (req, res) => {
   const v = req.body || {};
   if (v.invoice_prefix !== undefined) v.invoice_prefix = String(v.invoice_prefix).trim().toUpperCase();
+  if (v.online_always !== undefined) {           // only real shop sections
+    const known = new Set(require('../sections').SECTIONS.map((x) => x[0]));
+    v.online_always = [...new Set(String(v.online_always).split(',').map((x) => x.trim()).filter((x) => known.has(x)))].join(',');
+  }
   // the GST number and the GST rule for billing are the owner's
   if (!auth.can(req.user, 'gst')) {
     const cur = await settings.load();

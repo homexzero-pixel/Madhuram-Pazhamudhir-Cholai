@@ -23,7 +23,15 @@
     setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 800);
   }
 
+  var force = null;
   window.Splash = {
+    // the server is still starting: stay a little longer (the safety exit moves on by 12 seconds)
+    keep: function () {
+      if (ended || !el) return;
+      el.classList.add('wait');
+      clearTimeout(force);
+      force = setTimeout(out, 12000);
+    },
     done: function () {
       if (asked) return;
       asked = true;
@@ -43,5 +51,5 @@
     setTimeout(run, 1200);
   } else run();
   setTimeout(function () { if (!ended) el.classList.add('wait'); }, 2700);   // still loading: three dots
-  setTimeout(out, 10000);
+  force = setTimeout(out, 10000);
 }());

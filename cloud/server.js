@@ -9,24 +9,26 @@ const site = require('./src/site');
 const events = require('./src/events');
 const { UserError } = require('./src/money');
 
+function securityHeaders(req, res, next) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; " +
+    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), payment=()');
+  if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=15552000');
+  next();
+}
+
 function createApp() {
   const app = express();
   app.set('trust proxy', config.trustProxy);
   app.disable('x-powered-by');
 
-  app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('Referrer-Policy', 'same-origin');
-    res.setHeader('Content-Security-Policy',
-      "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; " +
-      "frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
-    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), payment=()');
-    if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=15552000');
-    next();
-  });
+  app.use(securityHeaders);
 
   // Which site this request is for (billing / customers' shop), and only that site's pages and API.
   app.use(site.scope);
@@ -148,9 +150,31 @@ async function main() {
   let app = null;
   let problem = null;
   const shell = express();
+  shell.set('trust proxy', config.trustProxy);
+  shell.disable('x-powered-by');
+  const pub = path.join(__dirname, 'public');
+  const files = express.static(pub, { index: false, maxAge: 0 });
   shell.use((req, res, next) => {
     if (app) return app(req, res, next);
-    const p = problem || { what: 'Starting… connecting to the database. Reload in a few seconds.', seen: '', code: '', detail: '' };
+    // Starting (a few seconds after an update or a restart): the pages open as usual behind the opening screen, and the
+    // screens ask again for their data until the database is ready. No "please wait" page for customers or staff.
+    if (!problem) {
+      if (req.path.startsWith('/api/') || req.path.startsWith('/internal/') || req.path.startsWith('/img/p/') || req.path.startsWith('/cron/')) {
+        res.setHeader('Retry-After', '2');
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(503).json({ ok: false, starting: true, error: 'One moment, the shop is opening…' });
+      }
+      return securityHeaders(req, res, () => {
+        if (['/', '/index.html', '/shop', '/shop/'].includes(req.path)) {
+          res.setHeader('Cache-Control', 'no-cache');
+          const shopPage = req.path.startsWith('/shop') || require('./src/site').siteOf(req) === 'shop';
+          return res.sendFile(path.join(pub, shopPage ? 'shop.html' : 'index.html'));
+        }
+        return files(req, res, () => res.status(404).type('text/plain').send('Not found.'));
+      });
+    }
+    if (req.path.startsWith('/api/')) return res.status(503).json({ ok: false, error: `The shop's database is not reachable: ${problem.what}` });
+    const p = problem;
     res.status(503).type('html').send(`<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width">
       <meta http-equiv="refresh" content="20"><title>Madhuram – setup needed</title>
       <body style="font-family:Segoe UI,Arial,sans-serif;max-width:720px;margin:40px auto;padding:0 16px;color:#1c2433">

@@ -213,12 +213,17 @@ from everywhere are taken off the products (so no broken pictures); the ones tha
 | `AI_SHOP=off`, `AI_BILLING=off`, `AI_ALL=off` | optional | stop the AI at once on that site |
 | `CORS_ALLOW` | optional | other web addresses allowed to call the API from a browser (normally none) |
 
-**Important: products need stock to appear online.** The customers' site shows a product only while
-*stock − stock held for open orders* is above 0. Products whose stock was never entered (0) are not shown. Enter stock with
-Purchases, Products → Stock in, or a stock count. Billing at the counter is still never blocked by stock.
+**Which products appear online.** Products in the sections chosen in **Settings → Online orders → Always in stock online**
+(Fresh Vegetables, Fresh Fruits and Dairy, Bread & Eggs at first) always show and can be ordered, with no stock count needed,
+because the shop has them every day. Every other product shows only while *stock − stock held for open orders* is above 0:
+enter its stock with Products → Stock in or a stock count. Billing at the counter is never blocked by stock.
 
 Online orders shows how each customer pays: **UPI paid** (with the reference to check), **UPI · not paid yet**, or **Cash on
 delivery / Pay at pickup**. Held stock is corrected by itself when the app starts.
+
+**After an update or a restart** both sites open as usual: the opening screen stays a few seconds longer while the server connects
+to the database, then the page appears (no "almost there" page). The tables are checked only when an update changed them, so a
+restart is quick. The explanation page appears only when the database really cannot be reached (wrong password, database down).
 
 ## Updates
 

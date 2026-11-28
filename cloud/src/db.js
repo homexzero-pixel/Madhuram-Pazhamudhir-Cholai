@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const mysql = require('mysql2/promise');
 const config = require('./config');
 
@@ -102,16 +103,26 @@ const COLUMNS = [
   ['online_orders', 'drop_note', "VARCHAR(200) NOT NULL DEFAULT ''"],
 ];
 
+// The tables and columns. Checked only when they changed since the last start (a fingerprint is kept in settings), so a
+// restart after an update takes one query instead of about eighty (slow on a shared hosting database).
 async function migrate() {
-  const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8').replace(/--[^\n]*/g, '');
+  const raw = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  const mark = crypto.createHash('sha1').update(raw).update(JSON.stringify(COLUMNS)).digest('hex').slice(0, 20);
+  const seen = await query("SELECT v FROM settings WHERE k='_schema'").then((r) => (r[0] ? r[0].v : ''), () => '');
+  if (seen === mark) return false;
+  const sql = raw.replace(/--[^\n]*/g, '');
   for (const stmt of sql.split(';').map((s) => s.trim()).filter(Boolean)) {
     await query(stmt);
   }
+  const have = new Set((await query('SELECT TABLE_NAME t, COLUMN_NAME c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()'))
+    .map((r) => `${r.t}.${r.c}`.toLowerCase()));
   for (const [table, col, ddl] of COLUMNS) {
-    const have = await query('SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [table, col]);
+    if (have.has(`${table}.${col}`.toLowerCase())) continue;
     // two copies of the app (billing site and shop site) may start together: the other one may have just added it
-    if (!have.length) await query(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${ddl}`).catch((e) => { if (e.code !== 'ER_DUP_FIELDNAME') throw e; });
+    await query(`ALTER TABLE \`${table}\` ADD COLUMN \`${col}\` ${ddl}`).catch((e) => { if (e.code !== 'ER_DUP_FIELDNAME') throw e; });
   }
+  await query("INSERT INTO settings (k, v) VALUES ('_schema', ?) ON DUPLICATE KEY UPDATE v=VALUES(v)", [mark]);
+  return true;
 }
 
 // ---------------------------------------------------------------- "something changed" counter for the shop's caches

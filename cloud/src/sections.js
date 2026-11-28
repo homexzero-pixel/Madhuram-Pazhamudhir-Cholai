@@ -113,10 +113,29 @@ async function sectionOf(id) { return (await map()).of.get(id) || 'packaged'; }
 // Sections with something AVAILABLE to sell (available = stock − held for orders > 0), for the shop's menus.
 async function list() {
   const m = await map();
-  const avail = await require('./cache').cached('avail-ids', async () => new Set((await db.query(
+  const inStock = await require('./cache').cached('avail-ids', async () => new Set((await db.query(
     'SELECT id FROM items WHERE active=1 AND price > 0 AND on_hand - reserved > 0')).map((r) => r.id)));
+  const avail = new Set([...inStock, ...(await alwaysIds())]);
   return SECTIONS.map(([key, name, group]) => ({ key, name, group, count: (m.ids.get(key) || []).filter((id) => avail.has(id)).length,
     img: m.img.get(key) || null })).filter((s) => s.count);
 }
 
-module.exports = { GROUPS, SECTIONS, KEYS, classify, idsOf, sectionOf, list, map, reset: () => { cache = { v: '', of: new Map(), ids: new Map(), img: new Map() }; } };
+// Sections the shop has every day (Settings → Online orders, "Always in stock online"; vegetables, fruits and dairy at first):
+// their products show on the customers' site and can be ordered without a stock count.
+const ALWAYS_DEFAULT = 'veg,fruits,dairy';
+async function alwaysKeys() {
+  const cfg = await require('./settings').load();
+  const known = new Set(SECTIONS.map((s) => s[0]));
+  return String(cfg.online_always ?? ALWAYS_DEFAULT).split(',').map((s) => s.trim()).filter((k) => known.has(k));
+}
+async function alwaysIds() {
+  const keys = await alwaysKeys();
+  const m = await map();
+  const out = new Set();
+  for (const k of keys) for (const id of m.ids.get(k) || []) out.add(id);
+  return out;
+}
+// for SQL: "IN (?)" needs at least one value (no product has id 0)
+const inList = (set) => (set.size ? [...set] : [0]);
+
+module.exports = { GROUPS, SECTIONS, KEYS, classify, idsOf, sectionOf, list, map, alwaysKeys, alwaysIds, inList, ALWAYS_DEFAULT, reset: () => { cache = { v: '', of: new Map(), ids: new Map(), img: new Map() }; } };

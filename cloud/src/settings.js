@@ -51,6 +51,7 @@ const DEFAULTS = {
   online_free_delivery_above: '500',
   online_area: '',
   shop_banners: '[]',
+  online_always: 'veg,fruits,dairy',  // sections always in stock online (no stock count needed): vegetables, fruits, dairy
   support_whatsapp: '',            // WhatsApp number customers write to for help (the shop phone when empty)
   upi_qr: '',                      // photo of the shop's UPI QR code (GPay / PhonePe), shown when a customer pays online
   festival_name: '',               // e.g. "Pongal Specials"; empty = the next festival from the calendar

@@ -25,18 +25,24 @@ Object.defineProperty(S, 'me', {
   set: (v) => { meNow = v || null; try { if (meNow) LS.set(ME_KEY, meNow); else localStorage.removeItem(ME_KEY); } catch (_) { /* private mode */ } },
 });
 
-async function get(path) {
-  const r = await fetch(`/api/shop${path}`);
-  const d = await r.json().catch(() => ({ ok: false, error: 'Please check the internet and try again.' }));
-  if (!d.ok) { const e = new Error(d.error || 'Please try again.'); e.status = r.status; throw e; }
-  return d;
+// The shop's server may be starting (a few seconds after an update): ask again quietly, behind the opening screen.
+async function ask(path, opts) {
+  for (let i = 0; ; i++) {
+    const r = await fetch(`/api/shop${path}`, opts).catch(() => null);
+    const d = r ? await r.json().catch(() => null) : null;
+    // the server said it is starting (nothing was done), or a page load could not connect: try again; a sent order is never sent twice
+    const again = r ? r.status === 503 && d && d.starting : !(opts && opts.method === 'POST');
+    if (again && i < 45) {
+      if (window.Splash && Splash.keep) Splash.keep();
+      await new Promise((ok) => setTimeout(ok, i < 5 ? 1000 : 2000));
+      continue;
+    }
+    if (!d || !d.ok) { const e = new Error((d && d.error) || 'Please check the internet and try again.'); e.status = r ? r.status : 0; throw e; }
+    return d;
+  }
 }
-async function post(path, body) {
-  const r = await fetch(`/api/shop${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-  const d = await r.json().catch(() => ({ ok: false, error: 'Please try again.' }));
-  if (!d.ok) { const e = new Error(d.error || 'Please try again.'); e.status = r.status; throw e; }
-  return d;
-}
+const get = (path) => ask(path);
+const post = (path, body) => ask(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
 const remember = (list) => { for (const it of list) S.items.set(it.id, it); return list; };
 
 // ------------------------------------------------------------------ money and quantities

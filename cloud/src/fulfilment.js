@@ -249,7 +249,7 @@ async function changeLine(orderId, lineId, qtyText, user) {
     if (l.unit === 'pcs' && qty % 1000) throw new UserError('Use whole pieces.');
     const it = (await stock.lockItems(q, [l.item_id])).get(l.item_id);
     const delta = qty - milli(l.qty);
-    if (delta > 0 && it && milli(it.on_hand) - milli(it.reserved) < delta) {
+    if (delta > 0 && it && milli(it.on_hand) - milli(it.reserved) < delta && !(await require('./sections').alwaysIds()).has(l.item_id)) {
       throw new UserError(`Only ${qtyStr(Math.max(0, milli(it.on_hand) - milli(it.reserved)))} more ${l.unit} of ${l.name} is free.`);
     }
     await stock.hold(q, l.item_id, delta);

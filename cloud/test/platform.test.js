@@ -519,3 +519,35 @@ test("domain changes: the customers' address comes from Settings, the billing si
     for (const [k, v] of Object.entries(keep)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
 });
+
+test('vegetables, fruits and dairy always show online and can be ordered without a stock count; other products need stock', async () => {
+  const c = await customer('Kavya', '9000000012', '10.1.0.13');
+  const mk = async (name, cat) => (await owner.post('/api/products', { name, price: '40', cat })).data.item;      // no stock entered
+  const tomato = await mk('Tomato nadu', 'Vegetables');
+  const milk = await mk('Aavin milk 500ml', 'Milk');
+  const soap = await mk('Lifebuoy soap 100g', 'Soap');
+  const seen = async (id) => (await c.get(`/api/shop/items?ids=${id}`)).data.items;
+  assert.equal((await seen(tomato.id)).length, 1);
+  assert.equal((await seen(milk.id)).length, 1);
+  assert.equal((await seen(soap.id)).length, 0);                       // other sections: only while they have stock
+  const t = (await seen(tomato.id))[0];
+  assert.equal(t.in_stock, true);
+  assert.ok(Number(t.available) >= 999);                               // no "only 2 left"
+  assert.ok((await c.get('/api/shop/info')).data.sections.some((x) => x.key === 'veg'));
+  const o = await order(c, [{ id: tomato.id, qty: 3 }, { id: milk.id, qty: 2 }]);
+  assert.equal(o.data.ok, true, JSON.stringify(o.data));
+  // the owner chooses the sections in Settings; unknown names are dropped
+  const saved = await owner.post('/api/settings', { online_always: 'fruits,dairy,nonsense' });
+  assert.equal(saved.data.settings.online_always, 'fruits,dairy');
+  assert.equal((await seen(tomato.id)).length, 0);
+  assert.equal((await seen(milk.id)).length, 1);
+  await owner.post('/api/settings', { online_always: 'veg,fruits,dairy' });
+  assert.equal((await seen(tomato.id)).length, 1);
+});
+
+test('a restart after an update skips the table checks when nothing changed', async () => {
+  assert.equal(await db.migrate(), false);
+  await db.query("UPDATE settings SET v='old' WHERE k='_schema'");
+  assert.equal(await db.migrate(), true);                               // something changed: tables and columns checked again
+  assert.equal(await db.migrate(), false);
+});
