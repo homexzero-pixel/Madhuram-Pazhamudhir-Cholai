@@ -892,3 +892,11 @@ body[data-page=welcome] .bnav, body[data-page=welcome] .pcbar, body[data-page=we
 .bnr.art { background: #f6f1e2; display: block; }
 .bnr.art .bnr-img { object-fit: cover; }
 
+/* the up-to-date check (Profile and Help pages): green = newest version, red = not up to date (tap to update) */
+.appver { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; font-size: .82rem; color: var(--ink2); }
+.vchip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: #f1f3f5; color: #5f6b7a;
+  font: inherit; font-weight: 600; border: 0; }
+.vchip .ico { width: 15px; height: 15px; }
+.vchip.ok { background: #e7f7ec; color: #15803d; }
+.vchip.old { background: #dc2626; color: #fff; cursor: pointer; }
+

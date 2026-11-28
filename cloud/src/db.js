@@ -57,6 +57,7 @@ async function tx(fn) {
 // Columns added after a table first existed (MySQL 8 has no "ADD COLUMN IF NOT EXISTS", so check first).
 const COLUMNS = [
   ['items', 'supplier_id', 'INT NULL'],
+  ['users', 'deleted_at', 'DATETIME NULL'],
   ['customers', 'address', "VARCHAR(250) NOT NULL DEFAULT ''"],
   ['customers', 'credit_limit', 'DECIMAL(12,2) NOT NULL DEFAULT 0'],
   ['sale_lines', 'returned_qty', 'DECIMAL(12,3) NOT NULL DEFAULT 0'],

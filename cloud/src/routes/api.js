@@ -194,6 +194,7 @@ r.post('/settings', need('settings'), wrap(async (req, res) => {
 
 r.get('/users', need('users'), wrap(async (req, res) => ok(res, { users: await admin.listUsers(), roles: auth.ROLES })));
 r.post('/users', need('users'), wrap(async (req, res) => ok(res, { id: await admin.saveUser(req.body || {}, req.user) })));
+r.post('/users/:id/delete', need('users'), wrap(async (req, res) => ok(res, { deleted: await admin.deleteUser(req.params.id, req.user) })));
 
 r.get('/backup', need('backup'), wrap(async (req, res) => { await admin.backup(res, req.user); }));
 r.post('/import-shop', need('settings'), express.raw({ type: 'application/octet-stream', limit: '60mb' }), wrap(async (req, res) => {

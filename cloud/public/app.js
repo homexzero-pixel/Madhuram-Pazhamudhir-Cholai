@@ -321,27 +321,50 @@ async function updateNow() {
   location.reload();
 }
 async function checkUpdate() {
-  if (!APP_V || Updates.ready) return;
+  if (!APP_V || Updates.ready) { drawVer(); return; }
   try {
     const r = await fetch('/api/version', { cache: 'no-store' });
-    if (!r.ok) return;
+    if (!r.ok) { if (!Updates.state) Updates.state = 'off'; drawVer(); return; }
     const { v } = await r.json();
-    if (!v || v === APP_V) return;
+    Updates.state = v && v !== APP_V ? 'old' : 'ok';
+    if (Updates.state === 'ok') { drawVer(); return; }
     Updates.ready = v;
     if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then((g) => g && g.update()).catch(() => {});
     const bar = document.createElement('div');
     bar.id = 'updbar';
-    bar.innerHTML = '<span>A new version of the software is ready.</span><button type="button" class="primary">Update now</button>';
+    bar.innerHTML = `${ico('alert')}<span><b>This PC is not up to date.</b> A new version of the software is ready.</span><button type="button" class="primary">Update now</button>`;
     document.body.appendChild(bar);
     bar.querySelector('button').addEventListener('click', updateNow);
-  } catch (_) { /* no internet: try again later */ }
+  } catch (_) { Updates.state = 'off'; }           // no internet: try again later
+  drawVer();
 }
+// the up-to-date check on every screen (side menu) and on "Install on this PC": green = up to date, red = not up to date (press to update)
+function drawVer() {
+  const st = Updates.ready ? 'old' : Updates.state;
+  document.querySelectorAll('[data-appver]').forEach((el) => {
+    el.className = `ver ${st || 'wait'}`;
+    el.title = st === 'old' ? `This PC has version ${APP_V}. Press to load the new version ${Updates.ready}.` : `Version ${APP_V}. Press to check again.`;
+    el.innerHTML = st === 'old' ? `${ico('alert')}<span>Not up to date</span><b>Update</b>`
+      : st === 'ok' ? `${ico('check')}<span>Up to date</span><small>v${esc(APP_V)}</small>`
+        : `<span>${st === 'off' ? 'Cannot check (no internet)' : 'Checking…'}</span><small>v${esc(APP_V)}</small>`;
+  });
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-appver]');
+  if (!b) return;
+  e.preventDefault();
+  if (Updates.ready) { updateNow(); return; }
+  Updates.state = '';
+  drawVer();
+  checkUpdate().then(() => toast(Updates.ready ? 'Not up to date: press Update to load the new version.' : Updates.state === 'ok' ? `Up to date (version ${APP_V}).` : 'Cannot check now. Check the internet.', !!Updates.ready));
+});
+App.afterFrame.push(drawVer);
 function maybeUpdate(front) {
   if (!Updates.ready || sessionStorage.getItem('mpc_updated_to') === Updates.ready || !updateSafe()) return;
   if (front || Date.now() - Updates.used > 90000) updateNow();
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate().then(() => maybeUpdate(true)); });
-setTimeout(checkUpdate, 15000);
+setTimeout(checkUpdate, 3000);
 setInterval(() => { if (document.visibilityState === 'visible') checkUpdate().then(() => maybeUpdate(false)); }, 120000);
 
 // ------------------------------------------------------------------ this PC's counter
@@ -406,7 +429,7 @@ function frame() {
         <nav class="nav">${navHtml()}</nav>
         <button class="install-btn" id="install-btn">${ico('download')} Install on this PC</button>
         <div class="who"><div class="who-n">${esc(App.me.name)}</div><div class="who-r">${esc(App.me.role)} · <span id="who-c">${esc(myCounter() || 'no counter')}</span></div>
-          <a href="#" id="logout">${ico('logout')} Log out</a><span class="ver">v${esc(App.version)}</span></div>
+          <a href="#" id="logout">${ico('logout')} Log out</a><button type="button" class="ver wait" data-appver></button></div>
       </aside>
       <main class="main" id="main"></main>
     </div>`;
@@ -1217,10 +1240,13 @@ const ROLE_NAMES = { owner: 'Owner', manager: 'Manager', cashier: 'Counter perso
 App.views.staff = async (main) => {
   const { users, roles } = await api('/users');
   main.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Staff logins</h1><button class="primary" id="uadd">+ Add login</button></div>
-    <p class="muted small">One login per person. Owner and manager PINs approve discounts and price changes at the counter.</p>
-    <table><tr><th>Name</th><th>Login name</th><th>Role</th><th>PIN</th><th>Status</th></tr>${users.map((u) => `<tr class="click" data-id="${u.id}">
+    <p class="muted small">One login per person. Owner and manager PINs approve discounts and price changes at the counter.
+      <b>Delete</b> removes a login for good: the person cannot log in any more, and their name stays on the bills they made.</p>
+    <table><tr><th>Name</th><th>Login name</th><th>Role</th><th>PIN</th><th>Status</th><th></th></tr>${users.map((u) => `<tr class="click" data-id="${u.id}">
       <td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${esc(ROLE_NAMES[u.role] || u.role)}</td><td>${u.has_pin ? 'set' : '-'}</td>
-      <td>${u.active ? '<span class="pill">active</span>' : '<span class="pill off">disabled</span>'}</td></tr>`).join('')}</table>
+      <td>${u.active ? '<span class="pill">active</span>' : '<span class="pill off">disabled</span>'}</td>
+      <td class="r">${App.me && u.id === App.me.id ? '<span class="small muted">you</span>'
+    : `<button type="button" class="danger small" data-del="${u.id}" aria-label="Delete ${esc(u.name)}">${ico('trash')} Delete</button>`}</td></tr>`).join('')}</table>
     <div class="card small" style="margin-top:14px"><b>Counter person:</b> everything in the software except the Dashboard and Reports,
       changing GST, staff logins and backups. <b>Owner:</b> everything.</div>`;
   const edit = (u) => {
@@ -1232,7 +1258,9 @@ App.views.staff = async (main) => {
       <div><label>${u ? 'New password (empty = keep)' : 'Password'}</label><input name="password" type="text" autocomplete="new-password" ${u ? '' : 'required minlength="6"'}></div></div>
       <div class="grid2"><div><label>Approval PIN (4–6 digits${u ? ', empty = keep' : ', not needed for a counter person'})</label><input name="pin" inputmode="numeric" autocomplete="off"></div>
       <div><label>&nbsp;</label><label class="row" style="font-weight:400"><input type="checkbox" name="active" style="width:auto" ${!u || u.active ? 'checked' : ''}> Active (can log in)</label></div></div>
-      <div class="actions"><button type="button" data-close>Cancel</button><button class="primary">Save</button></div></form>`);
+      <div class="actions">${u && !(App.me && u.id === App.me.id) ? `<button type="button" class="danger" id="udel" style="margin-right:auto">${ico('trash')} Delete login</button>` : ''}
+        <button type="button" data-close>Cancel</button><button class="primary">Save</button></div></form>`);
+    if ($('#udel', d)) $('#udel', d).addEventListener('click', () => { d.close(); remove(u); });
     $('form', d).addEventListener('submit', (e) => { e.preventDefault(); submitting($('button.primary', d), async () => {
       await api('/users', { method: 'POST', body: { ...formData(e.target), id: u ? u.id : undefined } });
       toast('Saved.');
@@ -1240,8 +1268,26 @@ App.views.staff = async (main) => {
       route();
     }); });
   };
+  // delete a login: asked once more, then gone from the list; the person is signed out at once and cannot log in again
+  const remove = (u) => {
+    const d = modal(`<h3>Delete the login of ${esc(u.name)}?</h3>
+      <p><b>${esc(u.name)}</b> (login name <b>${esc(u.username)}</b>, ${esc(ROLE_NAMES[u.role] || u.role)}) will be signed out at once and cannot log in
+        or approve with a PIN any more.</p>
+      <p class="muted small">Their name stays on the bills and records they made. To stop a login only for a while, open it and untick <i>Active</i> instead.</p>
+      <div class="actions"><button type="button" data-close>Cancel</button><button type="button" class="danger" id="udelok">${ico('trash')} Delete login</button></div>`);
+    $('#udelok', d).addEventListener('click', () => submitting($('#udelok', d), async () => {
+      await api(`/users/${u.id}/delete`, { method: 'POST', body: {} });
+      d.close('ok');
+      toast(`Login ${u.username} deleted.`);
+      route();
+    }));
+  };
   $('#uadd').addEventListener('click', () => edit(null));
-  $$('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => edit(users.find((u) => u.id === Number(tr.dataset.id)))));
+  $$('tr[data-id]').forEach((tr) => tr.addEventListener('click', (e) => {
+    if (e.target.closest('[data-del]')) return;
+    edit(users.find((u) => u.id === Number(tr.dataset.id)));
+  }));
+  $$('[data-del]').forEach((b) => b.addEventListener('click', () => remove(users.find((u) => u.id === Number(b.dataset.del)))));
 };
 
 // ================================================================== Settings & backup
@@ -1530,10 +1576,15 @@ App.views.install = async (main) => {
         <ol class="small"><li>Click this counter's button. A small file downloads.</li><li>Open it (Windows may ask "Run anyway").</li>
           <li>Use the new desktop icon <b>Madhuram Counter N</b>. Set the bill printer as the Windows default printer.</li></ol></div>
     </div>
+    <div class="card" style="margin-top:14px"><h2 style="margin-top:0">This PC's version</h2>
+      <p><button type="button" class="ver wait" data-appver></button></p>
+      <p class="small muted" style="margin-bottom:0">Green: up to date. Red: not up to date; press it to load the new version (the open bill is kept).
+        It is checked when the software opens and every 2 minutes; a new version also loads by itself at a quiet moment.</p></div>
     <div class="card" style="margin-top:14px"><h2 style="margin-top:0">Good to know</h2><ul class="small">
       <li>Everything is saved on the cloud server: all counters, the owner's mobile and home PC see the same stock and bills.</li>
       <li>The internet must be working to complete a bill. Keep a mobile hotspot ready as a backup connection.</li>
       <li>Updates reach every PC automatically.</li></ul></div>`;
+  drawVer();
   $('#inst').addEventListener('click', installApp);
 };
 

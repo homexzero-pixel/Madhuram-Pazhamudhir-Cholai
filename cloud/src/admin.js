@@ -23,7 +23,28 @@ async function firstSetup(data) {
 
 // ------------------------------------------------------------------ staff logins
 async function listUsers() {
-  return db.query("SELECT id, username, name, role, active, pin_hash <> '' has_pin, created_at FROM users ORDER BY active DESC, name");
+  return db.query(`SELECT id, username, name, role, active, pin_hash <> '' has_pin, created_at FROM users WHERE deleted_at IS NULL
+    ORDER BY active DESC, name`);
+}
+
+// Delete a staff login (owner): it leaves the staff list, can never log in or approve with a PIN again, and is signed out at once.
+// The person's name stays on the bills, shifts and records they made (they still point to it), and the login name is free again.
+async function deleteUser(id, actor) {
+  const u = await db.one('SELECT * FROM users WHERE id=? AND deleted_at IS NULL', [Number(id) || 0]);
+  if (!u) throw new UserError('Login not found.', 404);
+  if (actor && actor.id === u.id) throw new UserError('You cannot delete your own login.');
+  if (u.role === 'owner') {
+    const owners = await db.one("SELECT COUNT(*) n FROM users WHERE role='owner' AND active=1 AND deleted_at IS NULL AND id<>?", [u.id]);
+    if (Number(owners.n) === 0) throw new UserError('Keep at least one active owner login.');
+  }
+  const tag = `#del${u.id}`;                       // new login names cannot have '#', so the old name is free for a new person
+  await db.tx(async (q) => {
+    await q("UPDATE users SET active=0, deleted_at=?, pass_hash='', pin_hash='', username=? WHERE id=?",
+      [nowIST(), `${u.username.slice(0, 40 - tag.length)}${tag}`, u.id]);
+    await q('DELETE FROM sessions WHERE user_id=?', [u.id]);
+    await audit({ user_id: actor && actor.id, action: 'user_delete', summary: `Login ${u.username} (${u.name}) deleted` }, q);
+  });
+  return { username: u.username, name: u.name };
 }
 
 async function saveUser(data, actor) {
@@ -37,7 +58,7 @@ async function saveUser(data, actor) {
   const pin = String(data.pin || '');
   if (pin && !/^\d{4,6}$/.test(pin)) throw new UserError('PIN must be 4 to 6 digits.');
   if (id) {
-    const old = await db.one('SELECT * FROM users WHERE id=?', [id]);
+    const old = await db.one('SELECT * FROM users WHERE id=? AND deleted_at IS NULL', [id]);
     if (!old) throw new UserError('Login not found.', 404);
     if (old.role === 'owner' && (role !== 'owner' || !data.active)) {
       const owners = await db.one("SELECT COUNT(*) n FROM users WHERE role='owner' AND active=1 AND id<>?", [id]);
@@ -237,4 +258,4 @@ async function importFromShop(buffer, user) {
   return counts;
 }
 
-module.exports = { needsSetup, firstSetup, listUsers, saveUser, dashboard, auditLog, backup, dumpTo, importFromShop, TABLES };
+module.exports = { needsSetup, firstSetup, listUsers, saveUser, deleteUser, dashboard, auditLog, backup, dumpTo, importFromShop, TABLES };

@@ -63,6 +63,10 @@ Tamil, customer, price change and discount with manager PIN, hold, cancel), cash
    type and HSN, the GSTIN, the GST rule for billing), manages staff logins, downloads backups and uses Start fresh. Every other login
    (**counter person**) can do everything else: billing, prices and discounts, returns, credit, online orders, products and stock,
    customers, daily tools and settings. A product a counter person adds starts with GST "Not set yet" for the owner to fill in.
+   **Staff logins** (owner): **+ Add login**, and **Delete** on each row (or *Delete login* in the login's window). A deleted login is
+   signed out at once, cannot log in or approve with its PIN any more and leaves the list; the person's name stays on the bills and
+   records they made, and the login name can be given to someone new. The owner cannot delete their own login. To stop a login only
+   for a while, open it and untick *Active*.
    **Start fresh** (Settings & backup, owner): after testing, removes every bill, return, online order, cash drawer and expense in one go;
    a backup is saved on the server first; products, customers, staff and settings stay; the stock the test bills took goes back;
    bill numbers start again from 1.
@@ -250,7 +254,10 @@ Push to GitHub (or upload a new ZIP) and press **Redeploy** in hPanel. Database 
 **Open screens and installed apps update themselves** (from 28 Nov 2026). Each page asks the server which version it has
 (`/api/version` for billing, `/api/shop/version` for the customers' site; the `?v=` on the program files in `index.html` and
 `shop.html`), when it comes back to the front and every few minutes:
-- **Billing PCs:** a bar says *A new version of the software is ready* with **Update now**. Without a press, the new version loads
+- **Up-to-date check:** every billing screen shows it at the bottom of the side menu (and on *Install on this PC*): green
+  **Up to date** with the version number, or red **Not up to date · Update** (press it to load the new version). The customers' app
+  shows it at the bottom of **Profile** and **Help & support**: green *Up to date*, or red *Not up to date · Tap to update*.
+- **Billing PCs:** a bar says *This PC is not up to date. A new version of the software is ready* with **Update now**. Without a press, the new version loads
   by itself when nobody has used the PC for 90 seconds, or when the window comes back to the front; never while a window (payment,
   product, price) is open or something is being typed. The open bill stays on the PC.
 - **Customers' app and site:** the new version loads while the customer is away from the app, when they come back, or when they

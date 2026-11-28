@@ -1349,8 +1349,9 @@ function accountView() {
       ${row('href="#help"', 'help', 'Help & support', 'Call or WhatsApp the shop')}
       ${row('data-install hidden', 'download', 'Install the app', 'Order faster, right from your home screen')}
       ${row('data-out', 'logout', 'Log out', '', 'red')}
-    </div></div>`;
+    </div><div class="appver" id="shopver"></div></div>`;
   drawBars();
+  shopCheckUpdate();
   $$('[data-edit]').forEach((b) => b.addEventListener('click', editProfile));
   $$('[data-install]').forEach((b) => b.addEventListener('click', install));
   drawInstall();
@@ -1398,7 +1399,7 @@ function helpView() {
   const wa = (s.support_whatsapp || s.phone || '').replace(/\D/g, '');
   const waNum = wa.length === 10 ? `91${wa}` : wa;
   const faq = [
-    ['When will my order come?', `You choose the time when you order. Slots run from ${s.online_open || '8:00'} to ${s.online_close || '21:00'}. The shop sends a WhatsApp message when your order is packed and when it leaves.`],
+    ['When will my order come?', `You choose the time when you order. Slots run from ${s.online_open || '8:00'} to ${s.online_close || '21:00'}. Your order page (Orders) shows each step as the shop does it: accepted, packed, ready or on the way, delivered.`],
     ['What does delivery cost?', paise(s.online_delivery_charge) ? `${rs(paise(s.online_delivery_charge))} per order${paise(s.online_free_delivery_above) ? `, FREE above ${rs(paise(s.online_free_delivery_above))}` : ''}. Minimum order for delivery: ${rs(paise(s.online_min_order))}.` : 'Delivery is free.'],
     ['How do I pay?', `Pay on delivery (cash or UPI), or pay online by UPI after placing the order${s.upi_id ? ` (UPI ID ${s.upi_id})` : ''}.`],
     ['Fruits and vegetables are sold by weight. What will I pay?', 'They are weighed when your order is packed. The bill shows the exact weight and price; it can be a little more or less than the basket.'],
@@ -1413,8 +1414,10 @@ function helpView() {
       <p class="mut small" style="margin:0">Online orders: ${esc(s.online_open || '')} to ${esc(s.online_close || '')}${s.online_area ? ` · Delivery ${esc(s.online_area)}` : ''}</p></div>
     <h3 class="menu-h">Common questions</h3>
     <div class="box faq">${faq.map(([q, a]) => `<details><summary>${esc(q)}${ico('down')}</summary><p>${esc(a)}</p></details>`).join('')}</div>
-    <p class="credit">Some product photos: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (CC BY-SA).</p></div>`;
+    <p class="credit">Some product photos: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (CC BY-SA).</p>
+    <div class="appver" id="shopver"></div></div>`;
   drawBars();
+  shopCheckUpdate();
 }
 
 async function referView() {
@@ -1550,7 +1553,7 @@ function welcomeView() {
 // version loads while the customer is away from the app, when they come back, or when they move to another page; never in the
 // middle of the basket, signing in, an address or an open sheet. The basket is kept on the phone, so nothing is lost.
 const SHOP_V = (document.currentScript && new URL(document.currentScript.src, location.href).searchParams.get('v')) || '';
-const UPD = { ready: '' };
+const UPD = { ready: '', state: '' };
 function updQuiet() {
   const a = document.activeElement;
   return !['cart', 'auth', 'welcome', 'addresses', 'account'].includes(S.page) && !(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))
@@ -1562,15 +1565,29 @@ async function shopUpdateNow() {
   location.reload();
 }
 async function shopCheckUpdate() {
-  if (!SHOP_V || UPD.ready) return;
+  if (!SHOP_V || UPD.ready) { drawShopVer(); return; }
   try {
     const r = await fetch('/api/shop/version', { cache: 'no-store' });
-    if (!r.ok) return;
-    const { v } = await r.json();
-    if (!v || v === SHOP_V) return;
-    UPD.ready = v;
-    if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then((g) => g && g.update()).catch(() => {});
-  } catch (_) { /* no internet: try again later */ }
+    if (r.ok) {
+      const { v } = await r.json();
+      UPD.state = v && v !== SHOP_V ? 'old' : 'ok';
+      if (UPD.state === 'old') {
+        UPD.ready = v;
+        if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then((g) => g && g.update()).catch(() => {});
+      }
+    } else if (!UPD.state) UPD.state = 'off';
+  } catch (_) { UPD.state = 'off'; }             // no internet: try again later
+  drawShopVer();
+}
+// the up-to-date check (Profile and Help pages): green = this app has the newest version, red = not up to date (tap to update)
+function drawShopVer() {
+  const el = document.getElementById('shopver');
+  if (!el) return;
+  const st = UPD.ready ? 'old' : UPD.state;
+  el.innerHTML = `<span>App version ${esc(SHOP_V || '-')}</span>${st === 'old' ? `<button type="button" class="vchip old" data-upd>${ico('alert')}Not up to date · Tap to update</button>`
+    : st === 'ok' ? `<span class="vchip ok">${ico('check')}Up to date</span>` : `<span class="vchip">${st === 'off' ? 'Cannot check (no internet)' : 'Checking…'}</span>`}`;
+  const b = el.querySelector('[data-upd]');
+  if (b) b.addEventListener('click', shopUpdateNow);
 }
 function shopMaybeUpdate() {
   if (UPD.ready && sessionStorage.getItem('mpc_updated_to') !== UPD.ready && updQuiet()) shopUpdateNow();

@@ -336,7 +336,7 @@ dialog { border-radius: 10px; box-shadow: 0 20px 50px rgba(16, 24, 40, .25); }
 .who { margin: 0; padding: 10px 14px 12px; border-top: 1px solid var(--line); font-size: .8rem; }
 .who-n { font-weight: 600; color: var(--ink); } .who-r { color: var(--muted); text-transform: capitalize; margin-bottom: 6px; }
 .who a { display: inline-flex; align-items: center; gap: 6px; color: #475467; text-decoration: none; font-weight: 500; }
-.who .ver { float: right; color: #98a2b3; font-size: .72rem; margin-top: 3px; }
+.who .ver { float: right; margin-top: 1px; }
 .topbar button { border: none; padding: 6px; }
 
 /* billing screen */
@@ -520,4 +520,19 @@ dialog.pickprice { width: min(460px, 94vw); }
   background: #fff; border: 1px solid #cfe0fb; box-shadow: 0 10px 30px rgba(16, 38, 82, .18); border-radius: 12px; padding: 8px 8px 8px 16px;
   font-size: .92rem; max-width: 94vw; }
 #updbar button { white-space: nowrap; }
+
+/* the up-to-date check: green when this PC has the newest version, red when it does not (press to update) */
+.ver { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 999px; padding: 3px 9px; font: inherit; font-size: .74rem;
+  font-weight: 600; cursor: pointer; line-height: 1.3; box-shadow: none; }
+.ver .ico { width: 13px; height: 13px; stroke-width: 2.4; }
+.ver small { font-weight: 500; opacity: .8; }
+.ver.ok { background: #e7f7ec; color: #15803d; }
+.ver.ok:hover { background: #d7f1df; }
+.ver.old { background: var(--danger); color: #fff; }
+.ver.old:hover { background: #b91c1c; }
+.ver.old b { text-decoration: underline; }
+.ver.wait, .ver.off { background: #f1f3f6; color: #667085; }
+.card .ver { font-size: .92rem; padding: 7px 14px; }
+#updbar { border-color: #f3c4c4; }
+#updbar > .ico { width: 20px; height: 20px; color: var(--danger); flex: none; }
 
