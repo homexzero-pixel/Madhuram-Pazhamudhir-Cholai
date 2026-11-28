@@ -235,7 +235,7 @@ function card(it) {
 }
 
 // ------------------------------------------------------------------ header bits, bottom bars
-const avatar = () => `<span class="av">${S.me ? esc(S.me.name.trim().slice(0, 1).toUpperCase()) : '<img src="/img/shop-icon-192.png" alt="">'}</span>`;
+const avatar = () => `<span class="av">${S.me ? esc(S.me.name.trim().slice(0, 1).toUpperCase()) : '<img src="/img/shop-icon-192.png?v=2" alt="">'}</span>`;
 function locText() {
   const s = S.info.shop;
   if (S.mode === 'delivery') return S.me && S.me.address ? `Deliver to ${S.me.address}` : `Home delivery · ${s.online_area || 'near the shop'}`;
@@ -1223,7 +1223,7 @@ function authView(kind) {
       The shop sets a new password for your mobile number.</p><a class="btn-o wide" href="#login">Back to log in</a>`,
   };
   view().innerHTML = `${appbar(kind === 'forgot' ? 'Forgot password' : kind === 'signup' ? 'Sign up' : 'Log in')}<div class="page"><div class="auth">
-    <div class="auth-head"><img src="/img/shop-icon-192.png" alt=""><h1>${kind === 'forgot' ? 'Forgot password' : kind === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
+    <div class="auth-head"><img src="/img/shop-icon-192.png?v=2" alt=""><h1>${kind === 'forgot' ? 'Forgot password' : kind === 'signup' ? 'Create your account' : 'Welcome back'}</h1>
     <p>${esc(S.info.shop.name)}</p></div>${kind === 'forgot' ? '' : tabs}${forms[kind]}</div></div>`;
   drawBars();
   const f = $('#af');
@@ -1451,7 +1451,8 @@ function welcomeView() {
   ++S.tok;
   const s = S.info.shop;
   view().innerHTML = `<div class="wel">
-    <div class="wel-hd"><img class="wel-logo" src="/img/shop-logo.webp" alt="${esc(s.name)}">
+    <div class="wel-hd"><img class="wel-logo" src="/img/shop-logo.webp?v=2" alt="MPS">
+      <h2 class="wel-name">${esc(s.name)}</h2>
       <p>${esc(String(s.tagline || 'Fresh fruits, vegetables and daily needs').replace(/^Supermarket\s*·\s*/i, ''))}</p></div>
     <div class="wel-card">
       <h1>Welcome</h1>
@@ -1523,7 +1524,7 @@ function drawInstall() {
   if (c) c.hidden = !on || Date.now() - Number(LS.get('mpc_inst_x', 0)) < 14 * 86400000;
   $$('[data-install]').forEach((b) => { b.hidden = !on; });
 }
-const instCard = () => `<div class="inst-card" id="instCard" hidden><img src="/img/shop-icon-192.png" alt="" width="44" height="44">
+const instCard = () => `<div class="inst-card" id="instCard" hidden><img src="/img/shop-icon-192.png?v=2" alt="" width="44" height="44">
   <div class="ic-t"><b>Get the Madhuram app</b><span>Order faster, right from your home screen</span></div>
   <button class="ic-go" type="button" data-install-go>Install</button><button class="ic-x" type="button" aria-label="Not now" data-install-x>${ico('x')}</button></div>`;
 function bindInstall(root = document) {

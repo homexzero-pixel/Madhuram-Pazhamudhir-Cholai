@@ -823,8 +823,9 @@ body[data-page=welcome] { padding-bottom: 0; background: #f2f6ec; }
 body[data-page=welcome] .bnav, body[data-page=welcome] .pcbar, body[data-page=welcome] #cartbar { display: none !important; }
 .wel { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 .wel-hd { padding: calc(36px + env(safe-area-inset-top)) 24px 56px; text-align: center; background: radial-gradient(120% 90% at 50% 0%, #e3f2cf 0%, #f2f6ec 70%); }
-.wel-logo { width: min(78vw, 330px); height: auto; margin: 0 auto; animation: welIn .6s cubic-bezier(.2, .8, .2, 1) both; }
-.wel-hd p { margin: 12px 0 0; color: #5f6f57; font-size: .92rem; }
+.wel-logo { width: min(56vw, 230px); height: auto; margin: 0 auto; animation: welIn .6s cubic-bezier(.2, .8, .2, 1) both; }
+.wel-name { margin: 14px 0 0; font-size: 1.15rem; font-weight: 600; color: #1f7a2e; letter-spacing: -.2px; }
+.wel-hd p { margin: 4px 0 0; color: #5f6f57; font-size: .92rem; }
 .wel-card { flex: 1; width: 100%; max-width: 520px; margin: -28px auto 0; background: #fff; border-radius: 28px 28px 0 0;
   padding: 26px 22px calc(26px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px rgba(31, 122, 46, .08); animation: welUp .5s .1s cubic-bezier(.2, .8, .2, 1) both; }
 .wel-card h1 { margin: 0 0 4px; font-size: 1.6rem; font-weight: 600; letter-spacing: -.2px; }
