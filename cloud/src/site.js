@@ -1,7 +1,7 @@
 'use strict';
 // Two websites, one shared backend and database:
-//   billing site  (staff: billing, GST invoices, stock, ledger, Online orders)  e.g. billing.your-shop.in
-//   customers' site (shop, orders, tracking, invoices)                         SHOP_HOST, e.g. mpccustomer.zeravista.com
+//   billing site  (staff: billing, GST invoices, stock, ledger, Online orders)  e.g. mps.madhurampazhamudhirsolai.com
+//   customers' site (shop, orders, tracking, invoices)                         e.g. madhurampazhamudhirsolai.com
 //
 // Either run ONE copy of the app for both addresses (set SHOP_HOST, and BILLING_HOST to refuse every other address),
 // or TWO copies from the same code and database, one per address (SITE_ROLE=billing / SITE_ROLE=shop).
@@ -31,15 +31,21 @@ function siteOf(req) {
 const split = () => !!(role() === 'shop' || role() === 'billing' || env.SHOP_HOST || env.BILLING_HOST);
 
 // The customers' site address, for QR posters, WhatsApp tracking links and redirects. Ends with '/'.
-// SHOP_URL / SHOP_HOST when they name another site (a SHOP_URL set to the billing site's own address is ignored),
-// else the "Customer website address" in Settings, else /shop/ on this address.
+// The "Customer website address" in Settings (the owner changes it there after moving to a new domain), else SHOP_URL /
+// SHOP_HOST when they name another site, else /shop/ on this address. An address that is this billing site itself is ignored.
 function shopUrl(req, cfg = require('./settings').cached()) {
   const own = lc(String(req.headers.host || '').replace(/:\d+$/, ''));
   const other = (u) => {
     try { const x = new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`); return x.hostname.toLowerCase() !== own ? `${x.origin}${x.pathname.replace(/\/+$/, '')}/` : null; } catch (_) { return null; }
   };
-  return (env.SHOP_URL && other(env.SHOP_URL)) || (env.SHOP_HOST && other(env.SHOP_HOST))
-    || (siteOf(req) !== 'both' && cfg && cfg.shop_url && other(String(cfg.shop_url).trim())) || `${req.protocol}://${req.headers.host}/shop/`;
+  return (siteOf(req) !== 'both' && cfg && cfg.shop_url && other(String(cfg.shop_url).trim()))
+    || (env.SHOP_URL && other(env.SHOP_URL)) || (env.SHOP_HOST && other(env.SHOP_HOST)) || `${req.protocol}://${req.headers.host}/shop/`;
+}
+// The billing site's address, for the customers' site (product photos, order alerts): the address the billing site noted
+// itself (Settings, shared database), else BILLING_URL. No trailing '/'.
+function billingUrl(cfg = require('./settings').cached()) {
+  const u = String((cfg && cfg.billing_url) || env.BILLING_URL || '').trim().replace(/\/+$/, '');
+  return /^https?:\/\/[^\s/]+$/i.test(u) ? u : '';
 }
 
 // The customers' site may use only these API paths (everything under /api/shop/).
@@ -154,4 +160,4 @@ function rateLimit(req, res, next) {
   return next();
 }
 
-module.exports = { siteOf, split, shopUrl, scope, cors, sameOrigin, rateLimit, take, LIMITS, _buckets: buckets };
+module.exports = { siteOf, split, shopUrl, billingUrl, scope, cors, sameOrigin, rateLimit, take, LIMITS, _buckets: buckets };

@@ -54,6 +54,7 @@ r.post('/logout', wrap(async (req, res) => {
 }));
 
 r.get('/me', need(), wrap(async (req, res) => {
+  if (require('../site').siteOf(req) === 'billing') await settings.noteBillingUrl(String(req.headers.host || '').replace(/:\d+$/, '')).catch(() => {});
   const s = await settings.load();
   ok(res, { user: req.user, perms: auth.permsOf(req.user), settings: await settings.publicSettings(), counters: settings.counters(s),
     version: pkg.version, shop_url: require('../site').shopUrl(req) });
@@ -158,6 +159,16 @@ r.get('/settings', need('settings'), wrap(async (req, res) => ok(res, { settings
 r.post('/settings', need('settings'), wrap(async (req, res) => {
   const v = req.body || {};
   if (v.invoice_prefix !== undefined) v.invoice_prefix = String(v.invoice_prefix).trim().toUpperCase();
+  // a new customer website address must open the shop before it goes on posters and WhatsApp links
+  if (v.shop_url !== undefined) {
+    const url = String(v.shop_url).trim().replace(/\/+$/, '');
+    v.shop_url = url && !/^https?:\/\//i.test(url) ? `https://${url}` : url;
+    if (v.shop_url && v.shop_url !== (await settings.load()).shop_url && process.env.NODE_ENV !== 'test') {
+      const r = await fetch(`${v.shop_url}/api/shop/info`, { signal: AbortSignal.timeout(10000) }).catch(() => null);
+      const d = r && r.ok ? await r.json().catch(() => null) : null;
+      if (!d || !d.ok) throw new UserError(`The shop does not open at ${v.shop_url} yet. Connect the domain to the customers' app in Hostinger (with SSL), then save again.`);
+    }
+  }
   if (v.invoice_prefix !== undefined && !/^[A-Z0-9]{1,3}$/.test(v.invoice_prefix)) {
     throw new UserError('Bill number prefix: 1 to 3 capital letters or digits (GST allows at most 16 characters in a bill number).');
   }

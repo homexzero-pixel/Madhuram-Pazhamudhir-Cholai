@@ -80,7 +80,7 @@ function filePath(name) {
 // billing site, so the customers' site fetches each one from there the first time a customer needs it and keeps a copy
 // (every upload gets a new file name, so a copy is never out of date).
 async function fetchFromBilling(name) {
-  const base = String(process.env.BILLING_URL || '').replace(/\/+$/, '');
+  const base = require('./site').billingUrl();
   if (!base || !NAME.test(name || '')) return null;
   const r = await fetch(`${base}/img/p/${name}`, { signal: AbortSignal.timeout(8000), headers: { 'X-MPC-Photo-Copy': '1' } });
   if (!r.ok) return null;

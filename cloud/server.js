@@ -159,6 +159,7 @@ async function main() {
     try {
       await db.migrate();
       await require('./src/settings').upgrade();
+      await require('./src/settings').load();        // read once, so the addresses in Settings are known from the first request
       app = createApp();
       problem = null;
       startJobs();

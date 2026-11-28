@@ -4,7 +4,7 @@ Two websites, one Node.js backend, one MySQL / MariaDB database:
 
 | | Billing site (Domain A) | Customers' site (Domain B) |
 |---|---|---|
-| Address | your current address (e.g. `billing.your-shop.in`) | `mpccustomer.zeravista.com` |
+| Address | `mps.madhurampazhamudhirsolai.com` | `madhurampazhamudhirsolai.com` |
 | Users | owner, managers, cashiers | customers (mobile number + password) |
 | Screens | `index.html` + `app.js`, `pos.js`, `more.js` | `shop.html` + `shop.js` |
 | API | `/api/…` (staff) | `/api/shop/…` only |
@@ -21,7 +21,7 @@ flowchart LR
     POS["Billing counter (pos.js)"]
     ORD["Online orders, Checks & AI (more.js)"]
   end
-  subgraph B["Customers' site mpccustomer.zeravista.com"]
+  subgraph B["Customers' site madhurampazhamudhirsolai.com"]
     SHOP["Shop, basket, tracker, invoice, Ask the shop (shop.js)"]
   end
   subgraph S["Node.js backend (same code on both sites)"]
@@ -53,12 +53,17 @@ flowchart LR
 Two ways to run it (same code):
 
 * **Two copies** (recommended on Hostinger): the billing app with `SITE_ROLE=billing`, the customers' app with `SITE_ROLE=shop`, both
-  with the same `DB_*` settings. The shop copy wakes the billing copy after each change with a signed call
-  (`BILLING_URL`, `EVENTS_SECRET`); the billing copy also reads new events from the database every second, so nothing is lost if
-  that call fails. Product photos are uploaded on the billing copy; the shop copy fetches each photo from `BILLING_URL` the first
-  time a customer needs it and keeps its own copy (photo names are unique per upload).
-* **One copy answering both addresses**: `SHOP_HOST=mpccustomer.zeravista.com`, `BILLING_HOST=<billing address>`. Requests are routed by
-  the `Host` header; any other address gets `421`.
+  with the same `DB_*` settings. The shop copy wakes the billing copy after each change with a signed call (`EVENTS_SECRET`);
+  the billing copy also reads new events from the database every second, so nothing is lost if that call fails. Product photos
+  are uploaded on the billing copy; the shop copy fetches each photo from the billing copy the first time a customer needs it and
+  keeps its own copy (photo names are unique per upload).
+* **Addresses follow a domain change by themselves.** The billing copy notes its own address (`settings.billing_url`, shared
+  database) whenever staff load `/api/me` on a public domain; the shop copy uses it for wake-up calls and photos (`BILLING_URL`
+  only until then). The customers' address is **Settings → Customer website address** (`settings.shop_url`), checked on save by
+  fetching `/api/shop/info` there; it is used for the QR poster, WhatsApp tracking links and the `/shop/` redirect (`SHOP_URL` /
+  `SHOP_HOST` only when it is empty). An address that is the billing site itself is never used.
+* **One copy answering both addresses**: `SHOP_HOST=madhurampazhamudhirsolai.com`, `BILLING_HOST=mps.madhurampazhamudhirsolai.com`.
+  Requests are routed by the `Host` header; any other address gets `421`.
 * Without these settings the app works as before (staff at `/`, shop at `/shop/`).
 
 ## 2. Stock: physical, reserved, available

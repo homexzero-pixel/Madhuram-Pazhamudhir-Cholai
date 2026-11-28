@@ -13,6 +13,7 @@ const DEFAULTS = {
   invoice_prefix: 'MPC',           // bill numbers: PREFIX/MMYY/T<counter>/<number>, e.g. MU/1126/T2/107
   bill_footer: 'THANK U VISIT AGAIN',
   shop_url: 'https://mpccustomer.zeravista.com',   // the customers' site, for the QR poster and WhatsApp tracking links
+  billing_url: '',                 // the billing site's address, noted by itself when staff use it (the customers' site needs it)
   receipt_width: '80',
   print_copies: '1',               // 2 = customer copy + shop copy
   loyalty_enabled: '0',            // 1 = customers earn points on store and online bills
@@ -110,6 +111,7 @@ const PUBLIC = Object.keys(DEFAULTS);       // safe to send to every logged-in s
 
 let cache = null;
 let cachedAt = 0;
+let last = null;                            // the settings last read or saved here, for cached()
 
 async function load() {
   if (cache && Date.now() - cachedAt < 10000) return cache;
@@ -117,6 +119,7 @@ async function load() {
   const s = { ...DEFAULTS };
   for (const r of rows) s[r.k] = r.v;
   cache = s;
+  last = s;
   cachedAt = Date.now();
   return s;
 }
@@ -125,6 +128,7 @@ async function save(values) {
   for (const [k, v] of Object.entries(values)) {
     if (!(k in DEFAULTS)) continue;
     await db.query('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v=VALUES(v)', [k, String(v ?? '').slice(0, 2000)]);
+    if (last) last = { ...last, [k]: String(v ?? '').slice(0, 2000) };
   }
   cache = null;
 }
@@ -143,8 +147,17 @@ async function upgrade() {
   await db.query('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v=v', [UPGRADE_KEY, '1']);
 }
 
-// the settings last read (for code that cannot wait for the database)
-const cached = () => cache || DEFAULTS;
+// the settings last read or saved (for code that cannot wait for the database; read once at start)
+const cached = () => cache || last || DEFAULTS;
+
+// The billing site notes its own address whenever staff use it, so the customers' site always finds it (photos, order alerts),
+// also after a change of domain. Local addresses (this PC, the shop's network) are not noted.
+async function noteBillingUrl(host) {
+  host = String(host || '').trim().toLowerCase();
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host) || /^(localhost|\d+\.\d+\.\d+\.\d+)$/.test(host)) return;
+  const url = `https://${host}`;
+  if ((await load()).billing_url !== url) await save({ billing_url: url });
+}
 
 async function publicSettings() {
   const s = await load();
@@ -162,4 +175,4 @@ async function shopSettings() {
 // "NO.1,ARCOT PETTAI\nManapakkam" → "NO.1,ARCOT PETTAI, Manapakkam" for places that show the address on one line
 const oneLine = (a) => String(a || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean).join(', ');
 
-module.exports = { festival, photoUrl, shopBanners, shopSettings, DEFAULTS, load, save, publicSettings, counters, upgrade, oneLine, cached, reset: () => { cache = null; } };
+module.exports = { festival, photoUrl, shopBanners, shopSettings, DEFAULTS, load, save, publicSettings, counters, upgrade, oneLine, cached, noteBillingUrl, reset: () => { cache = null; last = null; } };

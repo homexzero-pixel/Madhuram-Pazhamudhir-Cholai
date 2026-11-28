@@ -110,7 +110,8 @@ const kick = () => { setImmediate(() => { pump().catch(() => {}); }); };
 // The customers' site: wake the billing site after a change (signed). Failure is fine: the billing site polls too.
 let wakeAt = 0;
 function wakeBilling(type = 'change') {
-  const url = env.BILLING_URL && `${env.BILLING_URL.replace(/\/+$/, '')}/internal/events`;
+  const base = require('./site').billingUrl();
+  const url = base && `${base}/internal/events`;
   if (!url || !secret() || Date.now() - wakeAt < 200) return;
   wakeAt = Date.now();
   post(url, type, 0, { wake: true, at: nowIST() }).catch(() => {});

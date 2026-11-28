@@ -1167,7 +1167,9 @@ App.views.settings = async (main) => {
       <h2>Online orders (customers order from their phone)</h2>
       <label class="row" style="font-weight:400"><input type="checkbox" name="online_enabled" style="width:auto" ${s.online_enabled === '1' ? 'checked' : ''}>
         <b>Take online orders</b> (customer site: <a href="${esc(App.shopUrl || '/shop/')}" target="_blank" rel="noopener">${esc(App.shopUrl || `${location.origin}/shop/`)}</a>)</label>
-      <div class="grid2">${f('shop_url', 'Customer website address (QR poster, WhatsApp tracking links)', 'placeholder="https://mpccustomer.zeravista.com"')}<div></div></div>
+      <div class="grid2">${f('shop_url', 'Customer website address (QR poster, WhatsApp tracking links)', 'placeholder="https://madhurampazhamudhirsolai.com"')}
+        <p class="small muted" style="align-self:end">After moving the customers' site to a new domain, type the new address here and save.
+          It is checked first: the shop must already open there.</p></div>
       <div class="grid3"><div><label class="row" style="font-weight:400"><input type="checkbox" name="online_pickup" style="width:auto" ${s.online_pickup === '1' ? 'checked' : ''}> Takeaway (customer collects)</label></div>
         <div><label class="row" style="font-weight:400"><input type="checkbox" name="online_delivery" style="width:auto" ${s.online_delivery === '1' ? 'checked' : ''}> Home delivery</label></div>
         ${f('online_area', 'Delivery area', 'placeholder="Within 3 km of the shop"')}</div>

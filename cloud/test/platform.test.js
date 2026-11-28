@@ -236,6 +236,9 @@ test('held stock is checked against the open orders and corrected; more held tha
 test('the billing site and the customers\' site are kept apart', async () => {
   process.env.SHOP_HOST = 'shop.test';
   process.env.BILLING_HOST = 'billing.test';
+  const settings = require('../src/settings');
+  const before = await settings.load();
+  await settings.save({ shop_url: 'https://shop.test' });          // the "Customer website address" the owner typed in Settings
   try {
     const staff = new Client('billing.test', '10.3.0.1');
     assert.equal((await staff.post('/api/login', { username: 'owner', password: 'owner-pass-1' })).data.ok, true);
@@ -256,6 +259,7 @@ test('the billing site and the customers\' site are kept apart', async () => {
     assert.equal((await cross.get('/api/shop/account')).status, 404);
     assert.equal((await cross.get('/api/me')).status, 401);
     assert.equal((await staff.get('/api/me')).status, 200);
+    assert.equal((await settings.load()).billing_url, 'https://billing.test');   // the billing site noted its own address
     assert.equal((await shopper.get('/api/shop/account')).data.me.phone, '9000000004');
     // unknown address
     assert.equal((await new Client('evil.test').get('/')).status, 421);
@@ -279,6 +283,7 @@ test('the billing site and the customers\' site are kept apart', async () => {
     assert.equal((await new Client('shop.test').call('POST', '/internal/events', { wake: true }, { 'X-MPC-Timestamp': good.ts, 'X-MPC-Signature': good.sig })).status, 404);
   } finally {
     delete process.env.SHOP_HOST; delete process.env.BILLING_HOST; delete process.env.EVENTS_SECRET;
+    await settings.save({ shop_url: before.shop_url, billing_url: before.billing_url });
   }
 });
 
@@ -459,20 +464,34 @@ test('checkout choices reach the shop; the customer can cancel until the order i
   assert.ok((await names('ponni arisi')).some((n) => /ponni rice/i.test(n)));
 });
 
-test("the customers' site address: a SHOP_URL that points at the billing site itself is ignored", () => {
+test("domain changes: the customers' address comes from Settings, the billing site notes its own address", async () => {
   const site = require('../src/site');
+  const settings = require('../src/settings');
   const req = (host) => ({ headers: { host }, protocol: 'https' });
-  const keep = { SITE_ROLE: process.env.SITE_ROLE, SHOP_URL: process.env.SHOP_URL };
+  const keep = { SITE_ROLE: process.env.SITE_ROLE, SHOP_URL: process.env.SHOP_URL, BILLING_URL: process.env.BILLING_URL };
   try {
     process.env.SITE_ROLE = 'billing';
-    process.env.SHOP_URL = 'https://mpc.zeravista.com';
+    process.env.SHOP_URL = 'https://mpc.zeravista.com';               // an old, wrong SHOP_URL is not used
     assert.equal(site.shopUrl(req('mpc.zeravista.com'), { shop_url: 'https://mpccustomer.zeravista.com' }), 'https://mpccustomer.zeravista.com/');
+    // after the move: the billing site has its new address, the owner typed the new shop address in Settings
+    assert.equal(site.shopUrl(req('mps.madhurampazhamudhirsolai.com'), { shop_url: 'https://madhurampazhamudhirsolai.com' }), 'https://madhurampazhamudhirsolai.com/');
+    assert.equal(site.shopUrl(req('mps.madhurampazhamudhirsolai.com'), { shop_url: 'madhurampazhamudhirsolai.com' }), 'https://madhurampazhamudhirsolai.com/');
     process.env.SHOP_URL = 'https://shop.example.in/';
-    assert.equal(site.shopUrl(req('mpc.zeravista.com'), { shop_url: 'https://other.example' }), 'https://shop.example.in/');
+    assert.equal(site.shopUrl(req('mps.madhurampazhamudhirsolai.com'), { shop_url: '' }), 'https://shop.example.in/');
+    assert.equal(site.shopUrl(req('mps.madhurampazhamudhirsolai.com'), { shop_url: 'https://mps.madhurampazhamudhirsolai.com' }), 'https://shop.example.in/');
     delete process.env.SHOP_URL;
-    assert.equal(site.shopUrl(req('mpc.zeravista.com'), { shop_url: 'mpccustomer.zeravista.com' }), 'https://mpccustomer.zeravista.com/');
     delete process.env.SITE_ROLE;
-    assert.equal(site.shopUrl(req('localhost:3456'), { shop_url: 'https://mpccustomer.zeravista.com' }), 'https://localhost:3456/shop/');
+    assert.equal(site.shopUrl(req('localhost:3456'), { shop_url: 'https://madhurampazhamudhirsolai.com' }), 'https://localhost:3456/shop/');
+    // the billing site's address: noted by the billing site itself, else BILLING_URL
+    process.env.BILLING_URL = 'https://mpc.zeravista.com/';
+    assert.equal(site.billingUrl({ billing_url: '' }), 'https://mpc.zeravista.com');
+    assert.equal(site.billingUrl({ billing_url: 'https://mps.madhurampazhamudhirsolai.com' }), 'https://mps.madhurampazhamudhirsolai.com');
+    await settings.noteBillingUrl('mps.madhurampazhamudhirsolai.com');
+    await settings.noteBillingUrl('localhost');
+    await settings.noteBillingUrl('192.168.1.20');
+    assert.equal((await settings.load()).billing_url, 'https://mps.madhurampazhamudhirsolai.com');
+    assert.equal(site.billingUrl(settings.cached()), 'https://mps.madhurampazhamudhirsolai.com');
+    await settings.save({ billing_url: '' });
   } finally {
     for (const [k, v] of Object.entries(keep)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }

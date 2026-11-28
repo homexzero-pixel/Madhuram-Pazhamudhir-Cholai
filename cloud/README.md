@@ -118,38 +118,68 @@ Owner phone: open the address in Chrome → ⋮ → **Install app** / Add to Hom
   check it in your UPI app before packing. (Card / netbanking through a payment gateway such as Cashfree needs their App ID
   and Secret Key; ask for it to be connected.)
 
-## Two websites: billing and customers (mpccustomer.zeravista.com)
+## Two websites: billing and customers
 
-The staff keep the current address. Customers get their own address, `mpccustomer.zeravista.com`, served by the same code and the same
-database. The staff screens and staff API do not exist on the customers' address, and the customers' API does not exist on the
-billing address.
+| Site | Address | Hostinger web app |
+|---|---|---|
+| Billing (staff) | `mps.madhurampazhamudhirsolai.com` | `SITE_ROLE` = `billing` |
+| Customers' shop | `madhurampazhamudhirsolai.com` | `SITE_ROLE` = `shop` |
+
+(Until November 2026 the addresses were `mpc.zeravista.com` and `mpccustomer.zeravista.com`; see *Moving to a new domain* below.)
+Both sites run the same code on the same database. The staff screens and staff API do not exist on the customers' address, and
+the customers' API does not exist on the billing address.
 
 **Recommended: a second Web App for the customers' address (same GitHub repository, same database).** The Business plan allows
 5 Node.js apps. Do the steps in this order, so customers always have a working shop:
 
 1. **Billing app (the one you have) → Redeploy** with the new code. Nothing else changes yet: the shop still opens at `/shop/`.
    The version at the bottom left of the staff screens shows `v2026.11.27` or later.
-2. hPanel → **Websites → Add Website → Node.js web app**. Use the domain `mpccustomer.zeravista.com` as its own website (not a folder
-   of zeravista.com; if the domain's DNS is managed elsewhere, add the record hPanel shows there). **Import Git repository →
+2. hPanel → **Websites → Add Website → Node.js web app**. Use the customers' domain (`madhurampazhamudhirsolai.com`) as its own
+   website (if the domain's DNS is managed elsewhere, add the records hPanel shows there). **Import Git repository →
    Connect with GitHub** → this repository, branch `main`, the same root folder / entry file (`server.js`) / Node version as the
    billing app. **Environment variables:** the same `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` as the billing app
-   (and `SMS_PROVIDER`, `SMS_API_KEY` if you use SMS codes), plus `SITE_ROLE` = `shop`, `BILLING_URL` = `https://<your billing address>`,
+   (and `SMS_PROVIDER`, `SMS_API_KEY` if you use SMS codes), plus `SITE_ROLE` = `shop` and
    `EVENTS_SECRET` = a long random password you make up (20+ letters and numbers; never send it to anyone). Leave every other
-   variable empty. Deploy, then turn on **SSL** for the new address. Product photos come over from the billing app by themselves.
-3. Billing app → **Environment variables**: add `SITE_ROLE` = `billing`, `SHOP_URL` = `https://mpccustomer.zeravista.com`,
-   `EVENTS_SECRET` = the same password as step 2 → **Redeploy**. From now on `/shop/` on the billing address forwards customers to
-   the new address.
-4. Print a new QR poster: **Online orders → QR poster** now points to `https://mpccustomer.zeravista.com/`.
+   variable empty. Deploy, then turn on **SSL** for the new address. Product photos come over from the billing app by themselves
+   (the billing site notes its own address in the shared database when staff use it, so the shop app finds it).
+3. Billing app → **Environment variables**: add `SITE_ROLE` = `billing` and `EVENTS_SECRET` = the same password as step 2 →
+   **Redeploy**.
+4. Billing → **Settings → Customer website address**: type the customers' address and save (it is checked first: the shop must
+   already open there). `/shop/` on the billing address forwards customers there, and the QR poster and WhatsApp tracking links
+   use it.
+5. Print a new QR poster: **Online orders → QR poster**.
 
-*If your panel lets one Node.js app answer two addresses instead,* set `SHOP_HOST` = `mpccustomer.zeravista.com` and
-`BILLING_HOST` = `<your billing address>` on that one app (no `SITE_ROLE`); every other address is refused.
+*If your panel lets one Node.js app answer two addresses instead,* set `SHOP_HOST` = `madhurampazhamudhirsolai.com` and
+`BILLING_HOST` = `mps.madhurampazhamudhirsolai.com` on that one app (no `SITE_ROLE`); every other address is refused.
+
+### Moving to a new domain
+
+No code or environment variable changes are needed. In this order:
+
+1. Billing → **Settings → Backup → Download today's backup** (a safety copy of all the shop's data).
+2. hPanel → **Websites** → the customers' website (old address) → **⋯ → Change domain** (or **Connect domain** on its dashboard)
+   → the new customers' domain. If the domain was bought at another company, add the DNS records hPanel shows at that company.
+   Wait until the new address opens the shop with the padlock (SSL is installed by itself; DNS can take up to 24 hours).
+3. The same for the billing website → the new billing address (a subdomain such as `mps.` of the new domain works).
+4. Open the new billing address and log in. The billing site notes its new address by itself (the shop app needs it for photos
+   and instant order alerts).
+5. **Settings → Customer website address** → the new customers' address → **Save**. The save is refused until the shop really
+   opens there, so a wrong address never reaches posters or WhatsApp links.
+6. **Online orders → QR poster** → print and replace the old posters. If you set up the Hostinger cron job for backups, copy the new
+   command from **Settings → Backup** (it contains the address).
+7. Staff log in once on the new address; on counter PCs and phones remove the old app shortcut and install it again from the new
+   address. Customers log in once on the new site (accounts, orders and points are kept).
+
+Old `SHOP_URL` / `BILLING_URL` values in the environment variables are not needed any more and can be deleted: the address in
+Settings and the address the billing site noted come first. Keep `SITE_ROLE`, `EVENTS_SECRET` and the `DB_*` variables.
 
 | Setting | Where | Meaning |
 |---|---|---|
 | `SITE_ROLE` | each app | `billing` or `shop` (two apps) |
 | `SHOP_HOST`, `BILLING_HOST` | one app | the two addresses (one app answering both) |
-| `SHOP_URL` | billing app | the customers' address, for QR posters, WhatsApp tracking links and redirects |
-| `BILLING_URL`, `EVENTS_SECRET` | shop app (secret on both) | the shop app wakes the billing app at once after an order (signed); without them the billing app still sees new orders within a second |
+| `SHOP_URL` | billing app, optional | only used when **Settings → Customer website address** is empty |
+| `EVENTS_SECRET` | both apps | the shop app wakes the billing app at once after an order (signed); without it the billing app still sees new orders within a second |
+| `BILLING_URL` | shop app, optional | only used until staff have opened the billing site once (it notes its own address in the database) |
 | `EVENTS_WEBHOOK_URL` | billing app, optional | every order event is also sent there, signed (for an automation) |
 | `ANTHROPIC_API_KEY` | optional, either app | turns on the AI in "Ask the shop" (shop app) and the AI summary on Checks & AI (billing app). Without it everything works and "Ask the shop" answers from the shop's own search. Put the key only in hPanel. |
 | `AI_SHOP=off`, `AI_BILLING=off`, `AI_ALL=off` | optional | stop the AI at once on that site |
