@@ -451,3 +451,15 @@ CREATE TABLE IF NOT EXISTS ai_logs (
   ip VARCHAR(45) NOT NULL DEFAULT '',
   INDEX (at), INDEX (outcome, at), INDEX (customer_id, at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Product photos from a list of web addresses (the owner's spreadsheet: product code + photo link). A staff browser works
+-- through the waiting ones: the server downloads the photo, the browser makes it small, and it becomes the product's photo.
+CREATE TABLE IF NOT EXISTS photo_links (
+  item_id INT PRIMARY KEY,
+  url VARCHAR(1000) NOT NULL,
+  status VARCHAR(10) NOT NULL DEFAULT 'waiting',    -- waiting / done / failed
+  note VARCHAR(200) NULL,
+  added_at DATETIME NOT NULL,
+  tried_at DATETIME NULL,
+  KEY (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

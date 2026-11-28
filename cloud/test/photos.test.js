@@ -75,3 +75,66 @@ test('upload a photo, it is served and shown in the shop; find photos by barcode
   await call('POST', `/api/products/${a.id}/image/remove`, '{}');
   assert.equal((await call('GET', `/api/products/${a.id}`)).data.item.image, null);
 });
+
+test('photos from a list of web addresses: matched by code or barcode, downloaded only from the internet, own photos kept', async () => {
+  const port = mock.address().port;
+  const link = (p) => `http://127.0.0.1:${port}${p}`;
+  const add = async (body) => (await call('POST', '/api/products', JSON.stringify(body))).data.item;
+  const grapes = await add({ name: 'Panneer Grapes', unit: 'kg', price: '140' });
+  const soap = await add({ name: 'Bath soap', price: '35', barcode: '8901111111117' });
+  const rice = await add({ name: 'Raw rice', price: '60' });
+  const own = await add({ name: 'Own photo pack', price: '20' });
+  await call('POST', `/api/products/${own.id}/image`, JPG, 'image/jpeg');                 // the shop's own photo
+  const rows = [
+    { code: grapes.sku, url: link('/front.jpg') },
+    { code: 'NOT-A-CODE', barcodes: '8900000000000|8901111111117', url: link('/front.jpg') },   // found by its barcode
+    { code: rice.sku, url: link('/missing.jpg') },
+    { code: own.sku, url: link('/front.jpg') },
+    { code: 'ZZZ999', url: link('/front.jpg') },
+    { code: grapes.sku, url: 'javascript:alert(1)' },
+  ];
+  let r = await call('POST', '/api/images/links', JSON.stringify({ rows }));
+  assert.equal(r.data.ok, true, JSON.stringify(r.data));
+  const x = r.data.result;
+  assert.deepEqual([x.queued, x.not_found, x.own_photo, x.bad_link], [3, 1, 1, 1]);
+  assert.deepEqual(x.missing, ['ZZZ999']);
+  assert.equal(r.data.waiting, 3);
+  assert.deepEqual((await call('GET', '/api/images/links/next?n=10')).data.items.map((i) => i.id).sort((a, b) => a - b), [grapes.id, soap.id, rice.id]);
+
+  // only addresses on the internet: this machine's own addresses are refused, and the link is marked as failed
+  const refused = await call('GET', `/api/images/links/${grapes.id}/source`);
+  assert.equal(refused.status, 400);
+  assert.match(refused.data.error, /not on the internet|unusual port/);
+  assert.equal((await call('GET', '/api/images/links')).data.failed, 1);
+  assert.equal((await call('POST', '/api/images/links/again', '{}')).data.waiting, 3);
+
+  process.env.PHOTO_LINKS_LOCAL = '1';                       // tests only: the stand-in photo server runs on this machine
+  try {
+    const src = await fetch(`${base}/api/images/links/${grapes.id}/source`, { headers: { Cookie: cookie } });
+    assert.equal(src.status, 200);
+    assert.equal(src.headers.get('content-type'), 'image/jpeg');
+    assert.match(src.headers.get('content-disposition'), /attachment/);
+    assert.deepEqual(Buffer.from(await src.arrayBuffer()), JPG);
+    const gone = await call('GET', `/api/images/links/${rice.id}/source`);
+    assert.match(gone.data.error, /answered 404/);
+    // the browser sends back the small copy it made
+    assert.equal((await call('POST', `/api/images/links/${grapes.id}/photo`, JPG, 'image/jpeg')).data.ok, true);
+    assert.equal((await call('GET', `/api/images/links/${soap.id}/source`)).status, 200);
+    assert.equal((await call('POST', `/api/images/links/${soap.id}/photo`, JPG, 'image/jpeg')).data.ok, true);
+  } finally { delete process.env.PHOTO_LINKS_LOCAL; }
+  // a late "failed" from another PC does not undo a finished one
+  await call('POST', `/api/images/links/${grapes.id}/failed`, JSON.stringify({ note: 'late' }));
+  const st = (await call('GET', '/api/images/links')).data;
+  assert.deepEqual([st.done, st.failed, st.waiting], [2, 1, 0]);
+  assert.match(st.failures[0].note, /404/);
+  const rows2 = await db.query('SELECT id, image, image_source FROM items WHERE id IN (?) ORDER BY id', [[grapes.id, soap.id, own.id]]);
+  assert.deepEqual(rows2.map((i) => [i.id, i.image_source, !!i.image]), [[grapes.id, 'link', true], [soap.id, 'link', true], [own.id, 'upload', true]]);
+  assert.equal((await fetch(`${base}/img/p/${rows2[0].image}`)).status, 200);
+
+  const images = require('../src/images');
+  for (const ip of ['10.1.2.3', '127.0.0.1', '169.254.169.254', '172.20.0.1', '192.168.1.5', '100.64.0.1', '::1', 'fd00::1', '::ffff:10.0.0.1']) assert.equal(images.privateIp(ip), true, ip);
+  for (const ip of ['8.8.8.8', '172.32.0.1', '151.101.1.1', '2606:4700::1111']) assert.equal(images.privateIp(ip), false, ip);
+  assert.equal(images.photoType(Buffer.from('GIF89a......')), 'image/gif');
+  assert.throws(() => images.photoType(Buffer.from('\0\0\0\x18ftypheic\0\0\0\0')), /HEIC/);
+  assert.equal(images.photoType(Buffer.from('<!DOCTYPE html><html>')), null);
+});

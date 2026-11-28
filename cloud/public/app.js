@@ -59,6 +59,137 @@ async function shrinkPhoto(file, max = 640) {
   } finally { URL.revokeObjectURL(url); }
 }
 
+// ------------------------------------------------------------------ spreadsheets read in the browser (Excel .xlsx or CSV)
+async function unzipFile(buf) {
+  const dv = new DataView(buf);
+  let end = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { end = i; break; }
+  if (end < 0) throw new Error('This is not an Excel (.xlsx) file.');
+  const files = new Map();
+  let p = dv.getUint32(end + 16, true);
+  for (let n = dv.getUint16(end + 10, true); n > 0 && dv.getUint32(p, true) === 0x02014b50; n--) {
+    const len = dv.getUint16(p + 28, true);
+    files.set(new TextDecoder().decode(new Uint8Array(buf, p + 46, len)), { method: dv.getUint16(p + 10, true), size: dv.getUint32(p + 20, true), at: dv.getUint32(p + 42, true) });
+    p += 46 + len + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+  }
+  return async (name) => {
+    const f = files.get(name);
+    if (!f) return null;
+    const data = new Uint8Array(buf, f.at + 30 + dv.getUint16(f.at + 26, true) + dv.getUint16(f.at + 28, true), f.size);
+    const bytes = f.method === 0 ? data
+      : new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    return new TextDecoder().decode(bytes);
+  };
+}
+// every sheet of an .xlsx file: [{ name, rows: [[text, …], …] }]
+async function readXlsx(file) {
+  const read = await unzipFile(await file.arrayBuffer());
+  const xml = async (n) => { const t = await read(n); return t ? new DOMParser().parseFromString(t, 'application/xml') : null; };
+  const all = (el, tag) => [...el.getElementsByTagNameNS('*', tag)];          // with or without a prefix (<x:row> or <row>)
+  const book = await xml('xl/workbook.xml');
+  if (!book) throw new Error('This is not an Excel (.xlsx) file.');
+  const target = {};
+  const rels = await xml('xl/_rels/workbook.xml.rels');
+  if (rels) for (const r of all(rels, 'Relationship')) target[r.getAttribute('Id')] = r.getAttribute('Target');
+  const shared = [];
+  const ss = await xml('xl/sharedStrings.xml');
+  if (ss) for (const si of all(ss, 'si')) shared.push(all(si, 't').map((t) => t.textContent).join(''));
+  const sheets = [];
+  for (const sh of all(book, 'sheet')) {
+    const t = target[sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') || sh.getAttribute('r:id')] || '';
+    const doc = await xml(t.startsWith('/') ? t.slice(1) : `xl/${t.replace(/^\.\//, '')}`);
+    if (!doc) continue;
+    const rows = [];
+    for (const row of all(doc, 'row')) {
+      const out = [];
+      for (const c of all(row, 'c')) {
+        let i = 0;
+        for (const ch of (c.getAttribute('r') || '').replace(/\d+$/, '')) i = i * 26 + ch.charCodeAt(0) - 64;
+        const v = all(c, 'v')[0];
+        const type = c.getAttribute('t');
+        out[i ? i - 1 : out.length] = type === 's' ? shared[Number(v && v.textContent)] ?? ''
+          : type === 'inlineStr' ? all(c, 't').map((x) => x.textContent).join('') : v ? v.textContent : '';
+      }
+      rows.push(Array.from(out, (x) => (x === undefined ? '' : String(x))));
+    }
+    sheets.push({ name: sh.getAttribute('name') || '', rows });
+  }
+  return sheets;
+}
+function readCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let q = false;
+  text = text.replace(/^﻿/, '');
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch !== '"') cell += ch; else if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cell); cell = ''; } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    } else cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+// the photo list in a workbook: a header row with the product code (or barcodes) and a photo-link column ("Image URL")
+function photoList(sheets) {
+  const isCode = (h) => /^(product ?code|item ?code|code|sku)$/i.test(h);
+  const isBar = (h) => /^(bar ?codes?|ean)$/i.test(h);
+  const isUrl = (h) => /^(image|photo|picture|pic)( ?(url|link|address|web address))?$/i.test(h);
+  const ordered = [...sheets].sort((a, b) => Number(/product/i.test(b.name)) - Number(/product/i.test(a.name)));
+  for (const sh of ordered) {
+    for (let h = 0; h < Math.min(sh.rows.length, 12); h++) {
+      const head = sh.rows[h].map((x) => String(x).trim());
+      const u = head.findIndex(isUrl);
+      const c = head.findIndex(isCode);
+      const b = head.findIndex(isBar);
+      if (u < 0 || (c < 0 && b < 0)) continue;
+      const rows = sh.rows.slice(h + 1).map((r) => ({ code: c >= 0 ? String(r[c] || '').trim() : '', barcodes: b >= 0 ? String(r[b] || '').trim() : '',
+        url: String(r[u] || '').trim() })).filter((r) => /^https?:\/\//i.test(r.url) && (r.code || r.barcodes));
+      return { sheet: sh.name, link: head[u], total: sh.rows.length - h - 1, rows };
+    }
+  }
+  return null;
+}
+// Works through the waiting photo links: the server downloads each photo, this PC makes it small, the server saves it.
+// Keeps going while the staff move to other screens; stops when the page is closed (Continue picks up from there).
+const PhotoLinks = { running: false, stop: false, done: 0, failed: 0, tick: null };
+async function runPhotoLinks() {
+  if (PhotoLinks.running) return;
+  Object.assign(PhotoLinks, { running: true, stop: false, done: 0, failed: 0 });
+  const tick = () => { if (PhotoLinks.tick) PhotoLinks.tick(); };
+  tick();
+  try {
+    for (;;) {
+      if (PhotoLinks.stop) break;
+      const { items } = await api('/images/links/next?n=6');
+      if (!items.length) break;
+      await Promise.all([0, 1, 2].map(async (k) => {
+        for (let j = k; j < items.length && !PhotoLinks.stop; j += 3) {
+          const it = items[j];
+          try {
+            const res = await fetch(`/api/images/links/${it.id}/source`, { credentials: 'same-origin' });
+            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'The photo could not be downloaded.');
+            const blob = await shrinkPhoto(await res.blob(), 480);
+            await api(`/images/links/${it.id}/photo`, { method: 'POST', raw: blob, type: blob.type });
+            PhotoLinks.done += 1;
+          } catch (e) {
+            PhotoLinks.failed += 1;
+            api(`/images/links/${it.id}/failed`, { method: 'POST', body: { note: e.message } }).catch(() => {});
+          }
+          tick();
+        }
+      }));
+    }
+  } catch (e) { toast(e.message); } finally {
+    PhotoLinks.running = false;
+    tick();
+  }
+}
+window.addEventListener('beforeunload', (e) => { if (PhotoLinks.running) { e.preventDefault(); e.returnValue = ''; } });
+
 // ------------------------------------------------------------------ server calls
 async function api(path, { method = 'GET', body, raw, type } = {}) {
   const opts = { method, headers: {}, credentials: 'same-origin' };
@@ -1005,10 +1136,19 @@ App.views.settings = async (main) => {
       <div class="card"><h2 style="margin-top:0">Product photos</h2><div id="phst" class="small">…</div>
         <p class="small">Finds the photo of each packed product by its barcode in the open product databases <b>Open Food Facts</b>, <b>Open Beauty Facts</b>
           and <b>Open Products Facts</b> (food, soap/shampoo/cream, household; free, open data whose photos may be
-          used with credit, which the shop page shows). Runs on the server, about 80 products a minute.
+          used with credit, which the shop's Help page shows). Runs on the server, about 80 products a minute.
           Loose items and local brands are not there: use <b>Products, Bulk photos</b> (photo files named by barcode, e.g. from your distributor)
           or <b>Photo mode</b> (best sellers first, one tap per product).</p>
-        <button class="primary" id="phgo">Find photos by barcode</button> <button id="phstop">Stop</button></div>
+        <button class="primary" id="phgo">Find photos by barcode</button> <button id="phstop">Stop</button>
+        <h3>Photos from a list (Excel or CSV)</h3>
+        <p class="small">A sheet with each product's <b>Product code</b> (or <b>Barcodes</b>) and a photo web address in a column named <b>Image URL</b>
+          (or Photo URL), for example <i>Madhuram_Product_Images.xlsx</i>. The server downloads each photo, this PC makes it small and it is saved as the
+          product's photo. Prices and stock are not changed, and photos you took yourself are kept. Keep this page open while it runs
+          (about 2 photos a second); you can stop and continue later.</p>
+        <label class="btn" for="plf">Choose the Excel or CSV file</label><input id="plf" type="file" accept=".xlsx,.csv" hidden>
+        <div id="plres" class="small"></div><div id="plst" class="small" style="margin-top:6px"></div>
+        <div class="row" style="margin-top:6px"><button class="primary" id="plgo" hidden>Continue</button><button id="plstop" hidden>Stop</button>
+          <button id="plagain" hidden>Try the failed ones again</button></div><div id="plfail"></div></div>
       <div class="card"><h2 style="margin-top:0">Bring data from the shop PC</h2><p class="small">On the shop PC double-click <b>Export_For_Cloud.bat</b>.
         It makes <i>madhuram_cloud_export.json.gz</i> on the desktop with all products, prices, barcodes, stock, customers and staff logins
         (they keep their passwords). Choose that file here. Allowed only before the first cloud bill.</p>
@@ -1107,6 +1247,52 @@ App.views.settings = async (main) => {
       ${p.error ? `<br><span class="bad">${esc(p.error)}</span>` : ''}`;
     if (p.running) setTimeout(() => { if ($('#phst')) photoStatus(); }, 4000);
   };
+  const linkStatus = async () => {
+    if (!$('#plst')) return;
+    const s = await api('/images/links');
+    const total = s.waiting + s.done + s.failed;
+    $('#plst').innerHTML = total ? `<b>${s.done}</b> of ${total} photos from the list added · ${s.waiting} waiting · ${s.failed
+      ? `<span class="bad">${s.failed} could not be used</span>` : 'none failed'}${PhotoLinks.running ? '<br><b class="ok">Adding photos… keep this page open.</b>'
+      : s.waiting ? '<br>Press Continue to fetch the rest.' : ''}` : '';
+    $('#plgo').hidden = PhotoLinks.running || !s.waiting;
+    $('#plstop').hidden = !PhotoLinks.running;
+    $('#plagain').hidden = PhotoLinks.running || !s.failed;
+    $('#plfail').innerHTML = s.failed ? `<details><summary class="small">Photos that could not be used (${s.failed}) – upload these yourself</summary>
+      <div class="small" style="max-height:220px;overflow:auto">${s.failures.map((f) => `${esc(f.code || '')} ${esc(f.name)}: ${esc(f.note || '')}`).join('<br>')}</div></details>` : '';
+  };
+  if ($('#plf')) {
+    let shown = 0;
+    PhotoLinks.tick = () => { if (!$('#plst')) return; const t = Date.now(); if (t - shown > 1500 || !PhotoLinks.running) { shown = t; linkStatus().catch(() => {}); } };
+    linkStatus().catch(() => {});
+    $('#plf').addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      e.target.value = '';
+      if (!f) return;
+      const box = $('#plres');
+      box.innerHTML = '<p>Reading the file…</p>';
+      try {
+        const sheets = /\.csv$/i.test(f.name) ? [{ name: f.name, rows: readCsv(await f.text()) }] : await readXlsx(f);
+        const list = photoList(sheets);
+        if (!list || !list.rows.length) throw new Error('No photo links found. The sheet needs a "Product code" (or "Barcodes") column and an "Image URL" column.');
+        box.innerHTML = `<p>Sheet <b>${esc(list.sheet)}</b>: ${list.rows.length} products have a photo link (column ${esc(list.link)}). Matching them to your products…</p>`;
+        const x = { queued: 0, not_found: 0, own_photo: 0, bad_link: 0, already: 0, missing: [] };
+        for (let i = 0; i < list.rows.length; i += 3000) {
+          const r = (await api('/images/links', { method: 'POST', body: { rows: list.rows.slice(i, i + 3000) } })).result;
+          for (const k of ['queued', 'not_found', 'own_photo', 'bad_link', 'already']) x[k] += r[k];
+          x.missing.push(...r.missing);
+        }
+        box.innerHTML = `<p class="ok"><b>${x.queued}</b> photos to add from the list.</p><p>${x.not_found ? `${x.not_found} codes are not in your products${x.missing.length
+          ? ` (for example ${x.missing.slice(0, 6).map(esc).join(', ')})` : ''}. ` : ''}${x.own_photo ? `${x.own_photo} products keep the photo you took. ` : ''}${x.already
+          ? `${x.already} were added before. ` : ''}${x.bad_link
+          ? `${x.bad_link} links are not web addresses.` : ''}</p>`;
+        if (x.queued) runPhotoLinks();
+        linkStatus();
+      } catch (err) { box.innerHTML = `<p class="bad">${esc(err.message)}</p>`; }
+    });
+    $('#plgo').addEventListener('click', () => { runPhotoLinks(); });
+    $('#plstop').addEventListener('click', () => { PhotoLinks.stop = true; toast('Stopping after the photos in hand.'); });
+    $('#plagain').addEventListener('click', () => submitting($('#plagain'), async () => { await api('/images/links/again', { method: 'POST', body: {} }); runPhotoLinks(); }));
+  }
   if ($('#phgo')) {
     photoStatus().catch(() => {});
     $('#phgo').addEventListener('click', () => submitting($('#phgo'), async () => { await api('/images/fetch', { method: 'POST', body: {} }); toast('Finding photos. You can keep working.'); photoStatus(); }));

@@ -549,10 +549,7 @@ async function homeView() {
     ${railSec('secSuggest', 'Suggested for you', '')}
     ${railSec('secAgain', 'Buy again', '')}
     <div class="groups">${(S.info.groups || []).map(groupTiles).join('')}</div>
-    <section class="sec">${secH('More for you')}<div class="page"><div id="feed"></div></div></section>
-    <p class="credit">Pictures: the shop's photos, <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (CC BY-SA),
-      <a href="/photos/credits.html" target="_blank">Wikimedia Commons photos</a> and <a href="/fe/LICENSE.txt" target="_blank">Microsoft Fluent Emoji</a> (MIT).
-      Pictures are for illustration; packs may differ.</p>`;
+    <section class="sec">${secH('More for you')}<div class="page"><div id="feed"></div></div></section>`;
   carousel();
   rotateHint();
   drawBars();
@@ -1298,7 +1295,8 @@ function helpView() {
     <div class="box"><h3>${ico('store')} ${esc(s.name)}</h3>${s.address ? `<p class="mut" style="margin:0 0 6px">${esc(s.address)}</p>` : ''}
       <p class="mut small" style="margin:0">Online orders: ${esc(s.online_open || '')} to ${esc(s.online_close || '')}${s.online_area ? ` · Delivery ${esc(s.online_area)}` : ''}</p></div>
     <h3 class="menu-h">Common questions</h3>
-    <div class="box faq">${faq.map(([q, a]) => `<details><summary>${esc(q)}${ico('down')}</summary><p>${esc(a)}</p></details>`).join('')}</div></div>`;
+    <div class="box faq">${faq.map(([q, a]) => `<details><summary>${esc(q)}${ico('down')}</summary><p>${esc(a)}</p></details>`).join('')}</div>
+    <p class="credit">Some product photos: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (CC BY-SA).</p></div>`;
   drawBars();
 }
 

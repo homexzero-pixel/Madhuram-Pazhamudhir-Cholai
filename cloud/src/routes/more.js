@@ -277,6 +277,27 @@ r.post('/shop-banners/image', need('settings'), express.raw({ type: ['image/*', 
 }));
 r.post('/products/:id/image/remove', need('products'), wrap(async (req, res) => { await images.remove(Number(req.params.id)); ok(res); }));
 r.get('/images/fetch', need('products'), wrap(async (req, res) => ok(res, await images.status())));
+// photos from a list of web addresses (the owner's spreadsheet, read in the browser: product code / barcode + photo link)
+r.post('/images/links', need('products'), wrap(async (req, res) => {
+  const out = await images.addLinks((req.body || {}).rows);
+  await auth.audit({ user_id: req.user.id, action: 'product_photo', summary: `Photo links from a list: ${out.queued} to fetch, ${out.not_found} not found, ${out.own_photo} kept` });
+  ok(res, { result: out, ...(await images.linksStatus()) });
+}));
+r.get('/images/links', need('products'), wrap(async (req, res) => ok(res, await images.linksStatus())));
+r.get('/images/links/next', need('products'), wrap(async (req, res) => ok(res, { items: await images.nextLinks(req.query.n) })));
+r.get('/images/links/:id/source', need('products'), wrap(async (req, res) => {
+  const p = await images.linkSource(Number(req.params.id));
+  res.setHeader('Content-Type', p.type);
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Disposition', 'attachment');           // never shown as a page of this site
+  res.send(p.buf);
+}));
+r.post('/images/links/:id/photo', need('products'), express.raw({ type: ['image/*', 'application/octet-stream'], limit: '1mb' }), wrap(async (req, res) => {
+  ok(res, await images.linkDone(Number(req.params.id), req.body));
+}));
+r.post('/images/links/:id/failed', need('products'), wrap(async (req, res) => { await images.linkFailed(Number(req.params.id), (req.body || {}).note); ok(res); }));
+r.post('/images/links/again', need('products'), wrap(async (req, res) => { await images.linksAgain(); ok(res, await images.linksStatus()); }));
+r.post('/images/links/clear', need('products'), wrap(async (req, res) => { await images.linksClear(); ok(res, await images.linksStatus()); }));
 r.post('/images/fetch', need('settings'), wrap(async (req, res) => {
   const st = req.body.action === 'stop' ? images.stop() : images.start();
   if (req.body.action !== 'stop') await auth.audit({ user_id: req.user.id, action: 'settings', summary: 'Started finding product photos by barcode' });

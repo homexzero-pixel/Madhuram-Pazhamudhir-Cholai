@@ -50,6 +50,10 @@ Tamil, customer, price change and discount with manager PIN, hold, cancel), cash
    total, tax, net total, the amount in words, the GST table, the payment, "THANK U VISIT AGAIN" and the bill number between stars.
    Bill numbers look like `MU/1126/T2/107`: prefix / month and year / counter / number, and each counter starts again at 1 every
    month. Set the prefix to `MU` from the 1st of the month you stop using the old billing machine, so no two bills share a number.
+   **Product photos from a list:** Settings, Product photos, *Photos from a list (Excel or CSV)*: choose a sheet with `Product code` (or
+   `Barcodes`) and `Image URL`, such as `Madhuram_Product_Images.xlsx`. The billing server downloads each photo (internet addresses
+   only), the PC makes it small and it becomes the product's photo; prices, stock and photos you took yourself are not changed.
+   Keep the page open while it runs (about 2 photos a second); Continue picks up where it stopped, and links that fail are listed.
 6. Products – either
    - **Bring data from the shop PC:** on the shop PC double-click `Export_For_Cloud.bat` (it is in the Madhuram folder) and upload
      the file it puts on the desktop. Products, prices, barcodes, stock, customers and staff (with their passwords and PINs) come over.
